@@ -53,3 +53,16 @@
 - ACTIVE OWNER가 아직 없고 기존 OWNER 초대 코드/링크를 분실했을 때만 사용한다.
 - 기존 PENDING OWNER 초대와 인증 코드는 폐기하고 새 초대 링크와 가입 인증 코드를 한 번 출력한다.
 - ACTIVE OWNER가 이미 있으면 실행이 차단된다.
+## 내부 단축 초대 URL 관련 운영
+
+단축 초대 URL은 별도 외부 명령 없이 직원 초대 생성과 OWNER 초대 seed/reissue 과정에서 자동으로 생성된다.
+
+- 직원 초대: `/organization/invitations`에서 OWNER가 실행
+- OWNER 최초 초대: `pnpm db:seed`
+- OWNER 초대 재발급: `pnpm db:reissue-owner-invitation`
+
+주의사항:
+
+- shortToken 원문은 생성 직후 한 번만 표시된다.
+- 분실 시 기존 초대를 재발급해 새 단축 URL과 새 가입 인증 코드를 생성한다.
+- 외부 URL 단축 서비스는 사용하지 않는다.

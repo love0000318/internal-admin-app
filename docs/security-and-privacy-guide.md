@@ -196,3 +196,31 @@ HR import row 전체, 주소 전체, 가족 정보 원문, fileKey/private path,
 - 실패 메시지는 `가입 인증 코드가 올바르지 않거나 만료되었습니다.`처럼 단일 문구로 유지해 공격자가 상태를 추측하지 못하게 한다.
 - 초대 token 원문은 기존처럼 DB에 저장하지 않고 `tokenHash`만 저장한다.
 - production에서 `mock-verified` 인증은 허용하지 않는다.
+## 내부 단축 초대 URL 보안 원칙
+
+- 외부 URL 단축 서비스에 초대 token이나 shortToken을 전달하지 않는다.
+- shortToken 원문은 생성 직후 OWNER 화면 또는 seed/reissue script 출력에만 표시한다.
+- DB에는 `shortTokenHash`만 저장하고 shortToken 원문은 저장하지 않는다.
+- AuditLog, Notification metadata, CSV export에는 shortToken 원문과 shortTokenHash를 포함하지 않는다.
+- 초대가 만료, 취소, 재발급, 가입 완료되면 해당 단축 URL은 다시 사용할 수 없다.
+- `/i/[shortToken]` 검증 실패 시 상세한 실패 사유를 사용자에게 노출하지 않는다.
+- 가입에는 단축 초대 URL만으로 충분하지 않으며, 별도의 1회용 가입 인증 코드가 함께 필요하다.
+
+## 자동 로그인 유지 보안 원칙
+
+- 자동 로그인 유지는 정상 로그인 성공 후 세션 만료 기간을 길게 설정하는 기능이다.
+- 비밀번호, session token 원문, tokenHash를 화면, 문서, AuditLog, Notification metadata, CSV에 노출하지 않는다.
+- session token 원문은 httpOnly cookie에만 저장하고 DB에는 tokenHash만 저장한다.
+- cookie는 `httpOnly`, `sameSite=lax`, `path=/`를 사용하며 production에서는 `secure=true`다.
+- 기본 만료 기간은 `SESSION_EXPIRES_IN_DAYS=14`, 자동 로그인 유지는 `REMEMBER_ME_SESSION_EXPIRES_IN_DAYS=30`이다.
+- 공용 PC에서는 자동 로그인 유지를 사용하지 않도록 로그인 화면에 안내한다.
+- 로그아웃 시 현재 세션을 revoke하고 cookie를 삭제해 자동 로그인 유지도 함께 해제한다.
+- production에서 demo login, mock login, admin quick login은 허용하지 않는다.
+
+## External Notification Security
+
+외부 알림에는 최소 운영 정보만 포함합니다. 이메일/Slack에는 주민등록번호, 계좌번호, 증명자료 내용, fileKey, private path, passwordHash, token, tokenHash, session token, API key, Slack webhook URL을 포함하지 않습니다.
+
+휴가 반려 사유 원문과 증명자료 파일명/내용은 기본 이메일에 넣지 않고 시스템 링크로 확인하게 합니다. 초대 이메일은 직원 가입을 위해 초대 URL과 1회용 가입 인증 코드를 포함할 수 있으나, 이 원문 값은 AuditLog, Notification metadata, JobRun, CSV export에 저장하지 않습니다.
+
+production에서 EMAIL_PROVIDER=console은 허용하지 않습니다. RESEND_API_KEY와 SLACK_WEBHOOK_URL은 Vercel 환경변수로만 관리합니다.

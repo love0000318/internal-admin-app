@@ -106,3 +106,12 @@
 - [ ] build/test/preflight 결과와 smoke test 결과를 운영 기록에 남긴다.
 - [ ] P0 blocker가 없으면 운영 시작 가능으로 판단한다.
 - [ ] 증명자료 파일 운영 저장소가 준비되지 않았다면 파일 첨부 운영은 제한적으로 시작한다.
+## 내부 단축 초대 URL 점검
+
+- [ ] OWNER가 직원 초대를 생성한다.
+  - 기대 결과: `/i/[shortToken]` 형태의 내부 단축 초대 URL과 가입 인증 코드가 생성 직후 한 번 표시된다.
+  - 실패 시 확인할 것: `APP_BASE_URL`, `Invitation.shortTokenHash`, `shortTokenExpiresAt`.
+
+- [ ] 직원이 단축 초대 URL과 가입 인증 코드로 가입한다.
+  - 기대 결과: 가입 완료 후 단축 URL과 가입 인증 코드는 재사용할 수 없다.
+  - 실패 시 확인할 것: `shortTokenConsumedAt`, `verificationCodeConsumedAt`, invitation status.

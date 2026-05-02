@@ -1,5 +1,12 @@
 import { Prisma, type JobTriggeredBy } from "@/generated/prisma/client";
 import { getPrisma } from "@/lib/db/prisma";
+import {
+  dispatchSlackMessage,
+} from "@/lib/external-notifications/dispatch-external-notification";
+import {
+  isSlackNotificationsEnabled,
+  shouldNotifySlackJobFailures,
+} from "@/lib/external-notifications/config";
 import { createNotification } from "@/lib/notifications/notifications";
 import { sanitizeJobError, sanitizeJobSummary } from "@/lib/jobs/sanitize";
 import { sanitizeAuditMetadata } from "@/lib/security/sanitize";
@@ -153,6 +160,26 @@ export async function failJobRun(jobRunId: string, error: unknown) {
       }),
     ),
   );
+
+  if (isSlackNotificationsEnabled() && shouldNotifySlackJobFailures()) {
+    await dispatchSlackMessage({
+      type: "JOB_FAILED",
+      text: [
+        "[운영 알림] 자동 작업 실패",
+        "",
+        `작업명: ${jobRun.jobName}`,
+        `상태: ${jobRun.status}`,
+        `실행 방식: ${jobRun.triggeredBy}`,
+        "",
+        "관리자 화면에서 확인해 주세요.",
+      ].join("\n"),
+      context: {
+        jobRunId: jobRun.id,
+        jobName: jobRun.jobName,
+        status: jobRun.status,
+      },
+    });
+  }
 
   return jobRun;
 }

@@ -8,6 +8,7 @@ import {
   calculateBirthdayHalfDayUsableRange,
   calculatePreviousBusinessDay,
   normalizeBirthdayPolicyInput,
+  resolveBirthdayLeaveBirthDate,
   shouldGrantBirthdayHalfDayToday,
 } from "@/lib/leave/birthday-half-day";
 
@@ -83,6 +84,42 @@ describe("birthday half-day helpers", () => {
         today: "2026-03-15",
       }),
     ).toBe(false);
+  });
+
+  it("resolves birthday source with HR profile priority and fallbacks", () => {
+    const profileBirthDate = new Date(Date.UTC(1995, 2, 12));
+    const userBirthDate = new Date(Date.UTC(1996, 3, 13));
+    const prejoinBirthDate = new Date(Date.UTC(1997, 4, 14));
+    const legacyBirthday = new Date(Date.UTC(1998, 5, 15));
+
+    expect(
+      resolveBirthdayLeaveBirthDate({
+        birthDate: userBirthDate,
+        profile: { birthDate: profileBirthDate, birthday: legacyBirthday },
+        linkedPrejoinProfiles: [{ birthDate: prejoinBirthDate }],
+      }),
+    ).toBe(profileBirthDate);
+    expect(
+      resolveBirthdayLeaveBirthDate({
+        birthDate: userBirthDate,
+        profile: { birthDate: null, birthday: legacyBirthday },
+        linkedPrejoinProfiles: [{ birthDate: prejoinBirthDate }],
+      }),
+    ).toBe(userBirthDate);
+    expect(
+      resolveBirthdayLeaveBirthDate({
+        birthDate: null,
+        profile: { birthDate: null, birthday: null },
+        linkedPrejoinProfiles: [{ birthDate: prejoinBirthDate }],
+      }),
+    ).toBe(prejoinBirthDate);
+    expect(
+      resolveBirthdayLeaveBirthDate({
+        birthDate: null,
+        profile: { birthDate: null, birthday: legacyBirthday },
+        linkedPrejoinProfiles: [],
+      }),
+    ).toBe(legacyBirthday);
   });
 
   it("validates policy input and audit coverage", () => {

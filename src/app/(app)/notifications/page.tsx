@@ -82,12 +82,13 @@ export default async function NotificationsPage({
         </p>
       ) : null}
 
-      <div className="mt-6 flex flex-wrap gap-2">
+      <div className="mt-6 w-full overflow-x-auto">
+        <div className="flex min-w-max gap-2 whitespace-nowrap pb-1">
         {NOTIFICATION_GROUPS.map((group) => (
           <a
             key={group}
             href={`/notifications?group=${group}`}
-            className={`rounded-md border px-3 py-2 text-sm ${
+            className={`shrink-0 rounded-md border px-3 py-2 text-sm break-keep ${
               selectedGroup === group
                 ? "border-neutral-950 bg-neutral-950 text-white"
                 : "border-neutral-300 bg-white"
@@ -96,9 +97,80 @@ export default async function NotificationsPage({
             {groupLabels[group]}
           </a>
         ))}
+        </div>
       </div>
 
-      <div className="mt-6 overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-sm">
+      <div className="mt-6 grid gap-3 md:hidden">
+        {notifications.length === 0 ? (
+          <div className="rounded-lg border border-neutral-200 bg-white p-4 text-sm text-neutral-500 shadow-sm">
+            {selectedGroup === "UNREAD"
+              ? "?쎌? ?딆? ?뚮┝???놁뒿?덈떎."
+              : "?뚮┝???놁뒿?덈떎."}
+          </div>
+        ) : (
+          notifications.map((notification) => (
+            <article
+              key={notification.id}
+              className={`rounded-lg border bg-white p-4 shadow-sm ${
+                notification.readAt ? "border-neutral-200" : "border-neutral-950"
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs text-neutral-500">
+                    {groupLabels[getNotificationGroup(notification.type)]}
+                  </p>
+                  <h2 className="mt-1 break-keep text-base font-semibold text-neutral-950">
+                    {notification.title}
+                  </h2>
+                </div>
+                <span
+                  className={`shrink-0 whitespace-nowrap rounded px-2 py-1 text-xs ${
+                    notification.priority === "HIGH"
+                      ? "bg-red-50 text-red-700"
+                      : notification.priority === "LOW"
+                        ? "bg-neutral-100 text-neutral-500"
+                        : "bg-blue-50 text-blue-700"
+                  }`}
+                >
+                  {priorityLabels[notification.priority]}
+                </span>
+              </div>
+              <p className="mt-2 break-keep text-sm leading-relaxed text-neutral-600">
+                {notification.message}
+              </p>
+              <p className="mt-3 text-xs text-neutral-500">
+                {notification.createdAt.toISOString().slice(0, 16).replace("T", " ")}
+              </p>
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                {notification.linkUrl ? (
+                  <form action={markNotificationReadAndRedirect}>
+                    <input name="notificationId" type="hidden" value={notification.id} />
+                    <input name="linkUrl" type="hidden" value={notification.linkUrl} />
+                    <button className="h-10 w-full rounded-md bg-neutral-950 px-3 text-sm font-medium text-white">
+                      ?대룞
+                    </button>
+                  </form>
+                ) : null}
+                {notification.readAt ? null : (
+                  <form action={markNotificationRead}>
+                    <input
+                      name="notificationId"
+                      type="hidden"
+                      value={notification.id}
+                    />
+                    <button className="h-10 w-full rounded-md border border-neutral-300 px-3 text-sm font-medium">
+                      ?쎌쓬 泥섎━
+                    </button>
+                  </form>
+                )}
+              </div>
+            </article>
+          ))
+        )}
+      </div>
+
+      <div className="mt-6 hidden overflow-x-auto rounded-lg border border-neutral-200 bg-white shadow-sm md:block">
         <table className="w-full min-w-[1100px] text-left text-sm">
           <thead className="bg-neutral-50 text-neutral-500">
             <tr>

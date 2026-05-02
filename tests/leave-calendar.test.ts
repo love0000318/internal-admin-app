@@ -6,6 +6,7 @@ import {
   canViewCalendarLeaveDetail,
   canViewCalendarLeaveEvent,
   formatCalendarLeaveTitle,
+  getLeaveCalendarEventColorClass,
   type CalendarLeaveRequest,
 } from "@/lib/leave/calendar";
 import type { RbacUser } from "@/lib/rbac/roles";
@@ -207,5 +208,36 @@ describe("leave calendar visibility", () => {
     ]);
     expect(events[0]).not.toHaveProperty("reason");
     expect(events[0]).not.toHaveProperty("attachmentStatus");
+  });
+
+  it("colors annual and half-day events without exposing hidden leave types", () => {
+    expect(
+      getLeaveCalendarEventColorClass({
+        leaveTypeCode: "ANNUAL",
+        leaveTypeLabel: "연차",
+        isPrivate: false,
+      }),
+    ).toContain("bg-blue-100");
+    expect(
+      getLeaveCalendarEventColorClass({
+        leaveTypeCode: "HALF_DAY",
+        leaveTypeLabel: "반차",
+        isPrivate: false,
+      }),
+    ).toContain("bg-orange-100");
+    expect(
+      getLeaveCalendarEventColorClass({
+        leaveTypeCode: "SICK",
+        leaveTypeLabel: "병가",
+        isPrivate: true,
+      }),
+    ).toContain("bg-slate-100");
+    expect(
+      getLeaveCalendarEventColorClass({
+        leaveTypeCode: "BIRTHDAY_HALF_DAY",
+        leaveTypeLabel: "생일 반차",
+        isPrivate: false,
+      }),
+    ).toContain("bg-slate-100");
   });
 });

@@ -67,10 +67,10 @@ function AttachmentInput({
         name="attachmentFile"
         type="file"
         accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,application/pdf,image/jpeg,image/png,image/webp,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        className="rounded-md border border-neutral-300 px-3 py-2 text-sm font-normal"
+        className="w-full min-w-0 rounded-md border border-neutral-300 px-3 py-2 text-sm font-normal"
         required={required}
       />
-      <span className="text-xs font-normal text-neutral-500">
+      <span className="break-keep text-xs font-normal leading-relaxed text-neutral-500">
         PDF, 이미지, Word 문서를 10MB 이하로 제출할 수 있습니다.
         {description ? ` ${description}` : ""}
       </span>
@@ -112,7 +112,7 @@ export function LeaveRequestForm({
     <div className="mt-6 grid gap-6">
       <form
         action={createLeaveRequest}
-        className="grid gap-4 rounded-lg border border-neutral-200 bg-white p-5 shadow-sm"
+        className="grid min-w-0 gap-4 rounded-lg border border-neutral-200 bg-white p-4 shadow-sm sm:p-5"
       >
         <div>
           <h2 className="text-base font-semibold">연차/기본 휴가 요청</h2>
@@ -120,7 +120,7 @@ export function LeaveRequestForm({
             연차, 반차, 예비군, 병가, 경조사 휴가를 요청합니다.
           </p>
         </div>
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid min-w-0 gap-3 md:grid-cols-2">
           <label className="grid gap-1 text-sm font-medium">
             휴가 유형
             <select
@@ -132,7 +132,7 @@ export function LeaveRequestForm({
                   setEndDate(startDate);
                 }
               }}
-              className="h-10 rounded-md border border-neutral-300 px-3 text-sm font-normal"
+              className="h-11 w-full min-w-0 rounded-md border border-neutral-300 px-3 text-base font-normal sm:text-sm"
               required
             >
               {LEAVE_TYPES.map((leaveType) => (
@@ -146,7 +146,7 @@ export function LeaveRequestForm({
               ))}
             </select>
           </label>
-          <div className="rounded-md bg-neutral-50 px-3 py-2 text-sm text-neutral-600">
+          <div className="break-keep rounded-md bg-neutral-50 px-3 py-2 text-sm leading-relaxed text-neutral-600">
             <p>
               연차 차감:{" "}
               {(policy?.deductsAnnualBalance ?? policy?.deductsAnnual)
@@ -158,7 +158,7 @@ export function LeaveRequestForm({
           </div>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid min-w-0 gap-3 md:grid-cols-2">
           <label className="grid gap-1 text-sm font-medium">
             시작일
             <input
@@ -171,7 +171,7 @@ export function LeaveRequestForm({
                   setEndDate(event.target.value);
                 }
               }}
-              className="h-10 rounded-md border border-neutral-300 px-3 text-sm font-normal"
+              className="h-11 w-full min-w-0 rounded-md border border-neutral-300 px-3 text-base font-normal sm:text-sm"
               required
             />
           </label>
@@ -183,7 +183,7 @@ export function LeaveRequestForm({
               value={isHalfDay ? startDate : endDate}
               onChange={(event) => setEndDate(event.target.value)}
               disabled={isHalfDay}
-              className="h-10 rounded-md border border-neutral-300 px-3 text-sm font-normal disabled:bg-neutral-100"
+              className="h-11 w-full min-w-0 rounded-md border border-neutral-300 px-3 text-base font-normal disabled:bg-neutral-100 sm:text-sm"
               required
             />
           </label>
@@ -194,7 +194,7 @@ export function LeaveRequestForm({
             반차 구분
             <select
               name="halfDayPeriod"
-              className="h-10 rounded-md border border-neutral-300 px-3 text-sm font-normal"
+              className="h-11 w-full min-w-0 rounded-md border border-neutral-300 px-3 text-base font-normal sm:text-sm"
               required
             >
               <option value="">선택</option>
@@ -211,20 +211,20 @@ export function LeaveRequestForm({
           <textarea
             name="reason"
             rows={4}
-            className="rounded-md border border-neutral-300 px-3 py-2 text-sm font-normal"
+            className="w-full min-w-0 rounded-md border border-neutral-300 px-3 py-2 text-base font-normal sm:text-sm"
           />
         </label>
 
         <AttachmentInput required={legacyAttachmentRequired} />
 
-        <button className="h-10 w-full rounded-md bg-neutral-950 px-4 text-sm font-medium text-white md:w-40">
+        <button className="h-11 w-full rounded-md bg-neutral-950 px-4 text-sm font-medium text-white md:w-40">
           요청 제출
         </button>
       </form>
 
       <form
         action={createLeaveRequest}
-        className="grid gap-4 rounded-lg border border-neutral-200 bg-white p-5 shadow-sm"
+        className="grid min-w-0 gap-4 rounded-lg border border-neutral-200 bg-white p-4 shadow-sm sm:p-5"
       >
         <input name="requestKind" type="hidden" value="CUSTOM_GRANT" />
         <div>
@@ -246,7 +246,7 @@ export function LeaveRequestForm({
                 name="leaveGrantId"
                 value={selectedGrantId}
                 onChange={(event) => setSelectedGrantId(event.target.value)}
-                className="h-10 rounded-md border border-neutral-300 px-3 text-sm font-normal"
+                className="h-11 w-full min-w-0 rounded-md border border-neutral-300 px-3 text-base font-normal sm:text-sm"
                 required
               >
                 {requestableGrants.map((grant) => (
@@ -258,7 +258,7 @@ export function LeaveRequestForm({
             </label>
 
             {selectedGrant ? (
-              <div className="rounded-md bg-neutral-50 px-3 py-3 text-sm text-neutral-600">
+              <div className="break-keep rounded-md bg-neutral-50 px-3 py-3 text-sm leading-relaxed text-neutral-600">
                 <p>사용 가능 기간: {selectedGrant.effectiveFrom} ~ {selectedGrant.expiresAt ?? "만료 없음"}</p>
                 <p>사용 가능 단위: {allowedUnits.join(", ")}</p>
                 <p>증명자료 정책: {attachmentPolicyLabels[selectedGrant.leaveType.attachmentPolicy]}</p>
@@ -274,7 +274,7 @@ export function LeaveRequestForm({
                 key={selectedGrantId}
                 name="usageUnit"
                 defaultValue={defaultUsageUnit}
-                className="h-10 rounded-md border border-neutral-300 px-3 text-sm font-normal"
+                className="h-11 w-full min-w-0 rounded-md border border-neutral-300 px-3 text-base font-normal sm:text-sm"
                 required
               >
                 <option value="FULL_DAY" disabled={!allowedUnits.includes("FULL_DAY")}>
@@ -292,13 +292,13 @@ export function LeaveRequestForm({
               </select>
             </label>
 
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid min-w-0 gap-3 md:grid-cols-2">
               <label className="grid gap-1 text-sm font-medium">
                 시작일
                 <input
                   name="startDate"
                   type="date"
-                  className="h-10 rounded-md border border-neutral-300 px-3 text-sm font-normal"
+                  className="h-11 w-full min-w-0 rounded-md border border-neutral-300 px-3 text-base font-normal sm:text-sm"
                   required
                 />
               </label>
@@ -307,7 +307,7 @@ export function LeaveRequestForm({
                 <input
                   name="endDate"
                   type="date"
-                  className="h-10 rounded-md border border-neutral-300 px-3 text-sm font-normal"
+                  className="h-11 w-full min-w-0 rounded-md border border-neutral-300 px-3 text-base font-normal sm:text-sm"
                   required
                 />
               </label>
@@ -317,7 +317,7 @@ export function LeaveRequestForm({
               반차 구분
               <select
                 name="halfDayPeriod"
-                className="h-10 rounded-md border border-neutral-300 px-3 text-sm font-normal"
+                className="h-11 w-full min-w-0 rounded-md border border-neutral-300 px-3 text-base font-normal sm:text-sm"
               >
                 <option value="">하루 사용이면 선택하지 않음</option>
                 <option value="AM">오전</option>
@@ -330,7 +330,7 @@ export function LeaveRequestForm({
               <textarea
                 name="reason"
                 rows={4}
-                className="rounded-md border border-neutral-300 px-3 py-2 text-sm font-normal"
+                className="w-full min-w-0 rounded-md border border-neutral-300 px-3 py-2 text-base font-normal sm:text-sm"
               />
             </label>
 
@@ -339,7 +339,7 @@ export function LeaveRequestForm({
               description={selectedGrant?.leaveType.attachmentDescription}
             />
 
-            <button className="h-10 w-full rounded-md bg-neutral-950 px-4 text-sm font-medium text-white md:w-40">
+            <button className="h-11 w-full rounded-md bg-neutral-950 px-4 text-sm font-medium text-white md:w-40">
               맞춤휴가 요청
             </button>
           </>

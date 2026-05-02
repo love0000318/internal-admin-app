@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { JOB_NAMES } from "../src/lib/jobs/job-names";
 import { runJobWithTracking } from "../src/lib/jobs/job-runner";
 import { grantBirthdayHalfDaysForDate } from "../src/lib/leave/birthday-half-day";
+import type { DateOnly } from "../src/lib/leave/types";
 
 function loadLocalEnv() {
   if (process.env.DATABASE_URL || !existsSync(".env")) {
@@ -27,6 +28,8 @@ function loadLocalEnv() {
 async function main() {
   loadLocalEnv();
   const dryRun = process.argv.includes("--dry-run");
+  const dateArg = process.argv.find((arg) => arg.startsWith("--date="));
+  const processedDate = dateArg?.slice("--date=".length);
   const jobRun = await runJobWithTracking(
     {
       jobName: JOB_NAMES.BIRTHDAY_HALF_DAY_GRANTS,
@@ -34,17 +37,31 @@ async function main() {
       dryRun,
     },
     async () => {
-      const result = await grantBirthdayHalfDaysForDate();
+      const result = await grantBirthdayHalfDaysForDate({
+        dryRun,
+        processedDate: processedDate as DateOnly | undefined,
+      });
 
       return {
-        checkedCount: result.grantedCount + result.skippedCount,
+        checkedCount: result.activeUserCount,
         createdCount: result.grantedCount,
-        skippedCount: result.skippedCount,
+        skippedCount: result.activeUserCount - result.grantedCount,
         resultSummary: {
           processedDate: result.processedDate,
+          dryRun: result.dryRun,
+          activeUserCount: result.activeUserCount,
+          dueCount: result.dueCount,
+          missingBirthDateCount: result.missingBirthDateCount,
+          alreadyGrantedCount: result.alreadyGrantedCount,
           grantedCount: result.grantedCount,
           skippedCount: result.skippedCount,
           disabled: result.disabled,
+          grantCandidates: result.grants.map((grant) => ({
+            userId: grant.userId,
+            birthdayDate: grant.birthdayDate,
+            usableFrom: grant.usableFrom,
+            usableUntil: grant.usableUntil,
+          })),
         },
       };
     },

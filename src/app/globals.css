@@ -24,3 +24,41 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans);
 }
+
+.break-keep {
+  word-break: keep-all;
+  overflow-wrap: normal;
+}
+
+@keyframes bell-shake {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+
+  10%,
+  30%,
+  50%,
+  70%,
+  90% {
+    transform: rotate(-10deg);
+  }
+
+  20%,
+  40%,
+  60%,
+  80% {
+    transform: rotate(10deg);
+  }
+}
+
+.animate-bell-shake {
+  animation: bell-shake 1.2s ease-in-out infinite;
+  transform-origin: top center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-bell-shake {
+    animation: none;
+  }
+}

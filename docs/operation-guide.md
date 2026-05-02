@@ -289,3 +289,29 @@ pnpm jobs:expire-annual-leaves -- --dry-run
 - 실패 횟수는 기본 5회이며 초과하면 해당 초대 인증 코드는 잠긴다.
 - 초대 취소 또는 재발급 시 기존 인증 코드는 폐기된다.
 - production에서는 `mock-verified` 본인인증을 계속 차단하며, 이메일/휴대폰 외부 인증 API는 사용하지 않는다.
+
+## 연차 사용계획 기간 입력 방식
+
+직원은 `/leaves/me/use-plan`에서 소멸 예정 연차 사용계획을 제출할 때 수량을 직접 입력하지 않고 시작일, 종료일, 사용 형태를 입력합니다. 종일 계획은 기간 내 토요일/일요일/회사 휴일을 제외해 자동 계산하며, 오전/오후 반차는 단일 날짜만 허용하고 0.5일로 계산합니다. 사용계획 제출은 실제 휴가 요청이 아니므로 LeaveLedger를 차감하지 않으며, 실제 휴가 사용은 별도 휴가 요청으로 진행합니다.
+
+## External Notifications
+
+3차 2단계에서는 기존 인앱 Notification을 유지하면서 이메일과 Slack Webhook 알림을 선택적으로 사용합니다. 외부 알림 실패는 초대 생성, 휴가 요청, 승인, 반려, 증명자료 검수, 연차 촉진, Job 실행을 실패시키지 않습니다.
+
+운영 환경변수:
+
+- EMAIL_PROVIDER=resend
+- RESEND_API_KEY
+- EMAIL_FROM
+- EMAIL_REPLY_TO
+- EXTERNAL_EMAIL_NOTIFICATIONS_ENABLED=true
+- SLACK_NOTIFICATIONS_ENABLED
+- SLACK_WEBHOOK_URL
+- SLACK_NOTIFY_JOB_FAILURES
+- SLACK_NOTIFY_LEAVE_REQUESTS
+
+초대 이메일에는 초대 URL과 1회용 가입 인증 코드가 포함될 수 있습니다. 단, AuditLog, Notification metadata, JobRun summary에는 원문 token, code, codeHash, tokenHash를 저장하지 않습니다.
+
+Slack은 기본적으로 Job 실패 같은 운영 경고에만 사용합니다. 휴가 요청 Slack 알림은 SLACK_NOTIFY_LEAVE_REQUESTS=true일 때만 보냅니다.
+
+자세한 설정과 검수 절차는 docs/external-notifications-guide.md를 따릅니다.

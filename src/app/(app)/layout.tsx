@@ -1,8 +1,10 @@
 import Link from "next/link";
 
 import { logoutAction } from "@/app/(auth)/logout/actions";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 import { RoleLabel } from "@/components/ui/status-badge";
 import { requireCurrentUser } from "@/lib/auth/session";
+import { countUnreadNotifications } from "@/lib/notifications/notifications";
 import { getVisibleNavItems } from "@/lib/routing/roles";
 
 export default async function AppLayout({
@@ -12,6 +14,7 @@ export default async function AppLayout({
 }) {
   const user = await requireCurrentUser();
   const navItems = getVisibleNavItems(user.role);
+  const unreadNotificationCount = await countUnreadNotifications(user.id);
 
   return (
     <div className="min-h-full bg-neutral-100 text-neutral-950">
@@ -52,7 +55,12 @@ export default async function AppLayout({
           </div>
         </aside>
         <main className="min-w-0 flex-1 overflow-x-hidden px-4 py-6 sm:px-6 md:px-8">
-          <div className="mx-auto w-full max-w-screen-2xl">{children}</div>
+          <div className="mx-auto flex w-full max-w-screen-2xl flex-col gap-5">
+            <header className="flex min-w-0 items-center justify-end">
+              <NotificationBell unreadCount={unreadNotificationCount} />
+            </header>
+            {children}
+          </div>
         </main>
       </div>
     </div>

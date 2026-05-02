@@ -1,5 +1,6 @@
 import { Prisma, type PrismaClient } from "@/generated/prisma/client";
 import { getPrisma } from "@/lib/db/prisma";
+import { dispatchExternalNotification } from "@/lib/external-notifications/dispatch-external-notification";
 import {
   calculateAnnualLeaveExpirationDate,
   calculateAnnualLeavePromotionSchedule,
@@ -18,6 +19,12 @@ import {
   createLeaveLedgerEntry,
   roundLeaveAmount,
 } from "@/lib/leave/ledger";
+import {
+  calculateAnnualUsePlanItemAmount,
+  halfDayPeriodToUsageType,
+  usageTypeToHalfDayPeriod,
+  type AnnualUsePlanUsageType,
+} from "@/lib/leave/annual-use-plan-calculator";
 import type { DateOnly } from "@/lib/leave/types";
 
 type PromotionDb = PrismaClient | Prisma.TransactionClient;
@@ -367,13 +374,14 @@ export async function sendDueAnnualLeavePromotionNotices({
 
   for (const notice of dueNotices) {
     const content = notificationMessage(notice.noticeType);
+    const notificationType =
+      notice.noticeType === "USE_PLAN_REMINDER"
+        ? "ANNUAL_LEAVE_USE_PLAN_REMINDER"
+        : "ANNUAL_LEAVE_PROMOTION";
     await prisma.notification.create({
       data: {
         userId: notice.userId,
-        type:
-          notice.noticeType === "USE_PLAN_REMINDER"
-            ? "ANNUAL_LEAVE_USE_PLAN_REMINDER"
-            : "ANNUAL_LEAVE_PROMOTION",
+        type: notificationType,
         title: content.title,
         message: content.message,
         linkUrl: "/leaves/me/use-plan",
@@ -405,6 +413,18 @@ export async function sendDueAnnualLeavePromotionNotices({
         },
       },
     });
+    await dispatchExternalNotification({
+      type: notificationType,
+      recipientUserId: notice.userId,
+      title: content.title,
+      message: content.message,
+      linkUrl: "/leaves/me/use-plan",
+      context: {
+        annualLeavePromotionNoticeId: notice.id,
+        noticeType: notice.noticeType,
+        referenceYear: notice.referenceYear,
+      },
+    });
     sent += 1;
   }
 
@@ -434,7 +454,7 @@ export async function getUsePlanContext({
         referenceYear: year,
       },
     },
-    include: { items: { orderBy: { plannedDate: "asc" } } },
+    include: { items: { orderBy: [{ plannedStartDate: "asc" }, { plannedDate: "asc" }] } },
   });
 
   return {
@@ -499,6 +519,110 @@ export function validateUsePlanItems({
   return roundedTotal;
 }
 
+type UsePlanValidationInput = {
+  plannedDate?: DateOnly;
+  amount?: number;
+  halfDayPeriod?: "AM" | "PM" | null;
+  plannedStartDate?: DateOnly;
+  plannedEndDate?: DateOnly;
+  usageType?: AnnualUsePlanUsageType;
+  memo?: string | null;
+};
+
+export function validateAnnualUsePlanItems({
+  items,
+  maxAmount,
+  today = todayInSeoul(),
+  companyHolidays = [],
+}: {
+  items: UsePlanValidationInput[];
+  maxAmount: number;
+  today?: DateOnly;
+  companyHolidays?: DateOnly[];
+}) {
+  if (items.length === 0) {
+    throw new Error("사용계획 항목을 1개 이상 입력해 주세요.");
+  }
+
+  const seen = new Set<string>();
+  let total = 0;
+  const normalizedItems: Array<{
+    plannedDate: DateOnly;
+    plannedStartDate: DateOnly;
+    plannedEndDate: DateOnly;
+    usageType: AnnualUsePlanUsageType;
+    calculatedAmount: number;
+    amount: number;
+    halfDayPeriod: "AM" | "PM" | null;
+    memo?: string | null;
+    countedDates: DateOnly[];
+    excludedDates: DateOnly[];
+  }> = [];
+
+  for (const item of items) {
+    const plannedStartDate = item.plannedStartDate ?? item.plannedDate;
+    const plannedEndDate = item.plannedEndDate ?? item.plannedDate;
+    const usageType =
+      item.usageType ?? halfDayPeriodToUsageType(item.halfDayPeriod ?? null);
+
+    if (!plannedStartDate || !plannedEndDate) {
+      throw new Error("사용계획 시작일과 종료일을 입력해 주세요.");
+    }
+
+    if (compareDateOnly(plannedStartDate, today) < 0) {
+      throw new Error("과거 날짜는 사용계획으로 제출할 수 없습니다.");
+    }
+
+    const calculation = calculateAnnualUsePlanItemAmount({
+      startDate: plannedStartDate,
+      endDate: plannedEndDate,
+      usageType,
+      companyHolidays,
+    });
+    const amount =
+      item.plannedStartDate || item.plannedEndDate || item.usageType
+        ? calculation.amount
+        : (item.amount ?? calculation.amount);
+
+    if (amount <= 0) {
+      throw new Error("사용 수량은 0보다 커야 합니다.");
+    }
+
+    if (Math.round(amount * 2) / 2 !== amount) {
+      throw new Error("사용 수량은 반차 단위로 입력해 주세요.");
+    }
+
+    for (const countedDate of calculation.countedDates) {
+      if (seen.has(countedDate)) {
+        throw new Error("같은 날짜에는 하나의 사용계획만 입력할 수 있습니다.");
+      }
+      seen.add(countedDate);
+    }
+
+    total += amount;
+    normalizedItems.push({
+      plannedDate: plannedStartDate,
+      plannedStartDate,
+      plannedEndDate,
+      usageType,
+      calculatedAmount: amount,
+      amount,
+      halfDayPeriod: usageTypeToHalfDayPeriod(usageType),
+      memo: item.memo ?? null,
+      countedDates: calculation.countedDates,
+      excludedDates: calculation.excludedDates,
+    });
+  }
+
+  const roundedTotal = roundLeaveAmount(total);
+
+  if (roundedTotal > maxAmount) {
+    throw new Error("사용계획 총 수량이 소멸 예정 연차보다 클 수 없습니다.");
+  }
+
+  return { totalPlannedAmount: roundedTotal, items: normalizedItems };
+}
+
 export async function scheduleUsePlanReminderNotices({
   usePlanId,
   prisma = getPrisma(),
@@ -524,7 +648,7 @@ export async function scheduleUsePlanReminderNotices({
   let created = 0;
 
   for (const item of plan.items) {
-    const plannedDate = dateToDateOnly(item.plannedDate);
+    const plannedDate = dateToDateOnly(item.plannedStartDate ?? item.plannedDate);
     const scheduledDate = calculateUsePlanReminderDate({
       plannedDate,
       daysBefore: policy.usePlanReminderDaysBefore,
@@ -551,7 +675,7 @@ export async function scheduleUsePlanReminderNotices({
         noticeType: "USE_PLAN_REMINDER",
         scheduledDate: dateOnlyToDate(scheduledDate),
         annualLeaveUsePlanId: plan.id,
-        remainingAmount: item.amount,
+        remainingAmount: item.calculatedAmount ?? item.amount,
         unit: item.unit,
       },
     });

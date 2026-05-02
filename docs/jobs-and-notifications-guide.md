@@ -136,3 +136,24 @@ preflight는 다음 항목을 점검한다.
 - 보안: `CRON_SECRET`을 `X-Cron-Secret` 또는 `Authorization: Bearer`로 전달한다.
 
 이 Job은 시작일이 지난 `PENDING` 휴가를 자동 확정하고 `JobRun`에 checked/created/skipped/failed 건수를 기록한다. 시작일 당일은 자동 확정하지 않는다. JobRun resultSummary에는 요청 사유나 민감정보를 저장하지 않는다.
+
+## 생일 반차 자동 지급 Job
+
+- Job name: `birthday-half-day-grants`
+- package script: `pnpm jobs:birthday-half-day-grants`
+- dry-run: `pnpm jobs:birthday-half-day-grants -- --dry-run`
+- 기준일 지정: `pnpm jobs:birthday-half-day-grants -- --date=YYYY-MM-DD --dry-run`
+- Cron endpoint: `POST /api/cron/birthday-half-day-grants`
+- Vercel cron 권장 시간: KST 00:20 실행을 위해 UTC `20 15 * * *`
+
+생일 반차는 `EmployeeProfile.birthDate`, `User.birthDate`, 연결된 `EmployeePrejoinProfile.birthDate` 순서로 생일을 확인한다. 지급 예정일은 생일 하루 전이며, 주말 또는 enabled CompanyHoliday이면 직전 평일로 앞당긴다.
+
+지급 시 `LeaveGrant.source = BIRTHDAY_AUTO`, `referenceYear = 생일 연도`로 기록하며 같은 직원/휴가유형/연도/source 조합은 중복 지급하지 않는다. 직원 화면과 휴가 요청 화면에는 사용 가능 기간 안의 잔여 `BIRTHDAY_AUTO` grant만 표시된다. 생일 반차 요청은 연차 잔여를 차감하지 않고 LeaveGrant의 `pendingAmount`, `usedAmount`, `remainingAmount`만 전환한다.
+
+## External Notifications
+
+인앱 Notification은 계속 유지하며, 외부 알림은 별도 dispatcher가 best-effort로 발송합니다. 이메일 실패나 Slack 실패는 핵심 업무 트랜잭션을 rollback하지 않습니다.
+
+이메일 대상 이벤트는 직원 초대, 휴가 요청 등록, 휴가 승인/반려/취소, 증명자료 재제출 요청, 연차 촉진/사용계획 리마인드입니다. Slack은 기본적으로 Job 실패 알림에 사용하며 휴가 요청 Slack 알림은 환경변수로 선택합니다.
+
+외부 발송 결과는 EXTERNAL_EMAIL_SENT/FAILED, EXTERNAL_SLACK_SENT/FAILED, INVITATION_EMAIL_SENT/FAILED 감사 로그로 남기되 본문 전체와 secret, token, 인증 코드 원문은 저장하지 않습니다.

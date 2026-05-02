@@ -3,6 +3,7 @@ import Link from "next/link";
 import {
   CALENDAR_HALF_DAY_LABELS,
   CALENDAR_STATUS_LABELS,
+  getLeaveCalendarEventColorClass,
   listCalendarFilterOptions,
   listCalendarLeaveEvents,
   monthRange,
@@ -94,6 +95,7 @@ function statusBadgeClass(status: LeaveRequestStatus) {
 }
 
 function EventLine({ event }: { event: LeaveCalendarEvent }) {
+  const colorClassName = getLeaveCalendarEventColorClass(event);
   const content = (
     <span className="block truncate">
       {event.title}
@@ -104,12 +106,12 @@ function EventLine({ event }: { event: LeaveCalendarEvent }) {
   return event.detailUrl ? (
     <Link
       href={event.detailUrl}
-      className="block rounded border border-neutral-200 bg-white px-2 py-1 text-xs text-neutral-800 hover:border-neutral-400"
+      className={`block rounded border px-2 py-1 text-xs transition hover:brightness-95 ${colorClassName}`}
     >
       {content}
     </Link>
   ) : (
-    <div className="rounded border border-neutral-200 bg-neutral-50 px-2 py-1 text-xs text-neutral-600">
+    <div className={`rounded border px-2 py-1 text-xs ${colorClassName}`}>
       {content}
     </div>
   );
@@ -305,7 +307,7 @@ export default async function LeaveCalendarPage({ searchParams }: CalendarPagePr
         </div>
       </div>
 
-      <div className="mt-6 overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-sm">
+      <div className="mt-6 overflow-x-auto rounded-lg border border-neutral-200 bg-white shadow-sm">
         <div className="border-b border-neutral-200 px-4 py-3">
           <h2 className="font-semibold">목록 보기</h2>
           <p className="mt-1 text-sm text-neutral-500">
@@ -336,7 +338,11 @@ export default async function LeaveCalendarPage({ searchParams }: CalendarPagePr
                   <td className="px-4 py-3">{event.employeeName}</td>
                   <td className="px-4 py-3">{event.teamName ?? "-"}</td>
                   <td className="px-4 py-3">
-                    {event.title}
+                    <span
+                      className={`inline-flex rounded-full border px-2 py-1 text-xs font-medium ${getLeaveCalendarEventColorClass(event)}`}
+                    >
+                      {event.title}
+                    </span>
                     {event.isPrivate ? (
                       <span className="ml-2 text-xs text-neutral-400">제한 표시</span>
                     ) : null}

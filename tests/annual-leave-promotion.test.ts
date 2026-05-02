@@ -5,8 +5,10 @@ import {
   calculateMonthlyFirstPromotionNoticeDate,
   calculateMonthlySecondPromotionNoticeDate,
   calculateUsePlanReminderDate,
+  validateAnnualUsePlanItems,
   validateUsePlanItems,
 } from "@/lib/leave/annual-promotion";
+import { calculateAnnualUsePlanItemAmount } from "@/lib/leave/annual-use-plan-calculator";
 
 describe("annual leave promotion operations", () => {
   it("calculates annual and monthly promotion notice dates", () => {
@@ -103,6 +105,136 @@ describe("annual leave promotion operations", () => {
             plannedDate: "2026-07-01",
             amount: 1.5,
             halfDayPeriod: null,
+          },
+        ],
+      }),
+    ).toThrow();
+  });
+
+  it("calculates date-range use plan amounts", () => {
+    expect(
+      calculateAnnualUsePlanItemAmount({
+        startDate: "2026-07-01",
+        endDate: "2026-07-01",
+        usageType: "FULL_DAY",
+      }).amount,
+    ).toBe(1);
+
+    expect(
+      calculateAnnualUsePlanItemAmount({
+        startDate: "2026-07-06",
+        endDate: "2026-07-08",
+        usageType: "FULL_DAY",
+      }).amount,
+    ).toBe(3);
+
+    expect(
+      calculateAnnualUsePlanItemAmount({
+        startDate: "2026-07-03",
+        endDate: "2026-07-06",
+        usageType: "FULL_DAY",
+      }).amount,
+    ).toBe(2);
+
+    expect(
+      calculateAnnualUsePlanItemAmount({
+        startDate: "2026-05-04",
+        endDate: "2026-05-06",
+        usageType: "FULL_DAY",
+        companyHolidays: ["2026-05-05"],
+      }),
+    ).toMatchObject({
+      amount: 2,
+      countedDates: ["2026-05-04", "2026-05-06"],
+      excludedDates: ["2026-05-05"],
+    });
+  });
+
+  it("calculates and validates half-day use plans", () => {
+    expect(
+      calculateAnnualUsePlanItemAmount({
+        startDate: "2026-07-01",
+        endDate: "2026-07-01",
+        usageType: "AM_HALF_DAY",
+      }).amount,
+    ).toBe(0.5);
+
+    expect(
+      calculateAnnualUsePlanItemAmount({
+        startDate: "2026-07-01",
+        endDate: "2026-07-01",
+        usageType: "PM_HALF_DAY",
+      }).amount,
+    ).toBe(0.5);
+
+    expect(() =>
+      calculateAnnualUsePlanItemAmount({
+        startDate: "2026-07-01",
+        endDate: "2026-07-02",
+        usageType: "AM_HALF_DAY",
+      }),
+    ).toThrow();
+  });
+
+  it("normalizes range use plans and rejects duplicate counted dates", () => {
+    const result = validateAnnualUsePlanItems({
+      today: "2026-05-01",
+      maxAmount: 5,
+      items: [
+        {
+          plannedStartDate: "2026-07-01",
+          plannedEndDate: "2026-07-03",
+          usageType: "FULL_DAY",
+        },
+        {
+          plannedStartDate: "2026-07-06",
+          plannedEndDate: "2026-07-06",
+          usageType: "PM_HALF_DAY",
+        },
+      ],
+    });
+
+    expect(result.totalPlannedAmount).toBe(3.5);
+    expect(result.items[0]).toMatchObject({
+      plannedDate: "2026-07-01",
+      plannedStartDate: "2026-07-01",
+      plannedEndDate: "2026-07-03",
+      calculatedAmount: 3,
+      halfDayPeriod: null,
+    });
+    expect(result.items[1]).toMatchObject({
+      calculatedAmount: 0.5,
+      halfDayPeriod: "PM",
+    });
+
+    expect(() =>
+      validateAnnualUsePlanItems({
+        today: "2026-05-01",
+        maxAmount: 5,
+        items: [
+          {
+            plannedStartDate: "2026-07-01",
+            plannedEndDate: "2026-07-02",
+            usageType: "FULL_DAY",
+          },
+          {
+            plannedStartDate: "2026-07-02",
+            plannedEndDate: "2026-07-02",
+            usageType: "AM_HALF_DAY",
+          },
+        ],
+      }),
+    ).toThrow();
+
+    expect(() =>
+      validateAnnualUsePlanItems({
+        today: "2026-05-01",
+        maxAmount: 1,
+        items: [
+          {
+            plannedStartDate: "2026-07-01",
+            plannedEndDate: "2026-07-03",
+            usageType: "FULL_DAY",
           },
         ],
       }),

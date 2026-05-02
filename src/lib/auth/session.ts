@@ -6,7 +6,8 @@ import { getPrisma } from "@/lib/db/prisma";
 import type { AuthenticatedUser } from "@/lib/auth/types";
 
 export const SESSION_COOKIE_NAME = "internal_ops_session";
-export const SESSION_TTL_DAYS = 7;
+export const SESSION_TTL_DAYS = 14;
+export const REMEMBER_ME_SESSION_TTL_DAYS = 30;
 
 const DEV_SESSION_SECRET =
   "dev-only-internal-ops-session-secret-change-before-production";
@@ -34,6 +35,27 @@ function getPositiveIntegerEnv(name: string, fallback: number) {
 
 export function getSessionTtlDays() {
   return getPositiveIntegerEnv("SESSION_EXPIRES_IN_DAYS", SESSION_TTL_DAYS);
+}
+
+export function getRememberMeSessionTtlDays() {
+  return getPositiveIntegerEnv(
+    "REMEMBER_ME_SESSION_EXPIRES_IN_DAYS",
+    REMEMBER_ME_SESSION_TTL_DAYS,
+  );
+}
+
+export function getSessionExpiresAt({
+  rememberMe = false,
+  now = new Date(),
+}: {
+  rememberMe?: boolean;
+  now?: Date;
+} = {}) {
+  const ttlDays = rememberMe
+    ? getRememberMeSessionTtlDays()
+    : getSessionTtlDays();
+
+  return new Date(now.getTime() + ttlDays * 24 * 60 * 60 * 1000);
 }
 
 export function createSessionToken() {
@@ -100,13 +122,16 @@ async function collectManagedTeamIds(userId: string) {
   return [...managed];
 }
 
-export async function createSessionForUser(userId: string) {
+export async function createSessionForUser(
+  userId: string,
+  options: { rememberMe?: boolean } = {},
+) {
   const prisma = getPrisma();
   const rawToken = createSessionToken();
   const tokenHash = hashSessionToken(rawToken);
-  const expiresAt = new Date(
-    Date.now() + getSessionTtlDays() * 24 * 60 * 60 * 1000,
-  );
+  const expiresAt = getSessionExpiresAt({
+    rememberMe: options.rememberMe ?? false,
+  });
 
   await prisma.session.create({
     data: {

@@ -72,9 +72,11 @@
 1. OWNER가 `/admin/leaves/annual-policy`에서 정책을 확인한다.
 2. `pnpm jobs:schedule-annual-promotion-notices`가 notice를 만든다.
 3. `pnpm jobs:send-annual-promotion-notices`가 due notice를 Notification으로 보낸다.
-4. 직원은 `/leaves/me/use-plan`에서 사용계획을 제출한다.
-5. `pnpm jobs:expire-annual-leaves -- --dry-run`으로 소멸 대상을 확인한다.
-6. 실제 실행 시 `LeaveLedger.EXPIRED`가 생성된다.
+4. 직원은 `/leaves/me/use-plan`에서 시작일/종료일과 사용 형태를 입력해 사용계획을 제출한다.
+5. 시스템은 토요일/일요일/회사 휴일을 제외해 사용계획 수량을 자동 계산하고, 서버에서 다시 검증한다.
+6. 사용계획 제출만으로 휴가 요청이나 LeaveLedger 차감은 생성하지 않는다.
+7. `pnpm jobs:expire-annual-leaves -- --dry-run`으로 소멸 대상을 확인한다.
+8. 실제 실행 시 `LeaveLedger.EXPIRED`가 생성된다.
 
 ## 증명자료 필수 휴가
 
@@ -155,3 +157,22 @@
 6. 코드가 유효하면 가입을 진행하고 `verificationCodeConsumedAt`을 저장한다.
 7. 코드가 틀리면 attemptCount를 증가시키고 최대 횟수 이후 잠근다.
 8. 초대 재발급 시 기존 초대와 코드는 폐기되고 새 링크/코드가 생성된다.
+## 내부 단축 초대 URL 플로우
+
+1. OWNER가 `/organization/invitations`에서 직원을 초대한다.
+2. 서버는 긴 invitation token, 내부 shortToken, 1회용 가입 인증 코드를 생성한다.
+3. DB에는 `tokenHash`, `shortTokenHash`, `verificationCodeHash`만 저장하고 원문은 저장하지 않는다.
+4. OWNER 화면에는 `/i/[shortToken]` 단축 초대 URL과 가입 인증 코드가 생성 직후 한 번 표시된다.
+5. 직원은 단축 URL로 접속해 초대 수락 화면을 열고 가입 인증 코드를 입력한다.
+6. 가입 성공 시 invitation은 `ACCEPTED`가 되고 `shortTokenConsumedAt`, `verificationCodeConsumedAt`, `usedAt`, `acceptedAt`이 기록된다.
+7. 초대 취소 또는 재발급 시 기존 shortToken과 가입 인증 코드는 폐기되어 다시 사용할 수 없다.
+
+## 자동 로그인 유지 플로우
+
+1. 사용자가 `/login`에서 전화번호와 비밀번호를 입력한다.
+2. 개인 기기라면 `이 기기에서 자동 로그인 유지`를 선택한다.
+3. 서버는 기존과 동일하게 전화번호, 비밀번호, 사용자 ACTIVE 상태를 검증한다.
+4. 검증에 성공하면 session token 원문을 생성해 httpOnly cookie에만 저장하고, DB에는 tokenHash와 `expiresAt`만 저장한다.
+5. 자동 로그인 유지가 선택되었으면 `REMEMBER_ME_SESSION_EXPIRES_IN_DAYS`, 선택되지 않았으면 `SESSION_EXPIRES_IN_DAYS` 기준으로 `expiresAt`을 설정한다.
+6. 사용자가 `/login`에 다시 접근했을 때 유효한 세션이 있으면 `/dashboard`로 이동한다.
+7. 로그아웃하면 현재 세션의 `revokedAt`을 기록하고 cookie를 삭제한다.

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 
 import { Prisma } from "@/generated/prisma/client";
 import { getPrisma } from "@/lib/db/prisma";
+import { dispatchExternalNotification } from "@/lib/external-notifications/dispatch-external-notification";
 import {
   canAccessLeaveRequestAttachments,
   canSubmitAttachmentForRequest,
@@ -341,6 +342,14 @@ export async function requestLeaveAttachmentResubmission(formData: FormData) {
   });
 
   revalidatePath(`/leaves/approvals/${requestId}`);
+  await dispatchExternalNotification({
+    type: "LEAVE_ATTACHMENT_RESUBMISSION_REQUESTED",
+    recipientUserId: leaveRequest.userId,
+    title: "휴가 증명자료 재제출이 필요합니다.",
+    message: "휴가 증명자료 재제출이 필요합니다.",
+    linkUrl: `/leaves/me/requests/${requestId}`,
+    context: { leaveRequestId: requestId },
+  });
   redirectToApproval(requestId, "success", "attachment-resubmission-requested");
 }
 

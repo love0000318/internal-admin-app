@@ -4,11 +4,14 @@ import { redirect } from "next/navigation";
 
 import { Prisma } from "@/generated/prisma/client";
 import { createInvitationTokenPayload } from "@/lib/auth/invitation-token";
+import { createUniqueInvitationShortTokenPayload } from "@/lib/auth/invitation-short-token";
 import { createInvitationVerificationCodePayload } from "@/lib/auth/invitation-verification-code";
 import { getPrisma } from "@/lib/db/prisma";
+import { dispatchInvitationEmail } from "@/lib/external-notifications/dispatch-external-notification";
 import { maskEmail } from "@/lib/security/masking";
 import {
   buildInvitationUrl,
+  buildShortInvitationUrl,
   getAppBaseUrl,
 } from "@/lib/organization/invitations";
 import {
@@ -243,6 +246,7 @@ export async function deactivateTeam(formData: FormData) {
 
 export async function createEmployeeInvitation(formData: FormData) {
   const actor = await requireOwner();
+  const shouldSendInvitationEmail = formData.get("sendInvitationEmail") === "true";
   const parsed = inviteEmployeeSchema.safeParse({
     name: formData.get("name"),
     email: formData.get("email"),
@@ -319,6 +323,7 @@ export async function createEmployeeInvitation(formData: FormData) {
     normalizeOptionalDate(parsed.data.birthDate) ?? prejoinProfile?.birthDate ?? null;
 
   const { rawToken, tokenHash, expiresAt } = createInvitationTokenPayload();
+  const shortToken = await createUniqueInvitationShortTokenPayload();
   const verificationCode = createInvitationVerificationCodePayload();
   const invitation = await prisma.invitation.create({
     data: {
@@ -333,6 +338,8 @@ export async function createEmployeeInvitation(formData: FormData) {
       birthDate: nextBirthDate,
       birthday: nextBirthDate,
       tokenHash,
+      shortTokenHash: shortToken.shortTokenHash,
+      shortTokenExpiresAt: shortToken.expiresAt,
       expiresAt,
       verificationCodeHash: verificationCode.codeHash,
       verificationCodeExpiresAt: verificationCode.expiresAt,
@@ -406,9 +413,40 @@ export async function createEmployeeInvitation(formData: FormData) {
     },
   });
 
+  await prisma.auditLog.create({
+    data: {
+      actorId: actor.id,
+      actorUserId: actor.id,
+      action: "INVITATION_SHORT_URL_CREATED",
+      targetType: "INVITATION",
+      targetId: invitation.id,
+      metadata: {
+        invitationId: invitation.id,
+        targetEmailMasked: maskEmail(invitation.email),
+        role: invitation.role,
+        expiresAt: shortToken.expiresAt,
+        status: "ISSUED",
+      },
+    },
+  });
+
   const inviteUrl = buildInvitationUrl(getAppBaseUrl(), rawToken);
+  const shortInviteUrl = buildShortInvitationUrl(
+    getAppBaseUrl(),
+    shortToken.rawShortToken,
+  );
+
+  if (shouldSendInvitationEmail) {
+    await dispatchInvitationEmail({
+      invitationId: invitation.id,
+      recipientEmail: invitation.email,
+      invitationUrl: shortInviteUrl,
+      verificationCode: verificationCode.rawCode,
+    });
+  }
+
   redirect(
-    `/organization/invitations?success=invitation-created&inviteUrl=${encodeURIComponent(inviteUrl)}&verificationCode=${encodeURIComponent(verificationCode.rawCode)}`,
+    `/organization/invitations?success=invitation-created&inviteUrl=${encodeURIComponent(shortInviteUrl)}&longInviteUrl=${encodeURIComponent(inviteUrl)}&verificationCode=${encodeURIComponent(verificationCode.rawCode)}`,
   );
 }
 
@@ -435,6 +473,7 @@ export async function cancelInvitation(formData: FormData) {
       status: "CANCELLED",
       cancelledAt: new Date(),
       verificationCodeRevokedAt: new Date(),
+      shortTokenRevokedAt: new Date(),
     },
   });
 
@@ -459,6 +498,24 @@ export async function cancelInvitation(formData: FormData) {
     },
   });
 
+  if (before.shortTokenHash) {
+    await prisma.auditLog.create({
+      data: {
+        actorId: actor.id,
+        actorUserId: actor.id,
+        action: "INVITATION_SHORT_URL_REVOKED",
+        targetType: "INVITATION",
+        targetId: invitation.id,
+        metadata: {
+          invitationId: invitation.id,
+          targetEmailMasked: maskEmail(invitation.email),
+          role: invitation.role,
+          status: "REVOKED",
+        },
+      },
+    });
+  }
+
   redirect("/organization/invitations?success=invitation-cancelled");
 }
 
@@ -480,6 +537,7 @@ export async function reissueInvitation(formData: FormData) {
   }
 
   const { rawToken, tokenHash, expiresAt } = createInvitationTokenPayload();
+  const shortToken = await createUniqueInvitationShortTokenPayload();
   const verificationCode = createInvitationVerificationCodePayload();
   const nextInvitation = await prisma.$transaction(async (tx) => {
     await tx.invitation.update({
@@ -488,6 +546,7 @@ export async function reissueInvitation(formData: FormData) {
         status: "CANCELLED",
         cancelledAt: new Date(),
         verificationCodeRevokedAt: new Date(),
+        shortTokenRevokedAt: new Date(),
       },
     });
 
@@ -504,6 +563,8 @@ export async function reissueInvitation(formData: FormData) {
         birthDate: before.birthDate ?? before.birthday,
         birthday: before.birthday ?? before.birthDate,
         tokenHash,
+        shortTokenHash: shortToken.shortTokenHash,
+        shortTokenExpiresAt: shortToken.expiresAt,
         expiresAt,
         verificationCodeHash: verificationCode.codeHash,
         verificationCodeExpiresAt: verificationCode.expiresAt,
@@ -533,9 +594,31 @@ export async function reissueInvitation(formData: FormData) {
     },
   });
 
+  await prisma.auditLog.create({
+    data: {
+      actorId: actor.id,
+      actorUserId: actor.id,
+      action: "INVITATION_REISSUED_WITH_SHORT_URL",
+      targetType: "INVITATION",
+      targetId: nextInvitation.id,
+      metadata: {
+        beforeInvitationId: before.id,
+        invitationId: nextInvitation.id,
+        targetEmailMasked: maskEmail(nextInvitation.email),
+        role: nextInvitation.role,
+        expiresAt: shortToken.expiresAt,
+        status: "ISSUED",
+      },
+    },
+  });
+
   const inviteUrl = buildInvitationUrl(getAppBaseUrl(), rawToken);
+  const shortInviteUrl = buildShortInvitationUrl(
+    getAppBaseUrl(),
+    shortToken.rawShortToken,
+  );
   redirect(
-    `/organization/invitations?success=invitation-reissued&inviteUrl=${encodeURIComponent(inviteUrl)}&verificationCode=${encodeURIComponent(verificationCode.rawCode)}`,
+    `/organization/invitations?success=invitation-reissued&inviteUrl=${encodeURIComponent(shortInviteUrl)}&longInviteUrl=${encodeURIComponent(inviteUrl)}&verificationCode=${encodeURIComponent(verificationCode.rawCode)}`,
   );
 }
 

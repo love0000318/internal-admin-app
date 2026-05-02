@@ -1,4 +1,4 @@
-import type { Prisma, PrismaClient } from "@/generated/prisma/client";
+﻿import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { getPrisma } from "@/lib/db/prisma";
 import {
   dateOnlyToDate,
@@ -26,12 +26,17 @@ type BirthdayPolicy = {
 
 export type BirthdayGrantJobResult = {
   processedDate: DateOnly;
+  dryRun: boolean;
+  activeUserCount: number;
+  dueCount: number;
+  missingBirthDateCount: number;
+  alreadyGrantedCount: number;
   grantedCount: number;
   skippedCount: number;
   disabled: boolean;
   grants: Array<{
     userId: string;
-    leaveGrantId: string;
+    leaveGrantId?: string;
     birthdayDate: DateOnly;
     usableFrom: DateOnly;
     usableUntil: DateOnly;
@@ -58,6 +63,23 @@ function monthDay(value: DateOnly) {
   const [, month, day] = value.split("-").map(Number);
 
   return { month, day };
+}
+
+export function resolveBirthdayLeaveBirthDate(user: {
+  birthDate?: Date | null;
+  profile?: {
+    birthDate?: Date | null;
+    birthday?: Date | null;
+  } | null;
+  linkedPrejoinProfiles?: Array<{ birthDate?: Date | null }> | null;
+}) {
+  return (
+    user.profile?.birthDate ??
+    user.birthDate ??
+    user.linkedPrejoinProfiles?.find((profile) => profile.birthDate)?.birthDate ??
+    user.profile?.birthday ??
+    null
+  );
 }
 
 export function calculateBirthdayDateForYear(
@@ -216,7 +238,7 @@ async function createGrantNotification({
       userId,
       type: "LEAVE_GRANTED",
       title: "생일 반차가 지급되었습니다.",
-      message: `생일을 맞아 0.5일 반차가 지급되었습니다. ${usableFrom}부터 ${usableUntil}까지 사용할 수 있습니다.`,
+      message: `생일을 맞아 사용할 수 있는 반차가 지급되었습니다. 사용 가능 기간: ${usableFrom} ~ ${usableUntil}`,
       linkUrl: "/leaves/me",
       metadata: toJsonValue({
         leaveGrantId,
@@ -245,13 +267,20 @@ async function createGrantNotification({
 export async function grantBirthdayHalfDaysForDate({
   prisma = getPrisma(),
   processedDate = todayInSeoul(),
+  dryRun = false,
 }: {
   prisma?: PrismaClient;
   processedDate?: DateOnly;
+  dryRun?: boolean;
 } = {}): Promise<BirthdayGrantJobResult> {
   const policy = await getBirthdayPolicy(prisma);
   const result: BirthdayGrantJobResult = {
     processedDate,
+    dryRun,
+    activeUserCount: 0,
+    dueCount: 0,
+    missingBirthDateCount: 0,
+    alreadyGrantedCount: 0,
     grantedCount: 0,
     skippedCount: 0,
     disabled: !policy?.isEnabled,
@@ -266,7 +295,14 @@ export async function grantBirthdayHalfDaysForDate({
   const [users, holidays, systemOwner] = await Promise.all([
     prisma.user.findMany({
       where: { status: "ACTIVE" },
-      include: { profile: true },
+      include: {
+        profile: true,
+        linkedPrejoinProfiles: {
+          select: { birthDate: true },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+        },
+      },
       orderBy: { name: "asc" },
     }),
     prisma.companyHoliday.findMany({
@@ -282,11 +318,13 @@ export async function grantBirthdayHalfDaysForDate({
   const holidayDates = holidays.map((holiday) => dateToDateOnly(holiday.date));
   const processedYear = Number(processedDate.slice(0, 4));
   const candidateYears = [processedYear, processedYear + 1];
+  result.activeUserCount = users.length;
 
   for (const user of users) {
-    const birthDate = user.birthDate ?? user.profile?.birthday ?? null;
+    const birthDate = resolveBirthdayLeaveBirthDate(user);
 
     if (!birthDate) {
+      result.missingBirthDateCount += 1;
       result.skippedCount += 1;
       result.skipped.push({ userId: user.id, reason: "NO_BIRTH_DATE" });
       continue;
@@ -311,6 +349,8 @@ export async function grantBirthdayHalfDaysForDate({
         continue;
       }
 
+      result.dueCount += 1;
+
       const existing = await prisma.leaveGrant.findFirst({
         where: {
           userId: user.id,
@@ -321,11 +361,22 @@ export async function grantBirthdayHalfDaysForDate({
       });
 
       if (existing) {
+        result.alreadyGrantedCount += 1;
         result.skippedCount += 1;
         result.skipped.push({
           userId: user.id,
           reason: "ALREADY_GRANTED",
           birthdayDate,
+        });
+        continue;
+      }
+
+      if (dryRun) {
+        result.grants.push({
+          userId: user.id,
+          birthdayDate,
+          usableFrom,
+          usableUntil,
         });
         continue;
       }
@@ -413,18 +464,18 @@ export function normalizeBirthdayPolicyInput(input: {
   notifyEmployee: boolean;
 }): Omit<BirthdayPolicy, "id" | "leaveTypeId" | "grantUnit"> {
   if (!Number.isFinite(input.grantAmount) || input.grantAmount <= 0) {
-    throw new Error("생일 반차 지급 수량은 0보다 커야 합니다.");
+    throw new Error("?앹씪 諛섏감 吏湲??섎웾? 0蹂대떎 而ㅼ빞 ?⑸땲??");
   }
 
   if (!Number.isInteger(input.grantDaysBefore) || input.grantDaysBefore < 0) {
-    throw new Error("생일 며칠 전 지급할지 확인해 주세요.");
+    throw new Error("?앹씪 硫곗튌 ??吏湲됲븷吏 ?뺤씤??二쇱꽭??");
   }
 
   if (
     !Number.isInteger(input.usableDaysFromBirthday) ||
     input.usableDaysFromBirthday < 0
   ) {
-    throw new Error("사용 가능 기간을 확인해 주세요.");
+    throw new Error("?ъ슜 媛??湲곌컙???뺤씤??二쇱꽭??");
   }
 
   return {

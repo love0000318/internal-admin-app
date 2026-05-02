@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 
 import { Prisma, type ApprovalPolicy } from "@/generated/prisma/client";
 import { getPrisma } from "@/lib/db/prisma";
+import { dispatchExternalNotification } from "@/lib/external-notifications/dispatch-external-notification";
 import { assertEnoughLeaveBalance, policyDeductsAnnual } from "@/lib/leave/balance";
 import {
   createLeaveAttachmentRecord,
@@ -151,15 +152,39 @@ async function notifyApproversForLeaveRequest({
   const requester = leaveRequest.user;
   const data = reviewers.map((reviewer) => ({
       userId: reviewer.id,
-      type: "SYSTEM" as const,
+      type: "LEAVE_REQUESTED" as const,
       title: "휴가 승인 요청이 등록되었습니다.",
       message: `${requester.name} 님이 ${leaveTypeName}을 요청했습니다.`,
       linkUrl: `/leaves/approvals/${leaveRequestId}`,
-      metadata: toJsonValue({ leaveRequestId, requesterId: requester.id }),
+      metadata: toJsonValue({
+        leaveRequestId,
+        requesterId: requester.id,
+        leaveTypeName,
+        startDate: dateToDateOnly(leaveRequest.startDate),
+        endDate: dateToDateOnly(leaveRequest.endDate),
+      }),
     }));
 
   if (data.length > 0) {
     await prisma.notification.createMany({ data });
+    await Promise.all(
+      reviewers.map((reviewer) =>
+        dispatchExternalNotification({
+          type: "LEAVE_REQUESTED",
+          recipientUserId: reviewer.id,
+          title: "?닿? ?뱀씤 ?붿껌???깅줉?섏뿀?듬땲??",
+          message: `${requester.name} 님이 휴가를 요청했습니다.`,
+          linkUrl: `/leaves/approvals/${leaveRequestId}`,
+          context: {
+            leaveRequestId,
+            requesterId: requester.id,
+            leaveTypeName,
+            startDate: dateToDateOnly(leaveRequest.startDate),
+            endDate: dateToDateOnly(leaveRequest.endDate),
+          },
+        }),
+      ),
+    );
   }
 }
 

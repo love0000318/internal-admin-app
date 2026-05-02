@@ -8,10 +8,15 @@ import { getPrisma } from "@/lib/db/prisma";
 import {
   getUsePlanContext,
   scheduleUsePlanReminderNotices,
-  validateUsePlanItems,
+  validateAnnualUsePlanItems,
 } from "@/lib/leave/annual-promotion";
+import {
+  ANNUAL_USE_PLAN_USAGE_TYPES,
+  type AnnualUsePlanUsageType,
+} from "@/lib/leave/annual-use-plan-calculator";
+import { listEnabledCompanyHolidayDateOnlys } from "@/lib/leave/queries";
 import { requireRouteAccess } from "@/lib/rbac/server-guards";
-import type { DateOnly, HalfDayPeriod } from "@/lib/leave/types";
+import type { DateOnly } from "@/lib/leave/types";
 
 function stringValue(formData: FormData, name: string) {
   const value = formData.get(name);
@@ -28,32 +33,34 @@ function redirectToUsePlan(error: string): never {
 
 function parseItems(formData: FormData) {
   const items: Array<{
-    plannedDate: DateOnly;
-    amount: number;
-    halfDayPeriod: HalfDayPeriod | null;
+    plannedStartDate: DateOnly;
+    plannedEndDate: DateOnly;
+    usageType: AnnualUsePlanUsageType;
     memo: string | null;
   }> = [];
 
   for (let index = 0; index < 5; index += 1) {
-    const plannedDate = stringValue(formData, `plannedDate_${index}`);
-    const amountValue = stringValue(formData, `amount_${index}`);
-    const amount = Number(amountValue);
-    const halfDayPeriod = stringValue(formData, `halfDayPeriod_${index}`);
+    const plannedStartDate = stringValue(formData, `plannedStartDate_${index}`);
+    const plannedEndDate = stringValue(formData, `plannedEndDate_${index}`);
+    const usageType = stringValue(formData, `usageType_${index}`);
     const memo = stringValue(formData, `memo_${index}`);
 
-    if (!plannedDate && !amountValue) {
+    if (!plannedStartDate && !plannedEndDate && !memo) {
       continue;
     }
 
-    if (!plannedDate || !Number.isFinite(amount)) {
+    if (
+      !plannedStartDate ||
+      !plannedEndDate ||
+      !ANNUAL_USE_PLAN_USAGE_TYPES.includes(usageType as AnnualUsePlanUsageType)
+    ) {
       redirectToUsePlan("invalid-item");
     }
 
     items.push({
-      plannedDate: plannedDate as DateOnly,
-      amount,
-      halfDayPeriod:
-        halfDayPeriod === "AM" || halfDayPeriod === "PM" ? halfDayPeriod : null,
+      plannedStartDate: plannedStartDate as DateOnly,
+      plannedEndDate: plannedEndDate as DateOnly,
+      usageType: usageType as AnnualUsePlanUsageType,
       memo: memo || null,
     });
   }
@@ -82,16 +89,33 @@ export async function submitAnnualLeaveUsePlan(formData: FormData) {
   }
 
   const items = parseItems(formData);
-  let totalPlannedAmount: number;
+  const holidayDates =
+    items.length > 0
+      ? await listEnabledCompanyHolidayDateOnlys(
+          items.reduce(
+            (min, item) =>
+              item.plannedStartDate < min ? item.plannedStartDate : min,
+            items[0].plannedStartDate,
+          ),
+          items.reduce(
+            (max, item) => (item.plannedEndDate > max ? item.plannedEndDate : max),
+            items[0].plannedEndDate,
+          ),
+          prisma,
+        )
+      : [];
+  let validated: ReturnType<typeof validateAnnualUsePlanItems>;
 
   try {
-    totalPlannedAmount = validateUsePlanItems({
+    validated = validateAnnualUsePlanItems({
       items,
       maxAmount: context.expiringAmount,
+      companyHolidays: holidayDates,
     });
   } catch {
     redirectToUsePlan("invalid-item");
   }
+  const totalPlannedAmount = validated.totalPlannedAmount;
 
   const plan = await prisma.$transaction(async (tx) => {
     const savedPlan = await tx.annualLeaveUsePlan.upsert({
@@ -124,9 +148,13 @@ export async function submitAnnualLeaveUsePlan(formData: FormData) {
       where: { usePlanId: savedPlan.id },
     });
     await tx.annualLeaveUsePlanItem.createMany({
-      data: items.map((item) => ({
+      data: validated.items.map((item) => ({
         usePlanId: savedPlan.id,
         plannedDate: new Date(`${item.plannedDate}T00:00:00.000Z`),
+        plannedStartDate: new Date(`${item.plannedStartDate}T00:00:00.000Z`),
+        plannedEndDate: new Date(`${item.plannedEndDate}T00:00:00.000Z`),
+        usageType: item.usageType,
+        calculatedAmount: item.calculatedAmount,
         amount: item.amount,
         unit: "DAY",
         halfDayPeriod: item.halfDayPeriod,

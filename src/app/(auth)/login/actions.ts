@@ -15,6 +15,7 @@ export type LoginFormState = {
 const loginSchema = z.object({
   phone: z.string().trim().min(1),
   password: z.string().min(1),
+  rememberMe: z.boolean(),
 });
 
 export async function loginAction(
@@ -24,6 +25,7 @@ export async function loginAction(
   const parsed = loginSchema.safeParse({
     phone: formData.get("phone"),
     password: formData.get("password"),
+    rememberMe: formData.get("rememberMe") === "on",
   });
 
   if (!parsed.success) {
@@ -93,11 +95,13 @@ export async function loginAction(
       targetType: "SESSION",
       targetId: user.id,
       metadata: {
-        phone: user.phone,
+        rememberMe: parsed.data.rememberMe,
       },
     },
   });
 
-  await createSessionForUser(user.id);
+  await createSessionForUser(user.id, {
+    rememberMe: parsed.data.rememberMe,
+  });
   redirect("/dashboard");
 }

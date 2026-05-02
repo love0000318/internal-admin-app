@@ -434,6 +434,7 @@ OWNER, 직원.
 
 ### 주요 동작
 schedule, due notification, use plan, reminder.
+사용계획은 시작일/종료일과 사용 형태를 입력하면 시스템이 수량을 자동 계산한다. 제출은 실제 휴가 요청을 만들지 않고 LeaveLedger를 차감하지 않는다.
 
 ### 권한
 OWNER 현황 관리, 직원 자기 계획.
@@ -445,7 +446,7 @@ OWNER 현황 관리, 직원 자기 계획.
 연차 촉진/리마인드.
 
 ### 테스트 포인트
-중복 schedule 방지.
+중복 schedule 방지, 사용계획 기간 자동 계산, 총 계획 수량 초과 차단, LeaveRequest/LeaveLedger 미생성.
 
 ### 남은 TODO
 전자문서/외부 발송.
@@ -792,3 +793,136 @@ OWNER만 초대와 재발급을 수행한다. 직원은 자신이 받은 초대 
 
 ### 남은 TODO
 OWNER 초대 전용 재발급 CLI는 필요 시 추가한다.
+## 내부 단축 초대 URL
+
+### 목적
+직원에게 전달하기 쉬운 짧은 초대 링크를 내부에서 안전하게 제공한다.
+
+### 사용자
+OWNER, 초대받은 직원.
+
+### 주요 화면
+`/organization/invitations`, `/i/[shortToken]`, `/invitations/accept`.
+
+### 주요 데이터 모델
+`Invitation.shortTokenHash`, `shortTokenExpiresAt`, `shortTokenConsumedAt`, `shortTokenRevokedAt`.
+
+### 주요 동작
+초대 생성 시 긴 초대 URL, 단축 초대 URL, 1회용 가입 인증 코드를 함께 생성한다. `/i/[shortToken]`은 `/invitations/accept?shortToken=...`으로 연결되고, 가입 완료 시 shortToken과 인증 코드가 모두 소비 처리된다.
+
+### 권한
+OWNER만 단축 초대 URL을 생성하거나 재발급할 수 있다. 초대받은 사용자는 유효한 shortToken과 가입 인증 코드가 있어야 가입할 수 있다.
+
+### AuditLog
+`INVITATION_SHORT_URL_CREATED`, `INVITATION_SHORT_URL_CONSUMED`, `INVITATION_SHORT_URL_REVOKED`, `INVITATION_REISSUED_WITH_SHORT_URL`.
+
+### Notification
+없음.
+
+### 테스트 포인트
+shortToken 원문 미저장, hash 검증, 소비/폐기/만료 차단, 가입 완료 후 재사용 차단, 재발급 시 기존 링크 폐기.
+
+### 남은 TODO
+초대 상세 화면 분리와 링크 전달 UI 고도화.
+
+## 자동 로그인 유지
+
+### 목적
+개인 기기에서 정상 로그인 후 더 긴 기간 동안 로그인 상태를 유지한다.
+
+### 사용자
+OWNER, LEAD, MANAGER 등 로그인 가능한 ACTIVE 내부 사용자.
+
+### 주요 화면
+`/login`.
+
+### 주요 데이터 모델
+`Session`. 별도 remember token은 만들지 않고 `expiresAt`을 일반 세션과 다르게 설정한다.
+
+### 주요 동작
+사용자가 `이 기기에서 자동 로그인 유지`를 선택하고 전화번호/비밀번호 검증에 성공하면 `REMEMBER_ME_SESSION_EXPIRES_IN_DAYS` 기준으로 세션 만료일을 설정한다. 선택하지 않으면 `SESSION_EXPIRES_IN_DAYS`를 사용한다.
+
+### 권한
+정상 로그인 성공과 ACTIVE 사용자 상태가 필수다. production quick login이나 mock login은 허용하지 않는다.
+
+### AuditLog
+`LOGIN_SUCCEEDED` metadata에 `rememberMe` 여부만 기록할 수 있다. password, session token, tokenHash는 기록하지 않는다.
+
+### Notification
+없음.
+
+### 테스트 포인트
+일반 로그인과 자동 로그인 유지의 만료일 차이, httpOnly/sameSite/production secure cookie, logout 후 세션 revoke, `/login` 접근 시 유효 세션 redirect.
+
+### 남은 TODO
+기기별 세션 관리 UI는 후순위다.
+## 3차 모바일/UX 안정화
+
+### 목적
+
+운영 중인 1차/2차 기능을 모바일에서도 사용할 수 있도록 form 폭, table overflow, 탭 줄바꿈, 알림 접근성을 정리한다.
+
+### 사용자
+
+OWNER, LEAD, MANAGER 등 로그인한 내부 사용자.
+
+### 주요 화면
+
+- `/login`
+- `/invitations/accept`
+- `/i/[shortToken]`
+- `/leaves/me`
+- `/leaves/me/requests/new`
+- `/admin/leaves/settings`
+- `/admin/leaves/types`
+- `/leaves/calendar`
+- `/notifications`
+
+### 주요 동작
+
+- 모바일 form은 1열과 `w-full` 입력으로 표시한다.
+- 넓은 table은 PC에서 유지하고 모바일에서는 card 또는 내부 가로 스크롤로 표시한다.
+- 설정 탭은 `whitespace-nowrap break-keep` 기반 가로 스크롤로 표시한다.
+- protected layout 우측 상단에 알림 아이콘을 표시한다.
+- 캘린더 이벤트는 연차/반차/유형 숨김 색상 규칙을 따른다.
+
+### 권한
+
+UI 개선만 수행하며 기존 route/server action 권한 검증을 변경하지 않는다.
+
+### 남은 TODO
+
+- 직원 상세와 관리자 리포트 세부 화면의 모바일 카드형 패턴 확대
+- Playwright 모바일 viewport smoke test 자동화
+
+## 외부 알림 연동
+
+### 목적
+인앱 Notification을 유지하면서 이메일과 Slack으로 중요한 운영 알림을 보냅니다.
+
+### 사용자
+OWNER, LEAD, MANAGER, 초대받은 직원. Slack 운영 알림은 OWNER/운영자 확인용입니다.
+
+### 주요 화면
+`/organization/invitations`, `/notifications`, `/admin/jobs`.
+
+### 주요 데이터 모델
+신규 설정 모델은 두지 않고 env 기반으로 동작합니다. 발송 결과는 `AuditLog`에 기록합니다.
+
+### 주요 동작
+초대 이메일, 휴가 요청/승인/반려/취소 이메일, 증명자료 재제출 이메일, 연차 촉진 이메일, Job 실패 Slack 알림.
+
+### 권한
+외부 발송은 기존 server action 권한 검증 이후에만 수행합니다. 발송 실패는 업무 처리 실패로 전파하지 않습니다.
+
+### AuditLog
+`EXTERNAL_EMAIL_SENT`, `EXTERNAL_EMAIL_FAILED`, `EXTERNAL_SLACK_SENT`, `EXTERNAL_SLACK_FAILED`, `INVITATION_EMAIL_SENT`, `INVITATION_EMAIL_FAILED`.
+
+### Notification
+기존 인앱 Notification은 그대로 생성합니다.
+
+### 테스트 포인트
+production console provider 차단, 민감정보 미포함, 외부 발송 실패 시 업무 성공 유지, API key/토큰 AuditLog 미저장.
+
+### 남은 TODO
+카카오 알림톡, 재시도 queue, 관리자 알림 설정 UI.

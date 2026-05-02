@@ -423,7 +423,7 @@ export default async function LeaveTypesPage({
 
       <form
         action="/admin/leaves/types"
-        className="mt-6 grid grid-cols-1 gap-3 rounded-lg border border-neutral-200 bg-white p-4 shadow-sm sm:grid-cols-2 xl:grid-cols-5"
+        className="mt-6 grid min-w-0 grid-cols-1 gap-3 rounded-lg border border-neutral-200 bg-white p-4 shadow-sm sm:grid-cols-2 xl:grid-cols-5 [&_button]:break-keep [&_button]:whitespace-nowrap [&_input]:min-w-0 [&_select]:min-w-0"
       >
         <input
           name="query"
@@ -464,7 +464,7 @@ export default async function LeaveTypesPage({
 
       <form
         action={createLeaveType}
-        className="mt-6 grid gap-4 rounded-lg border border-neutral-200 bg-white p-4 shadow-sm"
+        className="mt-6 grid w-full max-w-full gap-4 rounded-lg border border-neutral-200 bg-white p-4 shadow-sm [&_input]:min-w-0 [&_select]:min-w-0"
       >
         <div>
           <h2 className="text-lg font-semibold">맞춤휴가 생성</h2>
@@ -515,7 +515,213 @@ export default async function LeaveTypesPage({
         </button>
       </form>
 
-      <div className="mt-6 rounded-lg border border-neutral-200 bg-white shadow-sm">
+      <div className="mt-6 grid gap-3 md:hidden">
+        {leaveTypes.length === 0 ? (
+          <div className="rounded-lg border border-neutral-200 bg-white p-4 text-sm text-neutral-500">
+            등록된 휴가 유형이 없습니다.
+          </div>
+        ) : (
+          leaveTypes.map((leaveType) => (
+            <article
+              key={leaveType.id}
+              className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h2 className="break-keep text-base font-semibold text-neutral-950">
+                    {leaveType.name}
+                  </h2>
+                  <p className="mt-1 break-all font-mono text-xs text-neutral-500">
+                    {leaveType.code}
+                  </p>
+                </div>
+                <span className="shrink-0 whitespace-nowrap break-keep rounded-full bg-neutral-100 px-2 py-1 text-xs text-neutral-700">
+                  {leaveType.isEnabled ? "사용" : "미사용"}
+                </span>
+              </div>
+              <dl className="mt-4 grid gap-2 text-sm">
+                <div className="flex justify-between gap-3">
+                  <dt className="shrink-0 whitespace-nowrap break-keep text-neutral-500">
+                    구분
+                  </dt>
+                  <dd className="break-keep text-right">
+                    {categoryLabels[leaveType.category]}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="shrink-0 whitespace-nowrap break-keep text-neutral-500">
+                    유급
+                  </dt>
+                  <dd className="break-keep text-right">
+                    {leaveType.isPaid ? "유급" : "무급"} · {leaveType.paidRate}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="shrink-0 whitespace-nowrap break-keep text-neutral-500">
+                    부여 방식
+                  </dt>
+                  <dd className="break-keep text-right">
+                    {grantMethodLabels[leaveType.grantMethod]}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="shrink-0 whitespace-nowrap break-keep text-neutral-500">
+                    사용 방식
+                  </dt>
+                  <dd className="break-keep text-right">
+                    {usageModeLabels[leaveType.usageMode]}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="shrink-0 whitespace-nowrap break-keep text-neutral-500">
+                    사용 가능 단위
+                  </dt>
+                  <dd className="break-keep text-right">
+                    {allowedUnitText(leaveType.allowedUnits)}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="shrink-0 whitespace-nowrap break-keep text-neutral-500">
+                    증명자료
+                  </dt>
+                  <dd className="break-keep text-right">
+                    {attachmentPolicyLabels[leaveType.attachmentPolicy]}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="shrink-0 whitespace-nowrap break-keep text-neutral-500">
+                    연차 차감
+                  </dt>
+                  <dd className="break-keep text-right">
+                    {leaveType.deductsAnnualBalance ? "차감" : "미차감"}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="shrink-0 whitespace-nowrap break-keep text-neutral-500">
+                    시스템 기본
+                  </dt>
+                  <dd className="break-keep text-right">
+                    {leaveType.isSystemRequired ? "시스템 기본" : "관리자 생성"}
+                  </dd>
+                </div>
+              </dl>
+              <details className="mt-4 rounded-md border border-neutral-200 p-3">
+                <summary className="cursor-pointer whitespace-nowrap break-keep text-sm font-medium">
+                  수정
+                </summary>
+                <form action={updateLeaveType} className="mt-4 grid gap-3">
+                  <input name="id" type="hidden" value={leaveType.id} />
+                  <label className="grid gap-1 text-sm">
+                    휴가명
+                    <input
+                      name="name"
+                      defaultValue={leaveType.name}
+                      className="h-10 w-full min-w-0 rounded-md border border-neutral-300 px-3"
+                      required
+                    />
+                  </label>
+                  <label className="grid gap-1 text-sm">
+                    코드
+                    {leaveType.isSystemRequired ? (
+                      <>
+                        <input name="code" type="hidden" value={leaveType.code} />
+                        <input
+                          value={leaveType.code}
+                          className="h-10 w-full min-w-0 rounded-md border border-neutral-200 bg-neutral-50 px-3"
+                          disabled
+                        />
+                      </>
+                    ) : (
+                      <input
+                        name="code"
+                        defaultValue={leaveType.code}
+                        className="h-10 w-full min-w-0 rounded-md border border-neutral-300 px-3 uppercase"
+                        pattern="[A-Z0-9_]+"
+                        required
+                      />
+                    )}
+                  </label>
+                  <label className="grid gap-1 text-sm">
+                    구분
+                    {leaveType.isSystemRequired ? (
+                      <>
+                        <input
+                          name="category"
+                          type="hidden"
+                          value={leaveType.category}
+                        />
+                        <input
+                          value={categoryLabels[leaveType.category]}
+                          className="h-10 w-full min-w-0 rounded-md border border-neutral-200 bg-neutral-50 px-3"
+                          disabled
+                        />
+                      </>
+                    ) : (
+                      <select
+                        name="category"
+                        defaultValue={leaveType.category}
+                        className="h-10 w-full min-w-0 rounded-md border border-neutral-300 px-3"
+                      >
+                        {optionList(LEAVE_CATEGORY_VALUES, categoryLabels)}
+                      </select>
+                    )}
+                  </label>
+                  <label className="grid gap-1 text-sm">
+                    설명
+                    <input
+                      name="description"
+                      defaultValue={leaveType.description ?? ""}
+                      className="h-10 w-full min-w-0 rounded-md border border-neutral-300 px-3"
+                    />
+                  </label>
+                  <CommonPolicyFields
+                    prefix="update"
+                    defaults={{
+                      isEnabled: leaveType.isEnabled,
+                      isPaid: leaveType.isPaid,
+                      paidRate: leaveType.paidRate,
+                      grantMethod: leaveType.grantMethod,
+                      grantAmount: leaveType.grantAmount,
+                      grantUnit: leaveType.grantUnit,
+                      usageMode: leaveType.usageMode,
+                      allowedUnits: leaveType.allowedUnits,
+                      unusedRemainderHandling: leaveType.unusedRemainderHandling,
+                      deductsAnnualBalance: leaveType.deductsAnnualBalance,
+                      attachmentPolicy: leaveType.attachmentPolicy,
+                      attachmentDescription: leaveType.attachmentDescription,
+                      includeHolidayInDeduction:
+                        leaveType.includeHolidayInDeduction,
+                      visibility: leaveType.visibility,
+                    }}
+                  />
+                  <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                    <button className="h-10 w-full rounded-md bg-neutral-950 px-4 text-sm font-medium text-white sm:w-auto">
+                      저장
+                    </button>
+                    {leaveType.isEnabled ? (
+                      <button
+                        formAction={deactivateLeaveType}
+                        className="h-10 w-full rounded-md border border-red-200 px-4 text-sm font-medium text-red-700 sm:w-auto"
+                      >
+                        비활성화
+                      </button>
+                    ) : (
+                      <button
+                        formAction={reactivateLeaveType}
+                        className="h-10 w-full rounded-md border border-green-200 px-4 text-sm font-medium text-green-700 sm:w-auto"
+                      >
+                        다시 사용
+                      </button>
+                    )}
+                  </div>
+                </form>
+              </details>
+            </article>
+          ))
+        )}
+      </div>
+
+      <div className="mt-6 hidden rounded-lg border border-neutral-200 bg-white shadow-sm md:block">
         <div className="w-full overflow-x-auto">
         <table className="w-full min-w-[1500px] table-auto text-left text-sm [&_td]:break-keep [&_th]:break-keep [&_th]:whitespace-nowrap">
           <thead className="bg-neutral-50 text-neutral-500">

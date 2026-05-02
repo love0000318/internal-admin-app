@@ -1,5 +1,6 @@
 import { Prisma, type Notification, type NotificationType } from "@/generated/prisma/client";
 import { getPrisma } from "@/lib/db/prisma";
+import { dispatchExternalNotification } from "@/lib/external-notifications/dispatch-external-notification";
 import type { RbacUser } from "@/lib/rbac/roles";
 import { sanitizeNotificationMetadata } from "@/lib/security/sanitize";
 
@@ -86,7 +87,7 @@ export function getNotificationGroup(type: NotificationType): NotificationGroup 
 }
 
 export async function createNotification(params: CreateNotificationParams) {
-  return getPrisma().notification.create({
+  const notification = await getPrisma().notification.create({
     data: {
       userId: params.userId,
       type: params.type,
@@ -97,6 +98,17 @@ export async function createNotification(params: CreateNotificationParams) {
       metadata: params.metadata ? sanitizeNotificationMetadata(params.metadata) : Prisma.JsonNull,
     },
   });
+
+  await dispatchExternalNotification({
+    ...params,
+    recipientUserId: params.userId,
+    context: {
+      ...(params.metadata && typeof params.metadata === "object" ? params.metadata : {}),
+      notificationId: notification.id,
+    },
+  });
+
+  return notification;
 }
 
 export async function createNotifications(params: CreateNotificationParams[]) {
@@ -104,7 +116,7 @@ export async function createNotifications(params: CreateNotificationParams[]) {
     return { count: 0 };
   }
 
-  return getPrisma().notification.createMany({
+  const result = await getPrisma().notification.createMany({
     data: params.map((notification) => ({
       userId: notification.userId,
       type: notification.type,
@@ -117,6 +129,21 @@ export async function createNotifications(params: CreateNotificationParams[]) {
         : Prisma.JsonNull,
     })),
   });
+
+  await Promise.all(
+    params.map((notification) =>
+      dispatchExternalNotification({
+        ...notification,
+        recipientUserId: notification.userId,
+        context:
+          notification.metadata && typeof notification.metadata === "object"
+            ? (notification.metadata as Record<string, unknown>)
+            : undefined,
+      }),
+    ),
+  );
+
+  return result;
 }
 
 export async function createNotificationOnce(params: CreateNotificationParams) {

@@ -12,10 +12,14 @@ const initialState: AcceptInvitationFormState = {
 };
 
 type InvitationSignupFormProps = {
-  token: string;
+  token?: string;
+  shortToken?: string;
 };
 
-export function InvitationSignupForm({ token }: InvitationSignupFormProps) {
+export function InvitationSignupForm({
+  token,
+  shortToken,
+}: InvitationSignupFormProps) {
   const [state, formAction, pending] = useActionState(
     acceptInvitationAction,
     initialState,
@@ -23,8 +27,11 @@ export function InvitationSignupForm({ token }: InvitationSignupFormProps) {
 
   return (
     <form action={formAction} className="grid gap-4">
-      <input name="token" type="hidden" value={token} />
-      <div className="grid gap-1.5">
+      {token ? <input name="token" type="hidden" value={token} /> : null}
+      {shortToken ? (
+        <input name="shortToken" type="hidden" value={shortToken} />
+      ) : null}
+      <div className="grid min-w-0 gap-1.5">
         <label className="text-sm font-medium text-neutral-800" htmlFor="name">
           이름
         </label>
@@ -32,11 +39,11 @@ export function InvitationSignupForm({ token }: InvitationSignupFormProps) {
           id="name"
           name="name"
           autoComplete="name"
-          className="h-10 rounded-md border border-neutral-300 px-3 text-sm outline-none focus:border-neutral-900"
+          className="h-11 w-full min-w-0 rounded-md border border-neutral-300 px-3 text-base outline-none focus:border-neutral-900 sm:text-sm"
           required
         />
       </div>
-      <div className="grid gap-1.5">
+      <div className="grid min-w-0 gap-1.5">
         <label className="text-sm font-medium text-neutral-800" htmlFor="phone">
           전화번호
         </label>
@@ -45,11 +52,11 @@ export function InvitationSignupForm({ token }: InvitationSignupFormProps) {
           name="phone"
           type="tel"
           autoComplete="tel"
-          className="h-10 rounded-md border border-neutral-300 px-3 text-sm outline-none focus:border-neutral-900"
+          className="h-11 w-full min-w-0 rounded-md border border-neutral-300 px-3 text-base outline-none focus:border-neutral-900 sm:text-sm"
           required
         />
       </div>
-      <div className="grid gap-1.5">
+      <div className="grid min-w-0 gap-1.5">
         <label
           className="text-sm font-medium text-neutral-800"
           htmlFor="verificationCode"
@@ -61,14 +68,14 @@ export function InvitationSignupForm({ token }: InvitationSignupFormProps) {
           name="verificationCode"
           inputMode="numeric"
           autoComplete="one-time-code"
-          className="h-10 rounded-md border border-neutral-300 px-3 text-sm outline-none focus:border-neutral-900"
+          className="h-11 w-full min-w-0 rounded-md border border-neutral-300 px-3 text-base outline-none focus:border-neutral-900 sm:text-sm"
           required
         />
         <p className="text-xs leading-relaxed text-neutral-500">
           총괄 관리자가 전달한 1회용 가입 인증 코드를 입력해 주세요.
         </p>
       </div>
-      <div className="grid gap-1.5">
+      <div className="grid min-w-0 gap-1.5">
         <label
           className="text-sm font-medium text-neutral-800"
           htmlFor="password"
@@ -80,11 +87,11 @@ export function InvitationSignupForm({ token }: InvitationSignupFormProps) {
           name="password"
           type="password"
           autoComplete="new-password"
-          className="h-10 rounded-md border border-neutral-300 px-3 text-sm outline-none focus:border-neutral-900"
+          className="h-11 w-full min-w-0 rounded-md border border-neutral-300 px-3 text-base outline-none focus:border-neutral-900 sm:text-sm"
           required
         />
       </div>
-      <div className="grid gap-1.5">
+      <div className="grid min-w-0 gap-1.5">
         <label
           className="text-sm font-medium text-neutral-800"
           htmlFor="passwordConfirm"
@@ -96,7 +103,7 @@ export function InvitationSignupForm({ token }: InvitationSignupFormProps) {
           name="passwordConfirm"
           type="password"
           autoComplete="new-password"
-          className="h-10 rounded-md border border-neutral-300 px-3 text-sm outline-none focus:border-neutral-900"
+          className="h-11 w-full min-w-0 rounded-md border border-neutral-300 px-3 text-base outline-none focus:border-neutral-900 sm:text-sm"
           required
         />
       </div>
@@ -108,7 +115,7 @@ export function InvitationSignupForm({ token }: InvitationSignupFormProps) {
       <button
         type="submit"
         disabled={pending}
-        className="h-10 rounded-md bg-neutral-950 px-4 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-neutral-400"
+        className="h-11 w-full rounded-md bg-neutral-950 px-4 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-neutral-400"
       >
         {pending ? "가입 처리 중" : "가입 완료"}
       </button>

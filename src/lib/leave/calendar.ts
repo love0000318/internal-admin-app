@@ -41,6 +41,7 @@ export type LeaveCalendarEvent = {
   employeeName: string;
   employeeUserId: string;
   teamName?: string;
+  leaveTypeCode?: string;
   leaveTypeLabel?: string;
   status: LeaveRequestStatus;
   statusLabel: string;
@@ -185,6 +186,34 @@ export function formatCalendarLeaveTitle({
   return `${request.user.name} - 휴가${suffix}`;
 }
 
+export function getLeaveCalendarEventColorClass(event: {
+  isPrivate?: boolean;
+  leaveTypeCode?: string | null;
+  leaveTypeLabel?: string | null;
+}) {
+  if (event.isPrivate) {
+    return "border-slate-200 bg-slate-100 text-slate-700";
+  }
+
+  if (event.leaveTypeCode === "HALF_DAY") {
+    return "border-orange-200 bg-orange-100 text-orange-800";
+  }
+
+  if (event.leaveTypeCode === "ANNUAL") {
+    return "border-blue-200 bg-blue-100 text-blue-800";
+  }
+
+  if (!event.leaveTypeCode && event.leaveTypeLabel?.includes("반차")) {
+    return "border-orange-200 bg-orange-100 text-orange-800";
+  }
+
+  if (!event.leaveTypeCode && event.leaveTypeLabel?.includes("연차")) {
+    return "border-blue-200 bg-blue-100 text-blue-800";
+  }
+
+  return "border-slate-200 bg-slate-100 text-slate-700";
+}
+
 function resolveLeaveTypeDefinition(
   request: CalendarLeaveRequest,
   definitionsByCode: Map<string, Pick<LeaveTypeDefinition, "id" | "code" | "name" | "visibility">>,
@@ -226,6 +255,8 @@ export function buildLeaveCalendarEventsFromRequest({
 
   const canViewDetail = canViewCalendarLeaveDetail(actor, request);
   const leaveTypeLabel = definition?.name ?? request.type;
+  const canExposeLeaveType =
+    canViewActualLeaveType(actor, request) || visibility === "PUBLIC_WITH_TYPE";
   const startDate = dateToDateOnly(request.startDate);
   const endDate = dateToDateOnly(request.endDate);
   const title = formatCalendarLeaveTitle({
@@ -250,9 +281,8 @@ export function buildLeaveCalendarEventsFromRequest({
     employeeName: request.user.name,
     employeeUserId: request.userId,
     teamName: request.user.team?.name,
-    leaveTypeLabel: canViewActualLeaveType(actor, request) || visibility === "PUBLIC_WITH_TYPE"
-      ? leaveTypeLabel
-      : undefined,
+    leaveTypeCode: canExposeLeaveType ? definition?.code ?? request.type : undefined,
+    leaveTypeLabel: canExposeLeaveType ? leaveTypeLabel : undefined,
     status: request.status,
     statusLabel: CALENDAR_STATUS_LABELS[request.status],
     halfDayPeriod: request.halfDayPeriod ?? undefined,

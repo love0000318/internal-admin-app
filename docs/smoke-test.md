@@ -31,6 +31,22 @@
   - 기대 결과: `/dashboard`가 표시된다.
   - 실패 시 확인할 것: session cookie, session token hash, user status.
 
+- [ ] 로그인 화면에서 `이 기기에서 자동 로그인 유지`를 선택하고 로그인한다.
+  - 기대 결과: 정상 비밀번호 검증 후 로그인되며 세션 만료일이 `REMEMBER_ME_SESSION_EXPIRES_IN_DAYS` 기준으로 설정된다.
+  - 실패 시 확인할 것: login action의 `rememberMe` 값, session `expiresAt`, cookie expires.
+
+- [ ] 자동 로그인 유지로 로그인한 뒤 브라우저를 다시 열고 `/dashboard`에 접근한다.
+  - 기대 결과: 유효한 httpOnly session cookie로 로그인 상태가 유지된다.
+  - 실패 시 확인할 것: cookie expires, session revokedAt/expiresAt, user status.
+
+- [ ] 유효한 세션이 있는 상태로 `/login`에 접근한다.
+  - 기대 결과: 별도 입력 없이 `/dashboard`로 이동한다.
+  - 실패 시 확인할 것: login page의 `getCurrentUser` redirect 처리.
+
+- [ ] 로그아웃 후 다시 `/dashboard`에 접근한다.
+  - 기대 결과: 세션이 revoke되고 cookie가 삭제되어 `/login`으로 이동한다.
+  - 실패 시 확인할 것: logout action, session revokedAt, cookie 삭제.
+
 - [ ] 조직/팀을 생성하고 직원을 초대한다.
   - 기대 결과: 팀과 직원 초대가 생성된다.
   - 실패 시 확인할 것: OWNER guard, 팀 unique key, 초대 중복 검증.
@@ -38,6 +54,22 @@
 - [ ] 직원이 초대 링크로 가입한다.
   - 기대 결과: MANAGER 계정이 생성되고 로그인 가능하다.
   - 실패 시 확인할 것: invitation token, password validation, identity mock production 차단.
+
+- [ ] OWNER가 직원 초대를 생성한 직후 단축 초대 URL과 가입 인증 코드를 확인한다.
+  - 기대 결과: `/i/[shortToken]` 형태의 내부 단축 URL과 1회용 가입 인증 코드가 한 번만 표시된다.
+  - 실패 시 확인할 것: `shortTokenHash`, `verificationCodeHash`, APP_BASE_URL, 초대 생성 redirect query.
+
+- [ ] 직원이 단축 초대 URL과 가입 인증 코드로 가입한다.
+  - 기대 결과: 초대 수락 화면이 표시되고 가입 완료 후 invitation, shortToken, verificationCode가 모두 사용 처리된다.
+  - 실패 시 확인할 것: shortToken 만료/폐기/소비 상태, verificationCode attempt count, invitation status.
+
+- [ ] 가입 완료 후 같은 단축 초대 URL에 다시 접근한다.
+  - 기대 결과: 초대 링크가 유효하지 않거나 이미 사용된 것으로 처리된다.
+  - 실패 시 확인할 것: `shortTokenConsumedAt`, `acceptedAt`, `usedAt`.
+
+- [ ] 초대를 재발급한다.
+  - 기대 결과: 기존 긴 token, shortToken, 가입 인증 코드는 폐기되고 새 단축 URL과 새 가입 인증 코드가 생성 직후 한 번 표시된다.
+  - 실패 시 확인할 것: 이전 invitation status/cancelledAt, `shortTokenRevokedAt`, `verificationCodeRevokedAt`.
 
 ## HR Import와 온보딩
 
@@ -127,9 +159,25 @@
   - 기대 결과: BIRTHDAY_AUTO LeaveGrant가 중복 없이 생성된다.
   - 실패 시 확인할 것: referenceYear unique key, 지급일 보정.
 
+- [ ] 직원 생일 정보를 `EmployeeProfile.birthDate`, `User.birthDate`, 사전 프로필 연결 순서로 확인한다.
+  - 기대 결과: HR import 또는 직원 상세에서 입력된 생일이 자동 지급 대상 계산에 사용된다.
+  - 실패 시 확인할 것: EmployeeProfile.birthDate 저장 여부, User.birthDate fallback, linked EmployeePrejoinProfile.birthDate.
+
+- [ ] `pnpm jobs:birthday-half-day-grants -- --date=YYYY-MM-DD --dry-run`을 실행한다.
+  - 기대 결과: 실제 DB 변경 없이 ACTIVE 직원 수, 생일 정보 누락 수, 지급 대상 수, 이미 지급된 수가 요약된다.
+  - 실패 시 확인할 것: script 옵션 전달, JobRun dryRun, `grantBirthdayHalfDaysForDate` dryRun 처리.
+
 - [ ] 직원이 생일 반차를 요청한다.
   - 기대 결과: 반차 단위로 요청 가능하고 승인 흐름과 연결된다.
   - 실패 시 확인할 것: custom grant request adapter.
+
+- [ ] 직원 내 휴가 화면과 휴가 요청 화면에서 생일 반차를 확인한다.
+  - 기대 결과: 사용 가능 기간 안의 `BIRTHDAY_AUTO` LeaveGrant가 `/leaves/me`와 `/leaves/me/requests/new` 맞춤휴가 선택지에 표시된다.
+  - 실패 시 확인할 것: LeaveGrant effectiveFrom/expiresAt, remainingAmount, LeaveType `BIRTHDAY_HALF_DAY` 활성화 상태.
+
+- [ ] 생일 반차 요청 후 승인/반려/철회/승인취소 수량을 확인한다.
+  - 기대 결과: 연차 잔여는 차감하지 않고 LeaveGrant pendingAmount/usedAmount/remainingAmount만 전환된다.
+  - 실패 시 확인할 것: LeaveRequestGrantUsage, custom grant request transaction, LeaveLedger PENDING/USED/REJECTED/WITHDRAWN/CANCELLED.
 
 ## LeaveLedger
 
@@ -156,8 +204,16 @@
   - 실패 시 확인할 것: 입사일, 잔여 연차, policy promotion 설정.
 
 - [ ] 직원이 `/leaves/me/use-plan`에서 사용계획을 제출한다.
-  - 기대 결과: SUBMITTED 상태가 되고 OWNER 화면에서 확인된다.
-  - 실패 시 확인할 것: 계획 총량, 과거 날짜, 중복 날짜 검증.
+  - 기대 결과: 수량 직접 입력 없이 시작일/종료일과 사용 형태로 제출하며, SUBMITTED 상태가 되고 OWNER 화면에서 확인된다.
+  - 실패 시 확인할 것: 기간 자동 계산, 과거 날짜, 반차 단일 날짜 제한, 중복 날짜 검증.
+
+- [ ] 사용계획 자동 계산을 확인한다.
+  - 기대 결과: 종일 기간은 토요일/일요일/회사 휴일을 제외해 계산되고, 오전/오후 반차는 0.5일로 계산된다.
+  - 실패 시 확인할 것: `calculateAnnualUsePlanItemAmount`, CompanyHoliday 조회, 클라이언트/서버 재계산 일치.
+
+- [ ] 사용계획 제출 후 휴가 요청과 장부를 확인한다.
+  - 기대 결과: 사용계획 제출만으로 LeaveRequest가 생성되지 않고 LeaveLedger도 차감되지 않는다.
+  - 실패 시 확인할 것: `/leaves/me/use-plan` action, LeaveLedger create 경로, 휴가 요청 목록.
 
 - [ ] `pnpm jobs:expire-annual-leaves -- --dry-run`을 실행한다.
   - 기대 결과: 실제 소멸 전 대상자와 수량이 출력된다.
@@ -286,6 +342,42 @@
 
 ## 반응형 UI
 
+- [ ] 모바일에서 휴가 관리 설정 탭을 확인한다.
+  - 기대 결과: `휴가 유형 관리`, `승인 정책`, `휴가 지급`, `생일 반차 설정`, `연차 정책 설정`, `연차 촉진 관리`, `회사 휴일 관리` 탭이 한 글자씩 세로로 깨지지 않고 가로 스크롤로 이동할 수 있다.
+  - 실패 시 확인할 것: `/admin/leaves/settings` 탭 wrapper의 `overflow-x-auto`, 탭 버튼의 `shrink-0`, `whitespace-nowrap`, `break-keep`.
+
+- [ ] 모바일에서 휴가 유형 목록을 확인한다.
+  - 기대 결과: PC용 넓은 테이블 대신 카드형 목록이 표시되고, 각 카드에서 휴가명/코드/구분/사용/유급/부여 방식/증명자료/연차 차감/수정 버튼을 확인할 수 있다.
+  - 실패 시 확인할 것: `/admin/leaves/types`의 모바일 카드 영역, PC 테이블의 `hidden md:block` 처리.
+
+- [ ] 모바일에서 휴가 유형 생성/수정 form을 확인한다.
+  - 기대 결과: form이 1열로 표시되고 input/select/button이 화면 밖으로 벗어나지 않는다.
+  - 실패 시 확인할 것: form wrapper `max-w-full`, input/select `w-full min-w-0`, 버튼 영역 `flex-col sm:flex-row`.
+
+- [ ] PC에서 휴가 유형 관리를 확인한다.
+  - 기대 결과: 기존처럼 넓은 테이블이 유지되고, 컬럼명은 세로로 깨지지 않으며 필요한 경우 테이블 내부만 가로 스크롤된다.
+  - 실패 시 확인할 것: table `min-w-*`, wrapper `overflow-x-auto`, th/td `whitespace-nowrap break-keep`.
+
+- [ ] 모든 로그인 후 페이지 우측 상단에 알림 아이콘이 표시된다.
+  - 기대 결과: `/dashboard`, `/leaves/me`, `/admin/*` 등 protected layout 화면에서 알림센터 아이콘이 우측 상단에 보인다.
+  - 실패 시 확인할 것: `(app)/layout.tsx`, `NotificationBell`, 현재 사용자 세션.
+
+- [ ] 읽지 않은 알림이 있으면 빨간 동그라미가 표시되고 아이콘이 진동한다.
+  - 기대 결과: unread count가 1 이상이면 badge와 `animate-bell-shake`가 적용된다.
+  - 실패 시 확인할 것: `countUnreadNotifications`, Notification readAt, prefers-reduced-motion 설정.
+
+- [ ] 알림 아이콘을 클릭한다.
+  - 기대 결과: `/notifications` 알림센터로 이동한다.
+  - 실패 시 확인할 것: Link href, protected route 접근 권한.
+
+- [ ] 휴가 캘린더에서 연차와 반차 색상을 확인한다.
+  - 기대 결과: 연차는 파란색, 기본 반차는 주황색으로 표시된다.
+  - 실패 시 확인할 것: `getLeaveCalendarEventColorClass`, event.leaveTypeCode.
+
+- [ ] 공개 범위가 제한된 휴가 색상을 확인한다.
+  - 기대 결과: `PUBLIC_AS_LEAVE` 또는 권한 없는 비공개 휴가는 중립색으로 표시되어 실제 유형을 유추할 수 없다.
+  - 실패 시 확인할 것: calendar DTO의 `isPrivate`, `leaveTypeCode` 노출 조건.
+
 - [ ] PC 1440px/1280px에서 관리자 화면을 확인한다.
   - 기대 결과: 사이드바와 본문이 겹치지 않고, 넓은 표는 컬럼명이 읽히는 상태로 표시된다.
   - 실패 시 확인할 것: app layout `min-w-0`, table `min-width`, table wrapper `overflow-x-auto`.
@@ -319,6 +411,33 @@
 - [ ] `docs/v2-rehearsal-report.md`를 최신 결과로 갱신한다.
   - 기대 결과: 실제 사용 가능 여부와 남은 blocker가 명확하다.
   - 실패 시 확인할 것: 실행 명령 결과와 미검수 시나리오.
+
+## 3차 모바일 UX Smoke Test
+
+- [ ] 모바일 390px에서 `/login`에 접속한다.
+  - 기대 결과: 로그인 card가 화면 밖으로 벗어나지 않고, 입력칸과 자동 로그인 유지 영역을 터치하기 쉽다.
+  - 실패 시 확인할 것: login page shell, input `w-full`, checkbox label wrapping.
+- [ ] 모바일 390px에서 `/invitations/accept` 또는 `/i/[shortToken]` 가입 화면에 접속한다.
+  - 기대 결과: 초대 정보와 가입 인증 코드 입력 form이 1열로 표시되고 이메일/긴 값이 화면 밖으로 넘치지 않는다.
+  - 실패 시 확인할 것: invitation accept page, signup form input width, summary `break-all`.
+- [ ] 모바일 390px에서 `/leaves/me`를 확인한다.
+  - 기대 결과: 주요 버튼은 한 줄에 눌기 쉬운 크기로 표시되고, 긴 표는 내부 영역에서만 가로 스크롤된다.
+  - 실패 시 확인할 것: leave ledger/request table wrapper `overflow-x-auto`.
+- [ ] 모바일 390px에서 `/leaves/me/requests/new`를 확인한다.
+  - 기대 결과: 휴가 유형, 날짜, 반차, 사유, 첨부 입력이 1열로 정리되고 제출 버튼이 화면 폭에 맞는다.
+  - 실패 시 확인할 것: `LeaveRequestForm` input/select/textarea `w-full min-w-0`.
+- [ ] 모바일 390px에서 `/admin/leaves/settings`와 `/admin/leaves/types`를 확인한다.
+  - 기대 결과: 설정 탭이 가로 스크롤되고 한글이 세로로 깨지지 않으며, 휴가 유형 목록은 모바일 카드 또는 내부 스크롤로 표시된다.
+  - 실패 시 확인할 것: tab `whitespace-nowrap break-keep shrink-0`, table/card responsive 분기.
+- [ ] 모바일 390px에서 `/notifications`를 확인한다.
+  - 기대 결과: 필터는 가로 스크롤되고 알림 목록은 카드형으로 표시된다.
+  - 실패 시 확인할 것: notifications mobile card renderer, filter `min-w-max`.
+- [ ] 모바일과 PC에서 `/leaves/calendar`를 확인한다.
+  - 기대 결과: 연차는 파란색, 반차는 주황색, 유형 숨김 휴가는 중립색으로 표시된다.
+  - 실패 시 확인할 것: `getLeaveCalendarEventColorClass`, calendar DTO `isPrivate`.
+- [ ] 모든 protected page 우측 상단 알림 아이콘을 확인한다.
+  - 기대 결과: 읽지 않은 알림이 있으면 빨간 badge와 진동 animation이 보이고, 클릭하면 `/notifications`로 이동한다.
+  - 실패 시 확인할 것: protected layout, `NotificationBell`, unread count.
 
 ## 미승인 휴가 자동 확정 Smoke Test
 
@@ -361,3 +480,37 @@
 - [ ] 초대를 재발급한다.
   - 기대 결과: 기존 초대 token/code는 폐기되고 새 링크와 새 코드가 한 번 표시된다.
   - 실패 시 확인할 것: `reissueInvitation`.
+
+## 외부 알림 Smoke Test
+
+- [ ] Vercel 또는 로컬 환경에 EMAIL_PROVIDER, RESEND_API_KEY, EMAIL_FROM, EXTERNAL_EMAIL_NOTIFICATIONS_ENABLED를 설정한다.
+  - 기대 결과: `pnpm preflight`에서 외부 이메일 설정이 PASS 또는 의도한 WARN으로 표시된다.
+  - 실패 시 확인할 것: production에서 EMAIL_PROVIDER=console 사용 여부, RESEND_API_KEY/EMAIL_FROM 누락.
+
+- [ ] OWNER가 직원 초대 생성 시 `초대 이메일 발송`을 선택한다.
+  - 기대 결과: 초대는 생성되고, 이메일 provider가 초대 링크와 가입 인증 코드를 발송한다.
+  - 실패 시 확인할 것: 이메일 provider 환경변수, `INVITATION_EMAIL_FAILED` AuditLog. 초대 자체는 성공해야 한다.
+
+- [ ] 직원이 휴가 요청을 생성한다.
+  - 기대 결과: 승인권자에게 최소 정보만 포함된 휴가 요청 이메일이 발송된다.
+  - 실패 시 확인할 것: 승인권자 email, `LEAVE_REQUESTED` Notification, 외부 dispatcher 로그.
+
+- [ ] OWNER/LEAD가 휴가를 승인 또는 반려한다.
+  - 기대 결과: 요청자에게 결과 이메일이 발송되고 반려 사유 원문은 이메일에 포함되지 않는다.
+  - 실패 시 확인할 것: requester email, template 내용, AuditLog.
+
+- [ ] 증명자료 재제출 요청을 수행한다.
+  - 기대 결과: 직원에게 시스템 링크 중심의 재제출 요청 이메일이 발송된다.
+  - 실패 시 확인할 것: 파일명/fileKey/private path가 이메일에 포함되지 않는지.
+
+- [ ] 연차 촉진 알림 Job을 실행한다.
+  - 기대 결과: 연차 사용계획 제출 안내 이메일이 발송된다.
+  - 실패 시 확인할 것: `ANNUAL_LEAVE_PROMOTION` 또는 `ANNUAL_LEAVE_USE_PLAN_REMINDER` Notification.
+
+- [ ] SLACK_NOTIFICATIONS_ENABLED=true와 SLACK_WEBHOOK_URL을 설정한 뒤 Job 실패 케이스를 만든다.
+  - 기대 결과: Slack에 민감정보 없는 운영 실패 알림이 전송된다.
+  - 실패 시 확인할 것: `EXTERNAL_SLACK_FAILED` AuditLog, webhook URL 설정.
+
+- [ ] AuditLog를 확인한다.
+  - 기대 결과: API key, Slack webhook URL, 초대 token, 가입 인증 코드 원문, codeHash/tokenHash가 저장되어 있지 않다.
+  - 실패 시 확인할 것: `sanitizeAuditMetadata`, external notification metadata allowlist.

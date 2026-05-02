@@ -1,6 +1,7 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 
 import { PrismaClient } from "../src/generated/prisma/client";
+import { createUniqueInvitationShortTokenPayload } from "../src/lib/auth/invitation-short-token";
 import { createInvitationTokenPayload } from "../src/lib/auth/invitation-token";
 import { createInvitationVerificationCodePayload } from "../src/lib/auth/invitation-verification-code";
 
@@ -540,6 +541,7 @@ async function main() {
   }
 
   const { rawToken, tokenHash, expiresAt } = createInvitationTokenPayload();
+  const shortToken = await createUniqueInvitationShortTokenPayload();
   const verificationCode = createInvitationVerificationCodePayload();
 
   const invitation = await prisma.invitation.create({
@@ -551,6 +553,8 @@ async function main() {
       title: ownerTitle,
       jobTitle: ownerTitle,
       tokenHash,
+      shortTokenHash: shortToken.shortTokenHash,
+      shortTokenExpiresAt: shortToken.expiresAt,
       expiresAt,
       verificationCodeHash: verificationCode.codeHash,
       verificationCodeExpiresAt: verificationCode.expiresAt,
@@ -573,6 +577,8 @@ async function main() {
   });
 
   console.log("========================================");
+  console.log("Owner invitation short URL");
+  console.log(`${appBaseUrl}/i/${shortToken.rawShortToken}`);
   console.log("Owner invitation URL");
   console.log(`${appBaseUrl}/invitations/accept?token=${rawToken}`);
   console.log("Owner invitation verification code");

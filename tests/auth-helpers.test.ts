@@ -15,6 +15,13 @@ import {
   verifyInvitationToken,
 } from "@/lib/auth/invitation-token";
 import {
+  generateInvitationShortToken,
+  hashInvitationShortToken,
+  isInvitationShortTokenFormat,
+  validateInvitationShortTokenRecord,
+  verifyInvitationShortTokenHash,
+} from "@/lib/auth/invitation-short-token";
+import {
   createInvitationVerificationCodePayload,
   generateInvitationVerificationCode,
   hashInvitationVerificationCode,
@@ -25,7 +32,9 @@ import { MockIdentityVerificationProvider } from "@/lib/auth/identity-verificati
 import { normalizePhoneNumber } from "@/lib/auth/phone";
 import {
   createSessionToken,
+  getRememberMeSessionTtlDays,
   getSessionCookieOptions,
+  getSessionExpiresAt,
   getSessionTtlDays,
   hashSessionToken,
   isSessionExpired,
@@ -91,6 +100,69 @@ describe("auth helpers", () => {
     );
 
     vi.unstubAllEnvs();
+  });
+
+  it("generates and verifies internal short invitation tokens", () => {
+    vi.stubEnv("INVITATION_SHORT_TOKEN_LENGTH", "8");
+
+    const shortToken = generateInvitationShortToken();
+    const shortTokenHash = hashInvitationShortToken(shortToken);
+
+    expect(shortToken).toMatch(/^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{8}$/);
+    expect(shortToken).not.toMatch(/[O0I1L]/);
+    expect(shortTokenHash).toHaveLength(64);
+    expect(shortTokenHash).not.toEqual(shortToken);
+    expect(isInvitationShortTokenFormat(shortToken)).toBe(true);
+    expect(isInvitationShortTokenFormat("O0I1L")).toBe(false);
+    expect(verifyInvitationShortTokenHash(shortToken, shortTokenHash)).toBe(
+      true,
+    );
+    expect(verifyInvitationShortTokenHash("A7K9P2Q8", shortTokenHash)).toBe(
+      shortToken === "A7K9P2Q8",
+    );
+
+    vi.unstubAllEnvs();
+  });
+
+  it("validates short invitation token state", () => {
+    const now = new Date("2026-05-01T00:00:00.000Z");
+    const record = {
+      shortTokenHash: hashInvitationShortToken("A7K9P2Q8"),
+      shortTokenExpiresAt: new Date("2026-05-02T00:00:00.000Z"),
+      shortTokenConsumedAt: null,
+      shortTokenRevokedAt: null,
+    };
+
+    expect(validateInvitationShortTokenRecord(record, now)).toEqual({
+      ok: true,
+    });
+    expect(
+      validateInvitationShortTokenRecord(
+        {
+          ...record,
+          shortTokenExpiresAt: new Date("2026-04-30T00:00:00.000Z"),
+        },
+        now,
+      ),
+    ).toEqual({ ok: false, reason: "expired" });
+    expect(
+      validateInvitationShortTokenRecord(
+        {
+          ...record,
+          shortTokenConsumedAt: now,
+        },
+        now,
+      ),
+    ).toEqual({ ok: false, reason: "consumed" });
+    expect(
+      validateInvitationShortTokenRecord(
+        {
+          ...record,
+          shortTokenRevokedAt: now,
+        },
+        now,
+      ),
+    ).toEqual({ ok: false, reason: "revoked" });
   });
 
   it("validates invitation verification code state", () => {
@@ -241,8 +313,26 @@ describe("auth helpers", () => {
 
   it("allows session TTL to be configured by env", () => {
     vi.stubEnv("SESSION_EXPIRES_IN_DAYS", "10");
+    vi.stubEnv("REMEMBER_ME_SESSION_EXPIRES_IN_DAYS", "45");
 
     expect(getSessionTtlDays()).toBe(10);
+    expect(getRememberMeSessionTtlDays()).toBe(45);
+
+    vi.unstubAllEnvs();
+  });
+
+  it("uses a longer expiry when remember me is enabled", () => {
+    vi.stubEnv("SESSION_EXPIRES_IN_DAYS", "14");
+    vi.stubEnv("REMEMBER_ME_SESSION_EXPIRES_IN_DAYS", "30");
+
+    const now = new Date("2026-05-01T00:00:00.000Z");
+
+    expect(
+      getSessionExpiresAt({ rememberMe: false, now }).toISOString(),
+    ).toBe("2026-05-15T00:00:00.000Z");
+    expect(getSessionExpiresAt({ rememberMe: true, now }).toISOString()).toBe(
+      "2026-05-31T00:00:00.000Z",
+    );
 
     vi.unstubAllEnvs();
   });

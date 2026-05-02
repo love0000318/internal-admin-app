@@ -259,6 +259,12 @@ enum AnnualLeaveUsePlanStatus {
   CANCELLED
 }
 
+enum AnnualLeaveUsePlanUsageType {
+  FULL_DAY
+  AM_HALF_DAY
+  PM_HALF_DAY
+}
+
 enum JobRunStatus {
   RUNNING
   SUCCESS
@@ -355,6 +361,10 @@ enum AuditAction {
   INVITATION_VERIFICATION_CODE_REVOKED
   INVITATION_REISSUED_WITH_VERIFICATION_CODE
   OWNER_INVITATION_REISSUED_WITH_VERIFICATION_CODE
+  INVITATION_SHORT_URL_CREATED
+  INVITATION_SHORT_URL_CONSUMED
+  INVITATION_SHORT_URL_REVOKED
+  INVITATION_REISSUED_WITH_SHORT_URL
   USER_PROFILE_UPDATED
   USER_ROLE_UPDATED
   USER_TEAM_UPDATED
@@ -433,6 +443,12 @@ enum AuditAction {
   AUTO_CONFIRM_PAST_START_LEAVES_DRY_RUN
   REPORT_VIEWED
   REPORT_EXPORTED
+  EXTERNAL_EMAIL_SENT
+  EXTERNAL_EMAIL_FAILED
+  EXTERNAL_SLACK_SENT
+  EXTERNAL_SLACK_FAILED
+  INVITATION_EMAIL_SENT
+  INVITATION_EMAIL_FAILED
   JOB_RUN_STARTED
   JOB_RUN_COMPLETED
   JOB_RUN_FAILED
@@ -697,6 +713,10 @@ model Invitation {
   birthDate      DateTime?        @db.Date
   birthday       DateTime?        @db.Date
   tokenHash      String           @unique
+  shortTokenHash String?          @unique
+  shortTokenExpiresAt DateTime?
+  shortTokenConsumedAt DateTime?
+  shortTokenRevokedAt DateTime?
   status         InvitationStatus @default(PENDING)
   expiresAt      DateTime
   usedAt         DateTime?
@@ -725,6 +745,7 @@ model Invitation {
   @@index([email])
   @@index([status])
   @@index([expiresAt])
+  @@index([shortTokenExpiresAt])
   @@index([employeePrejoinProfileId])
 }
 
@@ -1003,6 +1024,10 @@ model AnnualLeaveUsePlanItem {
   id            String              @id @default(cuid())
   usePlanId     String
   plannedDate   DateTime            @db.Date
+  plannedStartDate DateTime?        @db.Date
+  plannedEndDate DateTime?          @db.Date
+  usageType     AnnualLeaveUsePlanUsageType?
+  calculatedAmount Float?
   amount        Float
   unit          LeaveGrantUnit       @default(DAY)
   halfDayPeriod HalfDayPeriod?
@@ -1014,6 +1039,7 @@ model AnnualLeaveUsePlanItem {
 
   @@index([usePlanId])
   @@index([plannedDate])
+  @@index([plannedStartDate])
   @@unique([usePlanId, plannedDate, halfDayPeriod])
 }
 

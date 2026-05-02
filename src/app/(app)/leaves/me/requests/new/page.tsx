@@ -46,11 +46,11 @@ export default async function NewLeaveRequestPage({
   ]);
 
   return (
-    <section className="max-w-4xl">
-      <Link href="/leaves/me" className="text-sm font-medium underline">
+    <section className="min-w-0 max-w-4xl">
+      <Link href="/leaves/me" className="inline-flex h-10 w-full items-center justify-center rounded-md border border-neutral-300 px-4 text-sm font-medium text-neutral-700 sm:w-auto">
         휴가 현황으로 돌아가기
       </Link>
-      <h1 className="mt-3 text-2xl font-semibold tracking-normal">
+      <h1 className="mt-3 break-keep text-2xl font-semibold tracking-normal">
         새 휴가 요청
       </h1>
       {error ? (

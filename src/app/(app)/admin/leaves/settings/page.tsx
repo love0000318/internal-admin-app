@@ -31,52 +31,52 @@ export default async function LeaveSettingsPage({
             휴가 관리 설정
           </h1>
         </div>
-        <div className="flex gap-2">
+        <div className="flex w-full min-w-0 gap-2 overflow-x-auto whitespace-nowrap pb-1">
           <Link
             href="/admin/leaves/types"
-            className="inline-flex h-10 items-center rounded-md border border-neutral-300 px-4 text-sm font-medium"
+            className="inline-flex h-10 shrink-0 items-center whitespace-nowrap break-keep rounded-md border border-neutral-300 px-4 text-sm font-medium"
           >
             휴가 유형 관리
           </Link>
           <Link
             href="/admin/leaves/approval-policies"
-            className="inline-flex h-10 items-center rounded-md border border-neutral-300 px-4 text-sm font-medium"
+            className="inline-flex h-10 shrink-0 items-center whitespace-nowrap break-keep rounded-md border border-neutral-300 px-4 text-sm font-medium"
           >
             휴가 승인 정책
           </Link>
           <Link
             href="/admin/leaves/grants"
-            className="inline-flex h-10 items-center rounded-md border border-neutral-300 px-4 text-sm font-medium"
+            className="inline-flex h-10 shrink-0 items-center whitespace-nowrap break-keep rounded-md border border-neutral-300 px-4 text-sm font-medium"
           >
             맞춤휴가 지급
           </Link>
           <Link
             href="/admin/leaves/birthday-policy"
-            className="inline-flex h-10 items-center rounded-md border border-neutral-300 px-4 text-sm font-medium"
+            className="inline-flex h-10 shrink-0 items-center whitespace-nowrap break-keep rounded-md border border-neutral-300 px-4 text-sm font-medium"
           >
             생일 반차 설정
           </Link>
           <Link
             href="/admin/leaves/annual-policy"
-            className="inline-flex h-10 items-center rounded-md border border-neutral-300 px-4 text-sm font-medium"
+            className="inline-flex h-10 shrink-0 items-center whitespace-nowrap break-keep rounded-md border border-neutral-300 px-4 text-sm font-medium"
           >
             연차 정책 설정
           </Link>
           <Link
             href="/admin/leaves/promotions"
-            className="inline-flex h-10 items-center rounded-md border border-neutral-300 px-4 text-sm font-medium"
+            className="inline-flex h-10 shrink-0 items-center whitespace-nowrap break-keep rounded-md border border-neutral-300 px-4 text-sm font-medium"
           >
             연차 촉진 관리
           </Link>
           <Link
             href="/admin/leaves/holidays"
-            className="inline-flex h-10 items-center rounded-md border border-neutral-300 px-4 text-sm font-medium"
+            className="inline-flex h-10 shrink-0 items-center whitespace-nowrap break-keep rounded-md border border-neutral-300 px-4 text-sm font-medium"
           >
             회사 휴일 관리
           </Link>
           <Link
             href="/admin/leaves/balances"
-            className="inline-flex h-10 items-center rounded-md border border-neutral-300 px-4 text-sm font-medium"
+            className="inline-flex h-10 shrink-0 items-center whitespace-nowrap break-keep rounded-md border border-neutral-300 px-4 text-sm font-medium"
           >
             직원별 현황
           </Link>

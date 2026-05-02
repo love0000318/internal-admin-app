@@ -207,6 +207,56 @@ function checkProductionProviderConfig() {
     : fail("production provider config", "mock provider is not allowed in production");
 }
 
+function isEnvTrue(name: string) {
+  return (process.env[name] ?? "").toLowerCase() === "true";
+}
+
+function checkExternalEmailConfig() {
+  const enabled = isEnvTrue("EXTERNAL_EMAIL_NOTIFICATIONS_ENABLED");
+  const provider = (process.env.EMAIL_PROVIDER ?? "").toLowerCase();
+
+  if (!enabled) {
+    return warn("external email notifications", "disabled");
+  }
+
+  if (!provider) {
+    return fail("external email notifications", "EMAIL_PROVIDER is required when enabled");
+  }
+
+  if (process.env.NODE_ENV === "production" && provider === "console") {
+    return fail(
+      "external email notifications",
+      "EMAIL_PROVIDER=console is not allowed in production",
+    );
+  }
+
+  if (provider === "console") {
+    return pass("external email notifications", "console provider");
+  }
+
+  if (provider !== "resend") {
+    return fail("external email notifications", `unsupported EMAIL_PROVIDER=${provider}`);
+  }
+
+  const missing = ["RESEND_API_KEY", "EMAIL_FROM"].filter((name) => !process.env[name]);
+
+  return missing.length === 0
+    ? pass("external email notifications", "resend provider configured")
+    : fail("external email notifications", `missing: ${missing.join(", ")}`);
+}
+
+function checkSlackNotificationConfig() {
+  const enabled = isEnvTrue("SLACK_NOTIFICATIONS_ENABLED");
+
+  if (!enabled) {
+    return warn("Slack notifications", "disabled");
+  }
+
+  return process.env.SLACK_WEBHOOK_URL
+    ? pass("Slack notifications", "webhook configured")
+    : fail("Slack notifications", "SLACK_WEBHOOK_URL is required when enabled");
+}
+
 async function checkProductionMockProviderBlocked() {
   if (process.env.NODE_ENV !== "production") {
     return pass("production mock identity flow", "checked in production");
@@ -326,6 +376,8 @@ async function main() {
     checkPrivateUploadDir(),
     checkProductionUrl(),
     checkProductionProviderConfig(),
+    checkExternalEmailConfig(),
+    checkSlackNotificationConfig(),
     await checkProductionMockProviderBlocked(),
     ...(await checkDatabase()),
   ];

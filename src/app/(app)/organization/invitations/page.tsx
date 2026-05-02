@@ -6,6 +6,7 @@ import {
   reissueInvitation,
 } from "@/app/(app)/organization/actions";
 import { roleLabel } from "@/lib/display/labels";
+import { isInvitationEmailAvailable } from "@/lib/external-notifications/config";
 import { toDisplayDate } from "@/lib/organization/format";
 import { getPrisma } from "@/lib/db/prisma";
 import { getInvitationVerificationCodeStatus } from "@/lib/auth/invitation-verification-code";
@@ -16,6 +17,7 @@ export const dynamic = "force-dynamic";
 type InvitationsPageProps = {
   searchParams: Promise<{
     inviteUrl?: string;
+    longInviteUrl?: string;
     verificationCode?: string;
     error?: string;
     success?: string;
@@ -35,8 +37,10 @@ export default async function InvitationsPage({
   searchParams,
 }: InvitationsPageProps) {
   await requireOwner();
-  const { inviteUrl, verificationCode, error, success } = await searchParams;
+  const { inviteUrl, longInviteUrl, verificationCode, error, success } =
+    await searchParams;
   const prisma = getPrisma();
+  const canSendInvitationEmail = isInvitationEmailAvailable();
   const [teams, invitations] = await Promise.all([
     prisma.team.findMany({
       where: { status: "ACTIVE" },
@@ -76,6 +80,9 @@ export default async function InvitationsPage({
           <p className="text-sm font-medium text-emerald-900">
             초대 링크가 생성되었습니다.
           </p>
+          <p className="mt-1 text-sm leading-relaxed text-emerald-800">
+            초대 링크와 가입 인증 코드를 직원에게 함께 전달해 주세요. 초대 링크와 인증 코드는 가입 완료 후 다시 사용할 수 없습니다.
+          </p>
           <div className="mt-3 flex flex-col gap-2 sm:flex-row">
             <input
               readOnly
@@ -84,6 +91,11 @@ export default async function InvitationsPage({
             />
             <CopyButton value={inviteUrl} />
           </div>
+          {longInviteUrl ? (
+            <p className="mt-2 break-all text-xs text-emerald-700">
+              긴 초대 URL도 사용할 수 있습니다: {longInviteUrl}
+            </p>
+          ) : null}
         </div>
       ) : null}
       {inviteUrl && verificationCode ? (
@@ -160,6 +172,23 @@ export default async function InvitationsPage({
             className="h-10 rounded-md border px-3 text-sm text-neutral-950"
           />
         </label>
+        <label className="flex items-start gap-2 rounded-md border border-neutral-200 bg-neutral-50 p-3 text-sm text-neutral-700 md:col-span-3">
+          <input
+            name="sendInvitationEmail"
+            type="checkbox"
+            value="true"
+            disabled={!canSendInvitationEmail}
+            className="mt-1 h-4 w-4 rounded border-neutral-300 disabled:opacity-50"
+          />
+          <span className="leading-relaxed break-keep">
+            초대 이메일 발송
+            <span className="block text-xs text-neutral-500">
+              {canSendInvitationEmail
+                ? "초대 링크와 가입 인증 코드를 직원 이메일로 함께 보냅니다."
+                : "이메일 provider 환경변수가 설정되지 않아 직접 전달만 가능합니다."}
+            </span>
+          </span>
+        </label>
         <button className="h-10 self-end rounded-md bg-neutral-950 px-4 text-sm font-medium text-white">
           초대 생성
         </button>
@@ -183,7 +212,7 @@ export default async function InvitationsPage({
           <tbody className="divide-y divide-neutral-100">
             {invitations.length === 0 ? (
               <tr>
-                <td className="px-4 py-6 text-neutral-500" colSpan={9}>
+                <td className="px-4 py-6 text-neutral-500" colSpan={10}>
                   진행 중인 초대가 없습니다.
                 </td>
               </tr>
@@ -203,6 +232,19 @@ export default async function InvitationsPage({
                   </td>
                   <td className="px-4 py-3">
                     <InvitationStatusBadge status={invitation.status} />
+                  </td>
+                  <td className="px-4 py-3">
+                    {invitation.status === "ACCEPTED" ||
+                    invitation.shortTokenConsumedAt
+                      ? "가입 완료"
+                      : invitation.status === "CANCELLED" ||
+                          invitation.shortTokenRevokedAt
+                        ? "취소됨"
+                        : invitation.status === "EXPIRED"
+                          ? "만료됨"
+                          : invitation.shortTokenHash
+                            ? "단축 링크 발급됨"
+                            : "재발급 필요"}
                   </td>
                   <td className="px-4 py-3">
                     {

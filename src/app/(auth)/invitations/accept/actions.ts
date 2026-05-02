@@ -4,6 +4,11 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { hashInvitationToken, isInvitationExpired } from "@/lib/auth/invitation-token";
+import {
+  hashInvitationShortToken,
+  isInvitationShortTokenFormat,
+  validateInvitationShortTokenRecord,
+} from "@/lib/auth/invitation-short-token";
 import { verifyInvitationVerificationCode } from "@/lib/auth/invitation-verification-code";
 import { hashPassword, validatePasswordPolicy } from "@/lib/auth/password";
 import { normalizePhoneNumber } from "@/lib/auth/phone";
@@ -18,7 +23,8 @@ export type AcceptInvitationFormState = {
 
 const acceptInvitationSchema = z
   .object({
-    token: z.string().min(1),
+    token: z.string().optional(),
+    shortToken: z.string().optional(),
     name: z.string().trim().min(1),
     phone: z.string().trim().min(1),
     password: z.string().min(8),
@@ -28,6 +34,10 @@ const acceptInvitationSchema = z
   .refine((data) => data.password === data.passwordConfirm, {
     path: ["passwordConfirm"],
     message: "PASSWORD_CONFIRM_MISMATCH",
+  })
+  .refine((data) => Boolean(data.token || data.shortToken), {
+    path: ["token"],
+    message: "INVITATION_TOKEN_REQUIRED",
   });
 
 const invalidCodeMessage = "가입 인증 코드가 올바르지 않거나 만료되었습니다.";
@@ -36,8 +46,14 @@ export async function acceptInvitationAction(
   _prevState: AcceptInvitationFormState,
   formData: FormData,
 ): Promise<AcceptInvitationFormState> {
+  const rawToken = formData.get("token");
+  const rawShortToken = formData.get("shortToken");
   const parsed = acceptInvitationSchema.safeParse({
-    token: formData.get("token"),
+    token: typeof rawToken === "string" && rawToken ? rawToken : undefined,
+    shortToken:
+      typeof rawShortToken === "string" && rawShortToken
+        ? rawShortToken
+        : undefined,
     name: formData.get("name"),
     phone: formData.get("phone"),
     password: formData.get("password"),
@@ -51,15 +67,26 @@ export async function acceptInvitationAction(
 
   const prisma = getPrisma();
   const phone = normalizePhoneNumber(parsed.data.phone);
-  const tokenHash = hashInvitationToken(parsed.data.token);
-  const invitation = await prisma.invitation.findUnique({
-    where: {
-      tokenHash,
-    },
-    include: {
-      employeePrejoinProfile: true,
-    },
-  });
+  const invitation = parsed.data.token
+    ? await prisma.invitation.findUnique({
+        where: {
+          tokenHash: hashInvitationToken(parsed.data.token),
+        },
+        include: {
+          employeePrejoinProfile: true,
+        },
+      })
+    : parsed.data.shortToken &&
+        isInvitationShortTokenFormat(parsed.data.shortToken)
+      ? await prisma.invitation.findUnique({
+          where: {
+            shortTokenHash: hashInvitationShortToken(parsed.data.shortToken),
+          },
+          include: {
+            employeePrejoinProfile: true,
+          },
+        })
+      : null;
 
   if (!invitation) {
     return { error: "유효하지 않은 초대 링크입니다." };
@@ -84,6 +111,14 @@ export async function acceptInvitationAction(
     });
 
     return { error: "만료된 초대 링크입니다." };
+  }
+
+  const shortTokenResult = parsed.data.shortToken
+    ? validateInvitationShortTokenRecord(invitation)
+    : { ok: true as const };
+
+  if (!shortTokenResult.ok) {
+    return { error: "?좏슚?섏? ?딆? 珥덈? 留곹겕?낅땲??" };
   }
 
   const codeResult = verifyInvitationVerificationCode({
@@ -211,6 +246,8 @@ export async function acceptInvitationAction(
           usedAt: null,
           verificationCodeConsumedAt: null,
           verificationCodeRevokedAt: null,
+          shortTokenConsumedAt: null,
+          shortTokenRevokedAt: null,
           verificationCodeAttemptCount: {
             lt: invitation.verificationCodeMaxAttempts,
           },
@@ -222,6 +259,7 @@ export async function acceptInvitationAction(
           acceptedUserId: createdUser.id,
           acceptedByUserId: createdUser.id,
           verificationCodeConsumedAt: now,
+          ...(invitation.shortTokenHash ? { shortTokenConsumedAt: now } : {}),
         },
       });
 
@@ -275,6 +313,25 @@ export async function acceptInvitationAction(
           },
         },
       });
+
+      if (invitation.shortTokenHash) {
+        await tx.auditLog.create({
+          data: {
+            actorId: createdUser.id,
+            actorUserId: createdUser.id,
+            targetUserId: createdUser.id,
+            action: "INVITATION_SHORT_URL_CONSUMED",
+            targetType: "INVITATION",
+            targetId: invitation.id,
+            metadata: {
+              invitationId: invitation.id,
+              targetEmailMasked: maskEmail(invitation.email),
+              role: invitation.role,
+              status: "CONSUMED",
+            },
+          },
+        });
+      }
 
       if (invitation.employeePrejoinProfileId) {
         await createEmployeeProfilesFromPrejoin({

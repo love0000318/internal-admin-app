@@ -63,16 +63,16 @@ export default async function MyLeavesPage({ searchParams }: MyLeavesPageProps) 
             휴가 보유 현황 및 요청
           </h1>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
           <Link
             href="/leaves/me/use-plan"
-            className="inline-flex h-10 items-center justify-center rounded-md border border-neutral-300 px-4 text-sm font-medium"
+            className="inline-flex h-10 w-full items-center justify-center rounded-md border border-neutral-300 px-4 text-sm font-medium sm:w-auto"
           >
             연차 사용계획
           </Link>
           <Link
             href="/leaves/me/requests/new"
-            className="inline-flex h-10 items-center justify-center rounded-md bg-neutral-950 px-4 text-sm font-medium text-white"
+            className="inline-flex h-10 w-full items-center justify-center rounded-md bg-neutral-950 px-4 text-sm font-medium text-white sm:w-auto"
           >
             새 휴가 요청하기
           </Link>
@@ -172,7 +172,7 @@ export default async function MyLeavesPage({ searchParams }: MyLeavesPageProps) 
         {inactiveCustomGrants.length > 0 ? (
           <div className="mt-6">
             <h3 className="text-sm font-semibold">만료되었거나 회수된 맞춤휴가</h3>
-            <div className="mt-3 overflow-hidden rounded-md border border-neutral-200">
+            <div className="mt-3 overflow-x-auto rounded-md border border-neutral-200">
               <table className="w-full min-w-[720px] text-left text-sm">
                 <thead className="bg-neutral-50 text-neutral-500">
                   <tr>
@@ -205,7 +205,7 @@ export default async function MyLeavesPage({ searchParams }: MyLeavesPageProps) 
         ) : null}
       </div>
 
-      <div className="mt-6 overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-sm">
+      <div className="mt-6 overflow-x-auto rounded-lg border border-neutral-200 bg-white shadow-sm">
         <div className="border-b border-neutral-100 px-4 py-3">
           <h2 className="text-base font-semibold">휴가 장부</h2>
           <p className="mt-1 text-sm text-neutral-500">
@@ -246,7 +246,7 @@ export default async function MyLeavesPage({ searchParams }: MyLeavesPageProps) 
         </table>
       </div>
 
-      <div className="mt-6 overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-sm">
+      <div className="mt-6 overflow-x-auto rounded-lg border border-neutral-200 bg-white shadow-sm">
         <table className="w-full min-w-[900px] text-left text-sm">
           <thead className="bg-neutral-50 text-neutral-500">
             <tr>
