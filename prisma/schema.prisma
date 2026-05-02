@@ -1,0 +1,1610 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  OWNER
+  LEAD
+  MANAGER
+  EXTERNAL_PARTNER
+}
+
+enum UserStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+  DEACTIVATED
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  CANCELLED
+  EXPIRED
+}
+
+enum TeamStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum LeaveType {
+  ANNUAL
+  HALF_DAY
+  RESERVE_FORCES
+  SICK
+  BEREAVEMENT
+}
+
+enum LeaveCategory {
+  ANNUAL
+  CUSTOM
+}
+
+enum LeaveGrantMethod {
+  SYSTEM
+  ON_REQUEST
+  AFTER_ANNUAL_EXHAUSTED
+  ON_HIRE_DATE
+  MANUAL
+  RECURRING
+  ON_TENURE
+}
+
+enum LeaveGrantUnit {
+  DAY
+  HOUR
+  MINUTE
+}
+
+enum LeaveUsageMode {
+  USE_ALL_AT_ONCE
+  SPLIT_ALLOWED
+}
+
+enum LeaveUsageUnit {
+  FULL_DAY
+  HALF_DAY
+  HOUR
+  MINUTE
+}
+
+enum UnusedRemainderHandling {
+  KEEP_REMAINING
+  EXPIRE_REMAINING
+}
+
+enum AttachmentPolicy {
+  NOT_REQUIRED
+  REQUIRED_BEFORE_REQUEST
+  REQUIRED_AFTER_REQUEST
+  OPTIONAL
+}
+
+enum LeaveVisibility {
+  PUBLIC_AS_LEAVE
+  PUBLIC_WITH_TYPE
+  PRIVATE_TO_APPROVERS
+}
+
+enum ApprovalAppliesTo {
+  LEAVE_REQUEST
+  LEAVE_CANCEL
+}
+
+enum ApprovalMode {
+  NONE
+  SINGLE
+  SEQUENTIAL
+}
+
+enum ApproverRule {
+  OWNER
+  TEAM_LEAD
+  TEAM_LEAD_OR_OWNER
+  CUSTOM_USER
+}
+
+enum AutoConfirmTiming {
+  ON_START_DATE
+  AFTER_START_DATE
+}
+
+enum LeaveGrantStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+enum LeaveGrantSource {
+  MANUAL
+  BULK_MANUAL
+  SYSTEM
+  MIGRATION
+  BIRTHDAY_AUTO
+}
+
+enum LeaveLedgerEventType {
+  GRANTED
+  PENDING
+  PENDING_RELEASED
+  USED
+  USED_RESTORED
+  EXPIRED
+  ADJUSTED
+  CANCELLED
+  REJECTED
+  WITHDRAWN
+  CARRIED_OVER
+  REVOKED
+}
+
+enum LeaveLedgerSource {
+  ANNUAL_AUTO
+  MANUAL_ADJUSTMENT
+  CUSTOM_GRANT
+  BIRTHDAY_AUTO
+  LEAVE_REQUEST
+  LEAVE_APPROVAL
+  LEAVE_AUTO_CONFIRM
+  LEAVE_REJECTION
+  LEAVE_WITHDRAWAL
+  LEAVE_CANCELLATION
+  SYSTEM_MIGRATION
+}
+
+enum NotificationType {
+  LEAVE_GRANTED
+  LEAVE_REQUESTED
+  LEAVE_APPROVED
+  LEAVE_AUTO_CONFIRMED
+  LEAVE_REJECTED
+  LEAVE_CANCELLED
+  LEAVE_ATTACHMENT_SUBMITTED
+  LEAVE_ATTACHMENT_ACCEPTED
+  LEAVE_ATTACHMENT_REJECTED
+  LEAVE_ATTACHMENT_RESUBMISSION_REQUESTED
+  ANNUAL_LEAVE_PROMOTION
+  ANNUAL_LEAVE_USE_PLAN_REMINDER
+  ANNUAL_LEAVE_EXPIRED
+  HR_PROFILE_CONFIRMATION_REQUIRED
+  HR_PROFILE_CHANGE_REQUEST_CREATED
+  HR_PROFILE_CHANGE_REQUEST_APPROVED
+  HR_PROFILE_CHANGE_REQUEST_REJECTED
+  INVITATION_CREATED
+  ONBOARDING_COMPLETED
+  REPORT_EXPORTED
+  JOB_COMPLETED
+  JOB_FAILED
+  SYSTEM
+}
+
+enum NotificationPriority {
+  LOW
+  NORMAL
+  HIGH
+}
+
+enum HalfDayPeriod {
+  AM
+  PM
+}
+
+enum LeaveRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+  WITHDRAWN
+}
+
+enum LeaveRequestKind {
+  LEGACY
+  ANNUAL
+  CUSTOM_GRANT
+}
+
+enum LeaveApprovalSource {
+  MANUAL
+  AUTO_START_DATE
+}
+
+enum AnnualGrantBasis {
+  HIRE_DATE
+  FISCAL_YEAR
+}
+
+enum AnnualLeaveUsageUnit {
+  DAY
+  HALF_DAY
+  HOUR
+}
+
+enum MonthlyLeaveGrantRule {
+  MONTHLY_FULL_ATTENDANCE
+  FRONTLOAD_ON_HIRE
+  DISABLED
+}
+
+enum FirstFiscalYearGrantRule {
+  NEEDS_CONFIRMATION
+  PRORATED_BY_HIRE_DATE
+  GRANT_REMAINING_MONTHS
+  COMPANY_CUSTOM
+}
+
+enum AnnualLeavePromotionNoticeType {
+  ANNUAL_USE_PLAN_REQUEST
+  MONTHLY_FIRST_NOTICE
+  MONTHLY_SECOND_NOTICE
+  USE_PLAN_REMINDER
+}
+
+enum AnnualLeavePromotionNoticeStatus {
+  SCHEDULED
+  SENT
+  CANCELLED
+  SKIPPED
+}
+
+enum AnnualLeaveUsePlanStatus {
+  DRAFT
+  SUBMITTED
+  CANCELLED
+}
+
+enum JobRunStatus {
+  RUNNING
+  SUCCESS
+  FAILED
+  PARTIAL
+}
+
+enum JobTriggeredBy {
+  SYSTEM
+  MANUAL
+  CRON
+}
+
+enum LeaveAttachmentType {
+  EVIDENCE
+  MEDICAL
+  RESERVE_FORCES
+  FAMILY_EVENT
+  HEALTH_CHECKUP
+  OTHER
+}
+
+enum LeaveAttachmentStatus {
+  REQUIRED
+  SUBMITTED
+  ACCEPTED
+  REJECTED
+  RESUBMISSION_REQUESTED
+  DELETED
+}
+
+enum LeaveRequestAttachmentStatus {
+  NOT_REQUIRED
+  OPTIONAL
+  REQUIRED_NOT_SUBMITTED
+  SUBMITTED
+  ACCEPTED
+  REJECTED
+  RESUBMISSION_REQUESTED
+}
+
+enum EmployeeImportBatchStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+enum EmployeePrejoinProfileStatus {
+  IMPORTED
+  INVITED
+  CLAIMED
+  IGNORED
+}
+
+enum EmployeeProfileSection {
+  BASIC
+  PRIVATE
+  BANK
+  FAMILY
+  CAREER
+  EDUCATION
+  LANGUAGE
+  CERTIFICATE
+  PROJECT_SKILL
+  TRAINING
+  CONTRACT
+  COMPENSATION
+}
+
+enum ProfileChangeRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum AuditAction {
+  INVITATION_CREATED
+  INVITATION_ACCEPTED
+  USER_CREATED
+  LOGIN
+  LOGIN_SUCCEEDED
+  LOGIN_FAILED
+  LOGOUT
+  SESSION_REVOKED
+  TEAM_CREATED
+  TEAM_UPDATED
+  TEAM_DEACTIVATED
+  INVITATION_CANCELLED
+  INVITATION_REISSUED
+  USER_PROFILE_UPDATED
+  USER_ROLE_UPDATED
+  USER_TEAM_UPDATED
+  USER_DEACTIVATED
+  USER_REACTIVATED
+  ROLE_CHANGED
+  LEAVE_POLICY_CHANGED
+  LEAVE_POLICY_UPDATED
+  HOLIDAY_CREATED
+  COMPANY_HOLIDAY_CREATED
+  COMPANY_HOLIDAY_UPDATED
+  COMPANY_HOLIDAY_DEACTIVATED
+  LEAVE_REQUESTED
+  LEAVE_REQUEST_CREATED
+  LEAVE_REQUEST_APPROVED
+  LEAVE_REQUEST_REJECTED
+  LEAVE_REQUEST_CANCELLED
+  LEAVE_APPROVED
+  LEAVE_REJECTED
+  LEAVE_CANCELLED
+  LEAVE_WITHDRAWN
+  LEAVE_REQUEST_WITHDRAWN
+  LEAVE_ADJUSTED
+  LEAVE_ADJUSTMENT_CREATED
+  LEAVE_TYPE_CREATED
+  LEAVE_TYPE_UPDATED
+  LEAVE_TYPE_DEACTIVATED
+  LEAVE_TYPE_REACTIVATED
+  LEAVE_GRANT_CREATED
+  LEAVE_GRANT_BULK_CREATED
+  LEAVE_GRANT_REVOKED
+  BIRTHDAY_LEAVE_POLICY_UPDATED
+  BIRTHDAY_HALF_DAY_GRANTED
+  BIRTHDAY_HALF_DAY_GRANT_SKIPPED
+  BIRTHDAY_HALF_DAY_NOTIFICATION_CREATED
+  CUSTOM_LEAVE_REQUEST_CREATED
+  CUSTOM_LEAVE_REQUEST_WITHDRAWN
+  CUSTOM_LEAVE_REQUEST_APPROVED
+  CUSTOM_LEAVE_REQUEST_REJECTED
+  CUSTOM_LEAVE_REQUEST_CANCELLED
+  LEAVE_GRANT_PENDING_AMOUNT_UPDATED
+  LEAVE_GRANT_USED_AMOUNT_UPDATED
+  LEAVE_LEDGER_CREATED
+  LEAVE_LEDGER_REBUILT
+  LEAVE_LEDGER_VALIDATED
+  LEAVE_LEDGER_INCONSISTENCY_FOUND
+  ANNUAL_LEAVE_POLICY_UPDATED
+  ANNUAL_LEAVE_GRANTED
+  MONTHLY_LEAVE_GRANTED
+  ANNUAL_LEAVE_EXPIRED
+  ANNUAL_LEAVE_PROMOTION_NOTICE_SCHEDULED
+  ANNUAL_LEAVE_PROMOTION_NOTICE_SENT
+  ANNUAL_LEAVE_USE_PLAN_CREATED
+  ANNUAL_LEAVE_USE_PLAN_UPDATED
+  ANNUAL_LEAVE_USE_PLAN_SUBMITTED
+  ANNUAL_LEAVE_USE_PLAN_CANCELLED
+  ANNUAL_LEAVE_EXPIRATION_DRY_RUN
+  ANNUAL_LEAVE_MAINTENANCE_RUN
+  LEAVE_ATTACHMENT_UPLOADED
+  LEAVE_ATTACHMENT_DOWNLOADED
+  LEAVE_ATTACHMENT_ACCEPTED
+  LEAVE_ATTACHMENT_REJECTED
+  LEAVE_ATTACHMENT_RESUBMISSION_REQUESTED
+  LEAVE_ATTACHMENT_DELETED
+  APPROVAL_POLICY_CREATED
+  APPROVAL_POLICY_UPDATED
+  APPROVAL_POLICY_DEACTIVATED
+  LEAVE_TYPE_APPROVAL_POLICY_UPDATED
+  LEAVE_REQUEST_AUTO_APPROVED
+  LEAVE_REQUEST_AUTO_CONFIRMED
+  LEAVE_REQUEST_APPROVER_RESOLVED
+  AUTO_CONFIRM_PENDING_LEAVES_RUN
+  AUTO_CONFIRM_PENDING_LEAVES_DRY_RUN
+  REPORT_VIEWED
+  REPORT_EXPORTED
+  JOB_RUN_STARTED
+  JOB_RUN_COMPLETED
+  JOB_RUN_FAILED
+  JOB_RUN_MANUALLY_TRIGGERED
+  CRON_JOB_TRIGGERED
+  NOTIFICATION_MARKED_READ
+  ALL_NOTIFICATIONS_MARKED_READ
+  EMPLOYEE_MASTER_IMPORTED
+  EMPLOYEE_PREJOIN_PROFILE_CREATED
+  EMPLOYEE_PREJOIN_PROFILE_UPDATED
+  EMPLOYEE_PREJOIN_PROFILE_LINKED_TO_INVITATION
+  EMPLOYEE_PROFILE_CREATED_FROM_IMPORT
+  EMPLOYEE_PROFILE_CONFIRMED
+  EMPLOYEE_PROFILE_UPDATED_BY_SELF
+  EMPLOYEE_PROFILE_UPDATED_BY_OWNER
+  EMPLOYEE_PROFILE_CHANGE_REQUEST_CREATED
+  EMPLOYEE_PROFILE_CHANGE_REQUEST_APPROVED
+  EMPLOYEE_PROFILE_CHANGE_REQUEST_REJECTED
+  SENSITIVE_FIELD_VIEWED
+  SENSITIVE_FIELD_UPDATED
+}
+
+enum AuditTargetType {
+  ORGANIZATION
+  TEAM
+  USER
+  EMPLOYEE_PROFILE
+  INVITATION
+  IDENTITY_VERIFICATION
+  SESSION
+  LEAVE_POLICY
+  LEAVE_BALANCE
+  LEAVE_ADJUSTMENT
+  LEAVE_TYPE
+  LEAVE_GRANT
+  LEAVE_LEDGER
+  ANNUAL_LEAVE_POLICY
+  ANNUAL_LEAVE_PROMOTION_NOTICE
+  ANNUAL_LEAVE_USE_PLAN
+  ANNUAL_LEAVE_EXPIRATION_RUN
+  LEAVE_ATTACHMENT
+  APPROVAL_POLICY
+  REPORT
+  JOB_RUN
+  NOTIFICATION
+  COMPANY_HOLIDAY
+  LEAVE_REQUEST
+  EMPLOYEE_IMPORT_BATCH
+  EMPLOYEE_PREJOIN_PROFILE
+  PROFILE_CHANGE_REQUEST
+}
+
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  phone        String?    @unique
+  name         String
+  title        String?
+  teamId       String?
+  hireDate     DateTime?  @db.Date
+  birthDate    DateTime?  @db.Date
+  role         Role       @default(MANAGER)
+  status       UserStatus @default(INVITED)
+  passwordHash String?
+  lastLoginAt  DateTime?
+  deactivatedAt DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  profile               EmployeeProfile?
+  team                  Team?                  @relation("UserTeam", fields: [teamId], references: [id], onDelete: SetNull)
+  leadTeams             Team[]                 @relation("TeamLead")
+  sentInvitations       Invitation[]           @relation("InvitationsSent")
+  acceptedInvitation    Invitation?            @relation("InvitationAccepted")
+  identityVerifications IdentityVerification[]
+  sessions              Session[]
+  leaveBalances         LeaveBalance[]
+  leaveRequests         LeaveRequest[]         @relation("UserLeaveRequests")
+  reviewedLeaveRequests LeaveRequest[]         @relation("LeaveReviews")
+  uploadedLeaveAttachments LeaveAttachment[]    @relation("LeaveAttachmentUploadedBy")
+  reviewedLeaveAttachments LeaveAttachment[]    @relation("LeaveAttachmentReviewedBy")
+  deletedLeaveAttachments  LeaveAttachment[]    @relation("LeaveAttachmentDeletedBy")
+  customApprovalPolicies   ApprovalPolicy[]     @relation("ApprovalPolicyCustomApprover")
+  leaveAdjustments      LeaveAdjustment[]      @relation("AdjustedUser")
+  createdAdjustments    LeaveAdjustment[]      @relation("AdjustmentCreator")
+  leaveGrants           LeaveGrant[]           @relation("LeaveGrantUser")
+  leaveGrantsCreated    LeaveGrant[]           @relation("LeaveGrantGrantedBy")
+  leaveGrantsRevoked    LeaveGrant[]           @relation("LeaveGrantRevokedBy")
+  leaveLedgers          LeaveLedger[]          @relation("LeaveLedgerUser")
+  createdLeaveLedgers   LeaveLedger[]          @relation("LeaveLedgerCreatedBy")
+  annualLeavePoliciesApproved AnnualLeavePolicy[] @relation("AnnualLeavePolicyPromotionApprover")
+  annualLeavePromotionNotices AnnualLeavePromotionNotice[]
+  annualLeaveUsePlans AnnualLeaveUsePlan[]
+  notifications         Notification[]
+  triggeredJobRuns      JobRun[]                @relation("JobRunTriggeredByUser")
+  auditLogs             AuditLog[]
+  importedEmployeeBatches EmployeeImportBatch[] @relation("EmployeeImportImportedBy")
+  linkedPrejoinProfiles EmployeePrejoinProfile[] @relation("PrejoinLinkedUser")
+  sensitiveProfile      EmployeeSensitiveProfile?
+  employmentProfile     EmploymentProfile?
+  employmentContracts   EmploymentContractProfile[]
+  compensationProfiles  CompensationProfile[]
+  familyMembers         FamilyMember[]
+  careerRecords         CareerRecord[]
+  educationRecords      EducationRecord[]
+  languageSkills        LanguageSkill[]
+  certificateRecords    CertificateRecord[]
+  projectSkillRecords   ProjectSkillRecord[]
+  trainingRecords       TrainingRecord[]
+  profileChangeRequests EmployeeProfileChangeRequest[] @relation("ProfileChangeRequestUser")
+  reviewedProfileChangeRequests EmployeeProfileChangeRequest[] @relation("ProfileChangeRequestReviewer")
+
+  @@index([status])
+  @@index([role])
+  @@index([teamId])
+}
+
+model Team {
+  id            String     @id @default(cuid())
+  name          String
+  description   String?
+  parentTeamId  String?
+  leadUserId    String?
+  status        TeamStatus @default(ACTIVE)
+  deactivatedAt DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  parent      Team?             @relation("TeamHierarchy", fields: [parentTeamId], references: [id], onDelete: SetNull)
+  children    Team[]            @relation("TeamHierarchy")
+  lead        User?             @relation("TeamLead", fields: [leadUserId], references: [id], onDelete: SetNull)
+  members     User[]            @relation("UserTeam")
+  profiles    EmployeeProfile[]
+  invitations Invitation[]
+
+  @@index([parentTeamId])
+  @@index([leadUserId])
+  @@index([status])
+  @@unique([parentTeamId, name])
+}
+
+model EmployeeProfile {
+  id            String    @id @default(cuid())
+  userId        String    @unique
+  teamId        String?
+  jobTitle      String?
+  hireDate      DateTime? @db.Date
+  birthday      DateTime? @db.Date
+  employeeNumber String?
+  legalName      String?
+  displayName    String?
+  englishName    String?
+  birthDate      DateTime? @db.Date
+  legalGender    String?
+  personalEmail  String?
+  phoneCountryCode String?
+  phoneNumber    String?
+  nationalityCode String?
+  residenceCountry String?
+  visaStatus     String?
+  address        String?
+  postalCode     String?
+  profileCompletedAt DateTime?
+  lastConfirmedAt DateTime?
+  deactivatedAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team Team? @relation(fields: [teamId], references: [id], onDelete: SetNull)
+
+  @@index([teamId])
+  @@index([employeeNumber])
+}
+
+model EmployeeImportBatch {
+  id               String                    @id @default(cuid())
+  fileName         String
+  importedByUserId String?
+  totalRows        Int                       @default(0)
+  successRows      Int                       @default(0)
+  failedRows       Int                       @default(0)
+  status           EmployeeImportBatchStatus @default(PENDING)
+  errorSummary     String?
+  createdAt        DateTime                  @default(now())
+
+  importedByUser User? @relation("EmployeeImportImportedBy", fields: [importedByUserId], references: [id], onDelete: SetNull)
+  profiles       EmployeePrejoinProfile[]
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model EmployeePrejoinProfile {
+  id             String                       @id @default(cuid())
+  importBatchId  String?
+  employeeNumber String?
+  legalName      String
+  displayName    String?
+  companyEmail   String
+  personalEmail  String?
+  phoneNumber    String?
+  employmentStatus String?
+  title          String?
+  position       String?
+  jobGrade       String?
+  roleSuggestion Role?
+  teamName       String?
+  teamCode       String?
+  hireDate       DateTime?                    @db.Date
+  groupHireDate  DateTime?                    @db.Date
+  birthDate      DateTime?                    @db.Date
+  englishName    String?
+  legalGender    String?
+  phoneCountryCode String?
+  nationalityCode String?
+  residenceCountry String?
+  visaStatus     String?
+  address        String?
+  postalCode     String?
+  residentIdEncrypted String?
+  bankCode       String?
+  bankName       String?
+  bankAccountEncrypted String?
+  bankAccountHolder String?
+  swiftCode      String?
+  veteranOrDisabledStatus String?
+  disabilityGrade String?
+  sourceStatus   EmployeePrejoinProfileStatus @default(IMPORTED)
+  linkedUserId   String?
+  linkedInvitationId String?
+  createdAt      DateTime                     @default(now())
+  updatedAt      DateTime                     @updatedAt
+
+  importBatch    EmployeeImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
+  linkedUser     User?                @relation("PrejoinLinkedUser", fields: [linkedUserId], references: [id], onDelete: SetNull)
+  invitations    Invitation[]         @relation("InvitationPrejoin")
+  families       FamilyMemberDraft[]
+  careers        CareerRecordDraft[]
+  educations     EducationRecordDraft[]
+  languages      LanguageSkillDraft[]
+  certificates   CertificateRecordDraft[]
+  projectSkills  ProjectSkillRecordDraft[]
+  trainings      TrainingRecordDraft[]
+
+  @@unique([companyEmail])
+  @@index([employeeNumber])
+  @@index([sourceStatus])
+  @@index([linkedUserId])
+}
+
+model Invitation {
+  id             String           @id @default(cuid())
+  email          String
+  name           String?
+  expectedName   String
+  role           Role             @default(MANAGER)
+  teamId         String?
+  title          String?
+  jobTitle       String?
+  hireDate       DateTime?        @db.Date
+  birthDate      DateTime?        @db.Date
+  birthday       DateTime?        @db.Date
+  tokenHash      String           @unique
+  status         InvitationStatus @default(PENDING)
+  expiresAt      DateTime
+  usedAt         DateTime?
+  acceptedAt     DateTime?
+  cancelledAt    DateTime?
+  invitedByUserId String?
+  acceptedByUserId String?
+  createdById    String?
+  acceptedUserId String?          @unique
+  employeePrejoinProfileId String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  team                  Team?                  @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  createdBy             User?                  @relation("InvitationsSent", fields: [createdById], references: [id], onDelete: SetNull)
+  acceptedUser          User?                  @relation("InvitationAccepted", fields: [acceptedUserId], references: [id], onDelete: SetNull)
+  employeePrejoinProfile EmployeePrejoinProfile? @relation("InvitationPrejoin", fields: [employeePrejoinProfileId], references: [id], onDelete: SetNull)
+  identityVerifications IdentityVerification[]
+
+  @@index([email])
+  @@index([status])
+  @@index([expiresAt])
+  @@index([employeePrejoinProfileId])
+}
+
+model IdentityVerification {
+  id             String   @id @default(cuid())
+  userId         String?
+  invitationId   String?
+  provider       String
+  verifiedName   String
+  verifiedPhone  String
+  providerRef    String?
+  verifiedAt     DateTime
+  createdAt      DateTime @default(now())
+
+  user       User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  invitation Invitation? @relation(fields: [invitationId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([invitationId])
+  @@index([verifiedPhone])
+}
+
+model Session {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+  lastSeenAt DateTime?
+  lastUsedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model LeavePolicy {
+  id                           String    @id @default(cuid())
+  type                         LeaveType @unique
+  name                         String    @default("")
+  description                  String?
+  isEnabled                    Boolean   @default(true)
+  deductsAnnual                Boolean   @default(false)
+  deductsAnnualBalance         Boolean   @default(false)
+  maxDaysPerRequest            Decimal?  @db.Decimal(4, 1)
+  minRequestDays               Decimal?  @db.Decimal(4, 1)
+  maxRequestDays               Decimal?  @db.Decimal(4, 1)
+  maxDaysPerYear               Decimal?  @db.Decimal(4, 1)
+  requestWindowStartOffsetDays Int?
+  requestWindowEndOffsetDays   Int?
+  requiresAttachment           Boolean   @default(false)
+  approvalRequired             Boolean   @default(true)
+  createdAt                    DateTime  @default(now())
+  updatedAt                    DateTime  @updatedAt
+}
+
+model LeaveTypeDefinition {
+  id                        String                    @id @default(cuid())
+  code                      String                    @unique
+  name                      String
+  description               String?
+  category                  LeaveCategory
+  isSystemRequired          Boolean                   @default(false)
+  isEnabled                 Boolean                   @default(true)
+  isPaid                    Boolean                   @default(true)
+  paidRate                  Float                     @default(1.0)
+  grantMethod               LeaveGrantMethod          @default(MANUAL)
+  grantAmount               Float?
+  grantUnit                 LeaveGrantUnit            @default(DAY)
+  usageMode                 LeaveUsageMode            @default(SPLIT_ALLOWED)
+  allowedUnits              String
+  unusedRemainderHandling   UnusedRemainderHandling   @default(KEEP_REMAINING)
+  deductsAnnualBalance      Boolean                   @default(false)
+  attachmentPolicy          AttachmentPolicy          @default(NOT_REQUIRED)
+  attachmentDescription     String?
+  includeHolidayInDeduction Boolean                   @default(false)
+  visibility                LeaveVisibility           @default(PUBLIC_WITH_TYPE)
+  approvalPolicyId          String?
+  createdAt                 DateTime                  @default(now())
+  updatedAt                 DateTime                  @updatedAt
+
+  grants                    LeaveGrant[]
+  birthdayLeavePolicies     BirthdayLeavePolicy[]
+  leaveRequests             LeaveRequest[]           @relation("CustomLeaveTypeRequests")
+  leaveLedgers              LeaveLedger[]
+  approvalPolicy            ApprovalPolicy?          @relation("LeaveTypeAssignedApprovalPolicy", fields: [approvalPolicyId], references: [id], onDelete: SetNull)
+  appliedApprovalPolicies   ApprovalPolicy[]         @relation("ApprovalPolicyAppliesToLeaveType")
+
+  @@index([category])
+  @@index([isEnabled])
+  @@index([isSystemRequired])
+  @@index([approvalPolicyId])
+}
+
+model ApprovalPolicy {
+  id                       String             @id @default(cuid())
+  code                     String             @unique
+  name                     String
+  description              String?
+  appliesTo                ApprovalAppliesTo  @default(LEAVE_REQUEST)
+  leaveTypeId              String?
+  approvalMode             ApprovalMode       @default(SINGLE)
+  approverRule             ApproverRule       @default(TEAM_LEAD_OR_OWNER)
+  customApproverUserId     String?
+  requireCommentOnReject   Boolean            @default(true)
+  requireCommentOnCancel   Boolean            @default(true)
+  requireAttachmentAcceptedBeforeApproval Boolean @default(false)
+  autoApproveIfNoApprover  Boolean            @default(false)
+  autoConfirmWhenStartDatePassed Boolean      @default(true)
+  autoConfirmTiming        AutoConfirmTiming   @default(ON_START_DATE)
+  isEnabled                Boolean            @default(true)
+  createdAt                DateTime           @default(now())
+  updatedAt                DateTime           @updatedAt
+
+  leaveType                LeaveTypeDefinition?  @relation("ApprovalPolicyAppliesToLeaveType", fields: [leaveTypeId], references: [id], onDelete: SetNull)
+  customApprover           User?                 @relation("ApprovalPolicyCustomApprover", fields: [customApproverUserId], references: [id], onDelete: SetNull)
+  assignedLeaveTypes       LeaveTypeDefinition[] @relation("LeaveTypeAssignedApprovalPolicy")
+
+  @@index([leaveTypeId])
+  @@index([customApproverUserId])
+  @@index([isEnabled])
+}
+
+model LeaveGrant {
+  id              String           @id @default(cuid())
+  userId          String
+  leaveTypeId     String
+  grantedAmount   Float
+  usedAmount      Float            @default(0)
+  pendingAmount   Float            @default(0)
+  remainingAmount Float
+  unit            LeaveGrantUnit
+  status          LeaveGrantStatus @default(ACTIVE)
+  effectiveFrom   DateTime         @db.Date
+  expiresAt       DateTime?        @db.Date
+  grantedByUserId String
+  revokedByUserId String?
+  revokedAt       DateTime?
+  revokeReason    String?
+  reason          String
+  source          LeaveGrantSource @default(MANUAL)
+  referenceYear   Int?
+  referenceDate   DateTime?        @db.Date
+  metadata        Json?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  user            User                @relation("LeaveGrantUser", fields: [userId], references: [id], onDelete: Cascade)
+  leaveType       LeaveTypeDefinition @relation(fields: [leaveTypeId], references: [id])
+  grantedByUser   User                @relation("LeaveGrantGrantedBy", fields: [grantedByUserId], references: [id])
+  revokedByUser   User?               @relation("LeaveGrantRevokedBy", fields: [revokedByUserId], references: [id])
+  requestUsages   LeaveRequestGrantUsage[]
+  leaveLedgers    LeaveLedger[]
+
+  @@index([userId])
+  @@index([leaveTypeId])
+  @@index([status])
+  @@index([effectiveFrom])
+  @@index([expiresAt])
+  @@index([referenceYear])
+  @@unique([userId, leaveTypeId, referenceYear, source])
+}
+
+model BirthdayLeavePolicy {
+  id                   String         @id @default(cuid())
+  isEnabled            Boolean        @default(true)
+  leaveTypeId          String
+  grantAmount          Float          @default(0.5)
+  grantUnit            LeaveGrantUnit @default(DAY)
+  grantDaysBefore      Int            @default(1)
+  usableDaysFromBirthday Int          @default(7)
+  adjustGrantDateToPreviousBusinessDay Boolean @default(true)
+  notifyEmployee       Boolean        @default(true)
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+
+  leaveType            LeaveTypeDefinition @relation(fields: [leaveTypeId], references: [id])
+
+  @@index([leaveTypeId])
+}
+
+model AnnualLeavePolicy {
+  id                    String                     @id @default(cuid())
+  isEnabled             Boolean                    @default(true)
+  grantBasis            AnnualGrantBasis           @default(FISCAL_YEAR)
+  fiscalYearStartMonth  Int                        @default(1)
+  fiscalYearStartDay    Int                        @default(1)
+  usageUnit             AnnualLeaveUsageUnit       @default(HALF_DAY)
+  allowAdvanceUse       Boolean                    @default(false)
+  approvalOnRequest     Boolean                    @default(true)
+  approvalOnCancel      Boolean                    @default(false)
+  monthlyLeaveEnabled   Boolean                    @default(true)
+  monthlyLeaveAmount    Float                      @default(1)
+  monthlyLeaveGrantRule MonthlyLeaveGrantRule      @default(MONTHLY_FULL_ATTENDANCE)
+  firstFiscalYearGrantRule FirstFiscalYearGrantRule @default(NEEDS_CONFIRMATION)
+  annualLeaveEnabled    Boolean                    @default(true)
+  baseAnnualDays        Float                      @default(15)
+  maxAnnualDays         Float                      @default(25)
+  additionalGrantEnabled Boolean                   @default(true)
+  expirationEnabled     Boolean                    @default(true)
+  annualExpirationMonths Int                       @default(12)
+  monthlyExpirationMonths Int                      @default(12)
+  carryOverAllowed      Boolean                    @default(false)
+  promotionEnabled      Boolean                    @default(true)
+  promotionApproverUserId String?
+  memberReminderEnabled Boolean                    @default(true)
+  managerReminderEnabled Boolean                   @default(false)
+  usePlanReminderDaysBefore Int                    @default(10)
+  annualPromotionMonthsBeforeExpiration Int        @default(6)
+  monthlyPromotionFirstMonthsBeforeExpiration Int  @default(3)
+  monthlyPromotionSecondMonthsBeforeExpiration Int @default(1)
+  memo                  String?
+  createdAt             DateTime                   @default(now())
+  updatedAt             DateTime                   @updatedAt
+
+  promotionApprover     User?                      @relation("AnnualLeavePolicyPromotionApprover", fields: [promotionApproverUserId], references: [id], onDelete: SetNull)
+
+  @@index([isEnabled])
+  @@index([promotionApproverUserId])
+}
+
+model AnnualLeavePromotionNotice {
+  id                   String                           @id @default(cuid())
+  userId               String
+  referenceYear        Int
+  noticeType           AnnualLeavePromotionNoticeType
+  status               AnnualLeavePromotionNoticeStatus @default(SCHEDULED)
+  scheduledDate        DateTime                         @db.Date
+  sentAt               DateTime?
+  cancelledAt          DateTime?
+  expirationDate       DateTime?                        @db.Date
+  remainingAmount      Float?
+  unit                 LeaveGrantUnit                   @default(DAY)
+  annualLeaveUsePlanId String?
+  createdAt            DateTime                         @default(now())
+  updatedAt            DateTime                         @updatedAt
+
+  user                 User                             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  annualLeaveUsePlan   AnnualLeaveUsePlan?              @relation(fields: [annualLeaveUsePlanId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([referenceYear])
+  @@index([noticeType])
+  @@index([status])
+  @@index([scheduledDate])
+  @@index([annualLeaveUsePlanId])
+  @@unique([userId, referenceYear, noticeType, scheduledDate], map: "AnnualLeavePromotionNotice_userId_referenceYear_noticeType_sche")
+}
+
+model AnnualLeaveUsePlan {
+  id                 String                    @id @default(cuid())
+  userId             String
+  referenceYear      Int
+  status             AnnualLeaveUsePlanStatus  @default(DRAFT)
+  totalPlannedAmount Float                     @default(0)
+  unit               LeaveGrantUnit            @default(DAY)
+  submittedAt        DateTime?
+  cancelledAt        DateTime?
+  memo               String?
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+
+  user               User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items              AnnualLeaveUsePlanItem[]
+  notices            AnnualLeavePromotionNotice[]
+
+  @@index([userId])
+  @@index([referenceYear])
+  @@index([status])
+  @@unique([userId, referenceYear])
+}
+
+model AnnualLeaveUsePlanItem {
+  id            String              @id @default(cuid())
+  usePlanId     String
+  plannedDate   DateTime            @db.Date
+  amount        Float
+  unit          LeaveGrantUnit       @default(DAY)
+  halfDayPeriod HalfDayPeriod?
+  memo          String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  usePlan       AnnualLeaveUsePlan  @relation(fields: [usePlanId], references: [id], onDelete: Cascade)
+
+  @@index([usePlanId])
+  @@index([plannedDate])
+  @@unique([usePlanId, plannedDate, halfDayPeriod])
+}
+
+model AnnualLeaveExpirationRun {
+  id            String       @id @default(cuid())
+  processedDate DateTime     @db.Date
+  processedBy   String?
+  status        JobRunStatus
+  checkedCount  Int          @default(0)
+  expiredCount  Int          @default(0)
+  skippedCount  Int          @default(0)
+  errorSummary  String?
+  createdAt     DateTime     @default(now())
+
+  @@index([processedDate])
+  @@index([status])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  priority  NotificationPriority @default(NORMAL)
+  title     String
+  message   String
+  linkUrl   String?
+  metadata  Json?
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([type])
+  @@index([priority])
+  @@index([readAt])
+  @@index([createdAt])
+}
+
+model JobRun {
+  id                String          @id @default(cuid())
+  jobName           String
+  status            JobRunStatus    @default(RUNNING)
+  triggeredBy       JobTriggeredBy
+  triggeredByUserId String?
+  startedAt         DateTime        @default(now())
+  finishedAt        DateTime?
+  checkedCount      Int?
+  createdCount      Int?
+  updatedCount      Int?
+  skippedCount      Int?
+  failedCount       Int?
+  resultSummary     Json?
+  errorSummary      String?
+  dryRun            Boolean         @default(false)
+  createdAt         DateTime        @default(now())
+
+  triggeredByUser   User?           @relation("JobRunTriggeredByUser", fields: [triggeredByUserId], references: [id], onDelete: SetNull)
+
+  @@index([jobName])
+  @@index([status])
+  @@index([triggeredBy])
+  @@index([startedAt])
+}
+
+model EmployeeSensitiveProfile {
+  id                    String   @id @default(cuid())
+  userId                String   @unique
+  residentIdEncrypted   String?
+  bankCode              String?
+  bankName              String?
+  bankAccountEncrypted  String?
+  bankAccountHolder     String?
+  swiftCode             String?
+  veteranOrDisabledStatus String?
+  disabilityGrade       String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model EmploymentProfile {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  hireDate           DateTime? @db.Date
+  groupHireDate      DateTime? @db.Date
+  hireType           String?
+  primaryJob         String?
+  additionalJob      String?
+  jobGroup           String?
+  organizationName   String?
+  organizationCode   String?
+  isPrimaryOrganization Boolean?
+  isOrganizationLeader Boolean?
+  jobTitle           String?
+  position           String?
+  jobGrade           String?
+  lastPositionChangedAt DateTime? @db.Date
+  retirementDate     DateTime? @db.Date
+  employmentInsuranceLossReason String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model EmploymentContractProfile {
+  id                 String   @id @default(cuid())
+  userId             String
+  contractType       String?
+  contractStartDate  DateTime? @db.Date
+  contractEndDate    DateTime? @db.Date
+  probationStartDate DateTime? @db.Date
+  probationEndDate   DateTime? @db.Date
+  probationPayRate   Float?
+  changeMemo         String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model CompensationProfile {
+  id                 String   @id @default(cuid())
+  userId             String
+  incomeType         String?
+  wageContractStartDate DateTime? @db.Date
+  wageContractEndDate DateTime? @db.Date
+  paymentType        String?
+  contractAmount     Float?
+  inclusiveWageContract Boolean?
+  inclusiveWageBasis String?
+  ordinaryHourlyWage Float?
+  appliedAt          DateTime? @db.Date
+  baseMonthlyPay     Float?
+  baseHourlyPay      Float?
+  fixedOvertimePay   Float?
+  mealAllowance      Float?
+  vehicleAllowance   Float?
+  childcareAllowance Float?
+  researchAllowance  Float?
+  changeMemo         String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model FamilyMember {
+  id                 String   @id @default(cuid())
+  userId             String
+  name               String
+  relationship       String?
+  phoneNumber        String?
+  residentIdEncrypted String?
+  basicDeduction     Boolean?
+  incomeDeductionRelationCode String?
+  childTaxCredit     Boolean?
+  healthInsuranceDependent Boolean?
+  dependentRelationCode String?
+  veteranOrDisabledStatus String?
+  disabilityGrade    String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model CareerRecord {
+  id             String   @id @default(cuid())
+  userId         String
+  companyName    String
+  contractType   String?
+  joinedMonth    String?
+  leftMonth      String?
+  job            String?
+  organization   String?
+  position       String?
+  title          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model EducationRecord {
+  id             String   @id @default(cuid())
+  userId         String
+  schoolType     String?
+  schoolName     String?
+  graduationStatus String?
+  major          String?
+  entranceMonth  String?
+  graduationMonth String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model LanguageSkill {
+  id        String   @id @default(cuid())
+  userId    String
+  language  String
+  level     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model CertificateRecord {
+  id             String   @id @default(cuid())
+  userId         String
+  name           String
+  gradeOrScore   String?
+  acquiredAt     DateTime? @db.Date
+  issuer         String?
+  validUntil     DateTime? @db.Date
+  certificateNumber String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model ProjectSkillRecord {
+  id          String   @id @default(cuid())
+  userId      String
+  title       String?
+  content     String?
+  period      String?
+  project     String?
+  skills      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model TrainingRecord {
+  id              String   @id @default(cuid())
+  userId          String
+  name            String
+  trainingDate    DateTime? @db.Date
+  type            String?
+  institution     String?
+  category        String?
+  totalHours      Float?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model EmployeeProfileChangeRequest {
+  id             String                     @id @default(cuid())
+  userId         String
+  section        EmployeeProfileSection
+  status         ProfileChangeRequestStatus @default(PENDING)
+  requestedChanges Json
+  beforeSnapshot    Json?
+  reviewComment     String?
+  requestedAt    DateTime                   @default(now())
+  reviewedAt     DateTime?
+  reviewedByUserId String?
+
+  user           User                       @relation("ProfileChangeRequestUser", fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy     User?                      @relation("ProfileChangeRequestReviewer", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([status])
+  @@index([section])
+}
+
+model FamilyMemberDraft {
+  id                 String   @id @default(cuid())
+  prejoinProfileId   String
+  name               String
+  relationship       String?
+  phoneNumber        String?
+  residentIdEncrypted String?
+  raw                Json?
+  createdAt          DateTime @default(now())
+
+  prejoinProfile     EmployeePrejoinProfile @relation(fields: [prejoinProfileId], references: [id], onDelete: Cascade)
+
+  @@index([prejoinProfileId])
+}
+
+model CareerRecordDraft {
+  id               String   @id @default(cuid())
+  prejoinProfileId String
+  companyName      String
+  contractType     String?
+  joinedMonth      String?
+  leftMonth        String?
+  job              String?
+  organization     String?
+  position         String?
+  title            String?
+  createdAt        DateTime @default(now())
+
+  prejoinProfile   EmployeePrejoinProfile @relation(fields: [prejoinProfileId], references: [id], onDelete: Cascade)
+
+  @@index([prejoinProfileId])
+}
+
+model EducationRecordDraft {
+  id               String   @id @default(cuid())
+  prejoinProfileId String
+  schoolType       String?
+  schoolName       String?
+  graduationStatus String?
+  major            String?
+  entranceMonth    String?
+  graduationMonth  String?
+  createdAt        DateTime @default(now())
+
+  prejoinProfile   EmployeePrejoinProfile @relation(fields: [prejoinProfileId], references: [id], onDelete: Cascade)
+
+  @@index([prejoinProfileId])
+}
+
+model LanguageSkillDraft {
+  id               String   @id @default(cuid())
+  prejoinProfileId String
+  language         String
+  level            String?
+  createdAt        DateTime @default(now())
+
+  prejoinProfile   EmployeePrejoinProfile @relation(fields: [prejoinProfileId], references: [id], onDelete: Cascade)
+
+  @@index([prejoinProfileId])
+}
+
+model CertificateRecordDraft {
+  id               String   @id @default(cuid())
+  prejoinProfileId String
+  name             String
+  gradeOrScore     String?
+  acquiredAt       DateTime? @db.Date
+  issuer           String?
+  validUntil       DateTime? @db.Date
+  certificateNumber String?
+  createdAt        DateTime @default(now())
+
+  prejoinProfile   EmployeePrejoinProfile @relation(fields: [prejoinProfileId], references: [id], onDelete: Cascade)
+
+  @@index([prejoinProfileId])
+}
+
+model ProjectSkillRecordDraft {
+  id               String   @id @default(cuid())
+  prejoinProfileId String
+  title            String?
+  content          String?
+  period           String?
+  project          String?
+  skills           String?
+  createdAt        DateTime @default(now())
+
+  prejoinProfile   EmployeePrejoinProfile @relation(fields: [prejoinProfileId], references: [id], onDelete: Cascade)
+
+  @@index([prejoinProfileId])
+}
+
+model TrainingRecordDraft {
+  id               String   @id @default(cuid())
+  prejoinProfileId String
+  name             String
+  trainingDate     DateTime? @db.Date
+  type             String?
+  institution      String?
+  category         String?
+  totalHours       Float?
+  createdAt        DateTime @default(now())
+
+  prejoinProfile   EmployeePrejoinProfile @relation(fields: [prejoinProfileId], references: [id], onDelete: Cascade)
+
+  @@index([prejoinProfileId])
+}
+
+model LeaveBalance {
+  id             String   @id @default(cuid())
+  userId         String
+  fiscalYear     Int
+  year           Int?
+  annualEntitled Decimal  @db.Decimal(4, 1)
+  grantedDays    Decimal? @db.Decimal(4, 1)
+  manualGranted  Decimal  @default(0) @db.Decimal(4, 1)
+  usedDays       Decimal  @default(0) @db.Decimal(4, 1)
+  pendingDays    Decimal  @default(0) @db.Decimal(4, 1)
+  remainingDays  Decimal? @db.Decimal(4, 1)
+  expiresAt      DateTime? @db.Date
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, fiscalYear])
+  @@index([fiscalYear])
+}
+
+model LeaveRequest {
+  id            String             @id @default(cuid())
+  userId        String
+  type          LeaveType
+  requestKind   LeaveRequestKind   @default(LEGACY)
+  leaveTypeId   String?
+  status        LeaveRequestStatus @default(PENDING)
+  startDate     DateTime           @db.Date
+  endDate       DateTime           @db.Date
+  halfDayPeriod HalfDayPeriod?
+  dayCount      Decimal            @db.Decimal(4, 1)
+  reason        String?
+  attachmentRequired Boolean       @default(false)
+  attachmentUrl String?
+  attachmentStatus LeaveRequestAttachmentStatus @default(NOT_REQUIRED)
+  reviewerId    String?
+  reviewedAt    DateTime?
+  reviewComment String?
+  rejectReason  String?
+  cancelReason  String?
+  withdrawnAt   DateTime?
+  cancelledAt   DateTime?
+  autoConfirmedAt DateTime?
+  autoConfirmReason String?
+  approvalSource LeaveApprovalSource? @default(MANUAL)
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  user     User  @relation("UserLeaveRequests", fields: [userId], references: [id], onDelete: Cascade)
+  reviewer User? @relation("LeaveReviews", fields: [reviewerId], references: [id], onDelete: SetNull)
+  customLeaveType LeaveTypeDefinition? @relation("CustomLeaveTypeRequests", fields: [leaveTypeId], references: [id], onDelete: SetNull)
+  grantUsages LeaveRequestGrantUsage[]
+  leaveLedgers LeaveLedger[]
+  attachments LeaveAttachment[]
+
+  @@index([userId, status])
+  @@index([reviewerId])
+  @@index([startDate, endDate])
+  @@index([type, status])
+  @@index([requestKind])
+  @@index([leaveTypeId])
+  @@index([attachmentStatus])
+}
+
+model LeaveAttachment {
+  id               String                @id @default(cuid())
+  leaveRequestId   String
+  uploadedByUserId String
+  fileName         String
+  originalFileName String?
+  fileKey          String?
+  fileUrl          String?
+  fileSize         Int?
+  mimeType         String?
+  attachmentType   LeaveAttachmentType   @default(EVIDENCE)
+  status           LeaveAttachmentStatus @default(SUBMITTED)
+  submittedAt      DateTime              @default(now())
+  reviewedAt       DateTime?
+  reviewedByUserId String?
+  reviewComment    String?
+  metadata         Json?
+  deletedAt        DateTime?
+  deletedByUserId  String?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  leaveRequest     LeaveRequest          @relation(fields: [leaveRequestId], references: [id], onDelete: Cascade)
+  uploadedBy       User                  @relation("LeaveAttachmentUploadedBy", fields: [uploadedByUserId], references: [id])
+  reviewedBy       User?                 @relation("LeaveAttachmentReviewedBy", fields: [reviewedByUserId], references: [id])
+  deletedBy        User?                 @relation("LeaveAttachmentDeletedBy", fields: [deletedByUserId], references: [id])
+
+  @@index([leaveRequestId])
+  @@index([uploadedByUserId])
+  @@index([reviewedByUserId])
+  @@index([deletedByUserId])
+  @@index([status])
+}
+
+model LeaveRequestGrantUsage {
+  id             String         @id @default(cuid())
+  leaveRequestId String
+  leaveGrantId   String
+  amount         Float
+  unit           LeaveGrantUnit
+  createdAt      DateTime       @default(now())
+
+  leaveRequest   LeaveRequest   @relation(fields: [leaveRequestId], references: [id], onDelete: Cascade)
+  leaveGrant     LeaveGrant     @relation(fields: [leaveGrantId], references: [id])
+
+  @@index([leaveRequestId])
+  @@index([leaveGrantId])
+}
+
+model LeaveAdjustment {
+  id          String   @id @default(cuid())
+  userId      String
+  fiscalYear  Int
+  year        Int?
+  days        Decimal  @db.Decimal(4, 1)
+  amount      Decimal? @db.Decimal(4, 1)
+  reason      String
+  createdById String
+  createdByUserId String?
+  createdAt   DateTime @default(now())
+
+  user      User @relation("AdjustedUser", fields: [userId], references: [id], onDelete: Cascade)
+  createdBy User @relation("AdjustmentCreator", fields: [createdById], references: [id])
+  leaveLedgers LeaveLedger[]
+
+  @@index([userId, fiscalYear])
+  @@index([createdById])
+}
+
+model LeaveLedger {
+  id                String               @id @default(cuid())
+  userId            String
+  leaveTypeId       String?
+  leaveGrantId      String?
+  leaveRequestId    String?
+  leaveAdjustmentId String?
+  eventType         LeaveLedgerEventType
+  amount            Float
+  unit              LeaveGrantUnit
+  effectiveDate     DateTime             @db.Date
+  expiresAt         DateTime?            @db.Date
+  referenceYear     Int?
+  referenceDate     DateTime?            @db.Date
+  source            LeaveLedgerSource
+  idempotencyKey    String?              @unique
+  reason            String?
+  metadata          Json?
+  createdByUserId   String?
+  createdAt         DateTime             @default(now())
+
+  user              User                 @relation("LeaveLedgerUser", fields: [userId], references: [id], onDelete: Cascade)
+  createdByUser     User?                @relation("LeaveLedgerCreatedBy", fields: [createdByUserId], references: [id])
+  leaveType         LeaveTypeDefinition? @relation(fields: [leaveTypeId], references: [id], onDelete: SetNull)
+  leaveGrant        LeaveGrant?          @relation(fields: [leaveGrantId], references: [id], onDelete: SetNull)
+  leaveRequest      LeaveRequest?        @relation(fields: [leaveRequestId], references: [id], onDelete: SetNull)
+  leaveAdjustment   LeaveAdjustment?     @relation(fields: [leaveAdjustmentId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([leaveTypeId])
+  @@index([leaveGrantId])
+  @@index([leaveRequestId])
+  @@index([leaveAdjustmentId])
+  @@index([eventType])
+  @@index([effectiveDate])
+  @@index([referenceYear])
+}
+
+model CompanyHoliday {
+  id            String   @id @default(cuid())
+  date          DateTime @unique @db.Date
+  name          String
+  isPaidHoliday Boolean  @default(true)
+  isEnabled     Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([isEnabled])
+}
+
+model AuditLog {
+  id         String          @id @default(cuid())
+  actorId    String?
+  actorUserId String?
+  targetUserId String?
+  action     AuditAction
+  targetType AuditTargetType
+  targetId   String?
+  metadata   Json?
+  beforeJson Json?
+  afterJson  Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime        @default(now())
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([actorId])
+  @@index([actorUserId])
+  @@index([targetUserId])
+  @@index([targetType, targetId])
+  @@index([createdAt])
+}

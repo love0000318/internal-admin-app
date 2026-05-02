@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/internal_ops_mvp?schema=public
+      APP_BASE_URL: http://localhost:3000
+      NODE_ENV: test
+      APP_SECRET: ci-only-app-secret-change-in-production
+      SESSION_SECRET: ci-only-session-secret-change-in-production
+      TOKEN_SECRET: ci-only-token-secret-change-in-production
+      INVITATION_TOKEN_SECRET: ci-only-invitation-secret-change-in-production
+      INVITATION_EXPIRES_IN_DAYS: "14"
+      SESSION_EXPIRES_IN_DAYS: "7"
+      IDENTITY_VERIFICATION_PROVIDER: mock
+      SEED_OWNER_EMAIL: owner@example.com
+      SEED_OWNER_NAME: Owner
+      SEED_OWNER_TITLE: CEO
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Install dependencies
+        run: corepack pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: corepack pnpm db:generate
+
+      - name: Validate Prisma schema
+        run: corepack pnpm db:validate
+
+      - name: Lint
+        run: corepack pnpm lint
+
+      - name: Typecheck
+        run: corepack pnpm typecheck
+
+      - name: Unit tests
+        run: corepack pnpm test:unit
+
+      - name: Integration tests
+        run: corepack pnpm test:integration
+
+      - name: E2E smoke tests
+        run: corepack pnpm e2e
+
+      - name: Build
+        run: corepack pnpm build

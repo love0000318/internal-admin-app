@@ -1,0 +1,44 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: internal-admin-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: internal_ops_mvp
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d internal_ops_mvp"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/internal_ops_mvp?schema=public
+      APP_BASE_URL: http://localhost:3000
+      NODE_ENV: production
+      APP_SECRET: replace-with-long-random-secret-at-least-32-characters
+      SESSION_SECRET: replace-with-long-random-secret-at-least-32-characters
+      TOKEN_SECRET: replace-with-long-random-secret-at-least-32-characters
+      INVITATION_TOKEN_SECRET: replace-with-long-random-secret-at-least-32-characters
+      INVITATION_EXPIRES_IN_DAYS: "7"
+      SESSION_EXPIRES_IN_DAYS: "14"
+      IDENTITY_VERIFICATION_PROVIDER: manual
+      SEED_OWNER_EMAIL: owner@example.com
+      SEED_OWNER_NAME: 대표이름
+      SEED_OWNER_TITLE: 대표
+    ports:
+      - "3000:3000"
+
+volumes:
+  postgres-data:
