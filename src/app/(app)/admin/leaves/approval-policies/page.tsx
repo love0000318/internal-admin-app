@@ -34,7 +34,6 @@ const appliesToLabels = {
 };
 
 const autoConfirmTimingLabels = {
-  ON_START_DATE: "휴가 시작일 당일",
   AFTER_START_DATE: "휴가 시작일 다음 날",
 };
 
@@ -115,7 +114,7 @@ function PolicyFields({
         className="h-9 rounded-md border px-2"
         placeholder="설명"
       />
-      <div className="grid gap-2 md:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
         <select
           name="appliesTo"
           defaultValue={policy?.appliesTo ?? "LEAVE_REQUEST"}
@@ -162,7 +161,7 @@ function PolicyFields({
           ))}
         </select>
       </div>
-      <div className="grid gap-2 text-sm md:grid-cols-5">
+      <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 xl:grid-cols-5">
         <label className="flex items-center gap-2">
           <input
             name="requireCommentOnReject"
@@ -211,7 +210,7 @@ function PolicyFields({
         </label>
         <select
           name="autoConfirmTiming"
-          defaultValue={policy?.autoConfirmTiming ?? "ON_START_DATE"}
+          defaultValue="AFTER_START_DATE"
           className="h-9 rounded-md border px-2"
         >
           {Object.entries(autoConfirmTimingLabels).map(([value, label]) => (
@@ -297,8 +296,8 @@ export default async function ApprovalPoliciesPage({
         </form>
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-sm">
-        <table className="w-full min-w-[1200px] text-left text-sm">
+      <div className="overflow-x-auto rounded-lg border border-neutral-200 bg-white shadow-sm">
+        <table className="w-full min-w-[1200px] table-auto text-left text-sm [&_td]:break-keep [&_th]:break-keep [&_th]:whitespace-nowrap">
           <thead className="bg-neutral-50 text-neutral-500">
             <tr>
               <th className="px-4 py-3">정책</th>

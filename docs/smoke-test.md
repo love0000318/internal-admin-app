@@ -284,6 +284,28 @@
   - 기대 결과: public URL로 접근할 수 없다.
   - 실패 시 확인할 것: storage root, Next public directory.
 
+## 반응형 UI
+
+- [ ] PC 1440px/1280px에서 관리자 화면을 확인한다.
+  - 기대 결과: 사이드바와 본문이 겹치지 않고, 넓은 표는 컬럼명이 읽히는 상태로 표시된다.
+  - 실패 시 확인할 것: app layout `min-w-0`, table `min-width`, table wrapper `overflow-x-auto`.
+
+- [ ] 모바일 430px/390px/360px에서 휴가 유형 관리 화면을 확인한다.
+  - 기대 결과: 한글 컬럼명이 한 글자씩 세로로 깨지지 않고, 표 영역만 좌우 스크롤된다.
+  - 실패 시 확인할 것: `/admin/leaves/types` table wrapper, `break-keep`, `whitespace-nowrap`.
+
+- [ ] 모바일에서 휴가 유형 생성/수정 form을 확인한다.
+  - 기대 결과: 입력 form은 1열로 표시되고, 버튼과 입력창이 화면 밖으로 벗어나지 않는다.
+  - 실패 시 확인할 것: form grid `grid-cols-1`, input/select `w-full`, 수정 form 최소 폭과 스크롤 영역.
+
+- [ ] 모바일에서 직원별 휴가 보유 현황, 맞춤휴가 지급, 관리자 리포트 표를 확인한다.
+  - 기대 결과: 전체 body가 밀리지 않고 각 표 내부에서만 가로 스크롤된다.
+  - 실패 시 확인할 것: 해당 table wrapper `overflow-x-auto`, table `min-w-*`.
+
+- [ ] 태블릿 768px~1024px에서 휴가 정책/생일 반차/승인 정책 form을 확인한다.
+  - 기대 결과: form이 1~2열로 정리되고, 4열 고정으로 인한 overflow가 없다.
+  - 실패 시 확인할 것: form grid breakpoint `md:grid-cols-2`, `xl:grid-cols-4`.
+
 ## 최종 확인
 
 - [ ] `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`를 실행한다.
@@ -297,3 +319,45 @@
 - [ ] `docs/v2-rehearsal-report.md`를 최신 결과로 갱신한다.
   - 기대 결과: 실제 사용 가능 여부와 남은 blocker가 명확하다.
   - 실패 시 확인할 것: 실행 명령 결과와 미검수 시나리오.
+
+## 미승인 휴가 자동 확정 Smoke Test
+
+- [ ] 직원이 내일 또는 기준일에 시작하는 연차/반차 휴가를 요청한다.
+  - 기대 결과: 요청 상태가 `PENDING`이고 승인 대기 수량이 반영된다.
+  - 실패 시 확인할 것: 휴가 잔여, 중복 휴가, 승인 정책, 증명자료 정책.
+- [ ] `pnpm jobs:auto-confirm-past-start-leaves -- --date=YYYY-MM-DD --dry-run`을 실행한다.
+  - 기대 결과: 자동 확정 대상 수가 출력되고 DB 변경은 없다.
+  - 실패 시 확인할 것: package script, DB 연결, ApprovalPolicy 자동 확정 설정.
+- [ ] `pnpm jobs:auto-confirm-past-start-leaves -- --date=YYYY-MM-DD`를 실행한다.
+  - 기대 결과: 대상 요청이 `APPROVED`로 변경되고 `autoConfirmedAt`, `approvalSource=AUTO_START_DATE`가 저장된다.
+  - 실패 시 확인할 것: LeaveRequest 상태, 사용자 ACTIVE 여부, 증명자료 확인 필요 여부.
+- [ ] 직원 내 휴가 상세와 승인 상세를 확인한다.
+  - 기대 결과: 승인 완료 상태에 자동 확정 표시와 시스템 자동 확정 승인자가 보인다.
+  - 실패 시 확인할 것: generated Prisma client, 상세 페이지 조회 필드.
+- [ ] LeaveLedger와 잔여를 확인한다.
+  - 기대 결과: `USED` + `LEAVE_AUTO_CONFIRM` 장부가 1건 생성되고 잔여가 중복 차감되지 않는다.
+  - 실패 시 확인할 것: `auto-confirm-used:{leaveRequestId}` idempotencyKey, 기존 PENDING ledger.
+- [ ] Notification과 AuditLog를 확인한다.
+  - 기대 결과: 직원에게 `LEAVE_AUTO_CONFIRMED` 알림이 생성되고 `LEAVE_REQUEST_AUTO_CONFIRMED_AFTER_START_DATE` 감사 로그가 남는다.
+  - 실패 시 확인할 것: NotificationType/AuditAction migration 적용 여부.
+- [ ] 같은 job을 한 번 더 실행한다.
+  - 기대 결과: 이미 승인된 요청은 skip되고 중복 ledger/중복 차감이 없다.
+  - 실패 시 확인할 것: `status=PENDING`, `autoConfirmedAt=null`, ledger idempotency 조건.
+
+## 초대 가입 인증 코드 Smoke Test
+
+- [ ] OWNER가 직원 초대를 생성한다.
+  - 기대 결과: 초대 링크와 가입 인증 코드가 생성 직후 화면에 표시된다.
+  - 실패 시 확인할 것: `createEmployeeInvitation`, `createInvitationVerificationCodePayload`.
+- [ ] 초대 목록을 확인한다.
+  - 기대 결과: 인증 코드 원문은 보이지 않고 발급/사용/만료/잠김/재발급 필요 상태만 표시된다.
+  - 실패 시 확인할 것: `/organization/invitations` 표시 로직.
+- [ ] 직원이 초대 링크와 올바른 가입 인증 코드로 가입한다.
+  - 기대 결과: 가입이 완료되고 인증 코드는 consumed 처리되어 재사용할 수 없다.
+  - 실패 시 확인할 것: `acceptInvitationAction`, `verificationCodeConsumedAt`.
+- [ ] 잘못된 가입 인증 코드를 5회 입력한다.
+  - 기대 결과: 실패 횟수가 증가하고 최대 횟수 이후 잠김 상태가 된다.
+  - 실패 시 확인할 것: `verificationCodeAttemptCount`, `verificationCodeMaxAttempts`.
+- [ ] 초대를 재발급한다.
+  - 기대 결과: 기존 초대 token/code는 폐기되고 새 링크와 새 코드가 한 번 표시된다.
+  - 실패 시 확인할 것: `reissueInvitation`.

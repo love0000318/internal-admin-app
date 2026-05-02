@@ -161,7 +161,7 @@ function CommonPolicyFields({
 
   return (
     <>
-      <div className="grid gap-2 md:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <label className="flex items-center gap-2 text-sm">
           <input
             name="isEnabled"
@@ -201,7 +201,7 @@ function CommonPolicyFields({
         </label>
       </div>
 
-      <div className="grid gap-2 md:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <label className="text-sm">
           부여 방식
           <select
@@ -246,10 +246,10 @@ function CommonPolicyFields({
         </label>
       </div>
 
-      <div className="grid gap-2 md:grid-cols-4">
-        <fieldset className="rounded-md border border-neutral-200 p-3 md:col-span-2">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
+        <fieldset className="min-w-0 rounded-md border border-neutral-200 p-3 lg:col-span-2">
           <legend className="px-1 text-sm font-medium">사용 가능 단위</legend>
-          <div className="mt-2 grid gap-2 md:grid-cols-4">
+          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
             {LEAVE_USAGE_UNIT_VALUES.map((unit) => (
               <label key={`${prefix}-${unit}`} className="flex items-center gap-2 text-sm">
                 <input
@@ -285,7 +285,7 @@ function CommonPolicyFields({
         </label>
       </div>
 
-      <div className="grid gap-2 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         <label className="text-sm">
           증명자료 정책
           <select
@@ -369,7 +369,7 @@ export default async function LeaveTypesPage({
   const error = errorMessage(params.error);
 
   return (
-    <section>
+    <section className="min-w-0">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <p className="text-sm font-medium text-neutral-500">휴가 관리</p>
@@ -382,28 +382,28 @@ export default async function LeaveTypesPage({
             제한됩니다.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
           <Link
             href="/admin/leaves/settings"
-            className="inline-flex h-10 items-center rounded-md border border-neutral-300 px-4 text-sm font-medium"
+            className="inline-flex h-10 w-full items-center justify-center whitespace-nowrap break-keep rounded-md border border-neutral-300 px-4 text-sm font-medium sm:w-auto"
           >
             휴가 정책 설정
           </Link>
           <Link
             href="/admin/leaves/grants"
-            className="inline-flex h-10 items-center rounded-md border border-neutral-300 px-4 text-sm font-medium"
+            className="inline-flex h-10 w-full items-center justify-center whitespace-nowrap break-keep rounded-md border border-neutral-300 px-4 text-sm font-medium sm:w-auto"
           >
             맞춤휴가 지급
           </Link>
           <Link
             href="/admin/leaves/holidays"
-            className="inline-flex h-10 items-center rounded-md border border-neutral-300 px-4 text-sm font-medium"
+            className="inline-flex h-10 w-full items-center justify-center whitespace-nowrap break-keep rounded-md border border-neutral-300 px-4 text-sm font-medium sm:w-auto"
           >
             회사 휴일 관리
           </Link>
           <Link
             href="/admin/leaves/balances"
-            className="inline-flex h-10 items-center rounded-md border border-neutral-300 px-4 text-sm font-medium"
+            className="inline-flex h-10 w-full items-center justify-center whitespace-nowrap break-keep rounded-md border border-neutral-300 px-4 text-sm font-medium sm:w-auto"
           >
             직원별 휴가 보유 현황
           </Link>
@@ -423,7 +423,7 @@ export default async function LeaveTypesPage({
 
       <form
         action="/admin/leaves/types"
-        className="mt-6 grid gap-3 rounded-lg border border-neutral-200 bg-white p-4 shadow-sm md:grid-cols-5"
+        className="mt-6 grid grid-cols-1 gap-3 rounded-lg border border-neutral-200 bg-white p-4 shadow-sm sm:grid-cols-2 xl:grid-cols-5"
       >
         <input
           name="query"
@@ -472,7 +472,7 @@ export default async function LeaveTypesPage({
             사용하지 않는 휴가 유형은 삭제하지 않고 비활성화됩니다.
           </p>
         </div>
-        <div className="grid gap-2 md:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
           <label className="text-sm">
             휴가명
             <input
@@ -515,8 +515,9 @@ export default async function LeaveTypesPage({
         </button>
       </form>
 
-      <div className="mt-6 overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-sm">
-        <table className="w-full min-w-[1500px] text-left text-sm">
+      <div className="mt-6 rounded-lg border border-neutral-200 bg-white shadow-sm">
+        <div className="w-full overflow-x-auto">
+        <table className="w-full min-w-[1500px] table-auto text-left text-sm [&_td]:break-keep [&_th]:break-keep [&_th]:whitespace-nowrap">
           <thead className="bg-neutral-50 text-neutral-500">
             <tr>
               <th className="px-4 py-3">휴가명</th>
@@ -571,9 +572,9 @@ export default async function LeaveTypesPage({
                     {leaveType.isSystemRequired ? "시스템 기본" : "관리자 생성"}
                   </td>
                   <td className="px-4 py-3">
-                    <form action={updateLeaveType} className="grid min-w-[640px] gap-3">
+                    <form action={updateLeaveType} className="grid min-w-[720px] max-w-[780px] gap-3">
                       <input name="id" type="hidden" value={leaveType.id} />
-                      <div className="grid gap-2 md:grid-cols-4">
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                         <label className="text-sm">
                           휴가명
                           <input
@@ -692,6 +693,7 @@ export default async function LeaveTypesPage({
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </section>
   );

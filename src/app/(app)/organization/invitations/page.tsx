@@ -8,6 +8,7 @@ import {
 import { roleLabel } from "@/lib/display/labels";
 import { toDisplayDate } from "@/lib/organization/format";
 import { getPrisma } from "@/lib/db/prisma";
+import { getInvitationVerificationCodeStatus } from "@/lib/auth/invitation-verification-code";
 import { requireOwner } from "@/lib/rbac/server-guards";
 
 export const dynamic = "force-dynamic";
@@ -15,16 +16,26 @@ export const dynamic = "force-dynamic";
 type InvitationsPageProps = {
   searchParams: Promise<{
     inviteUrl?: string;
+    verificationCode?: string;
     error?: string;
     success?: string;
   }>;
+};
+
+const verificationCodeStatusLabels = {
+  ISSUED: "인증 코드 발급됨",
+  CONSUMED: "인증 코드 사용됨",
+  EXPIRED: "인증 코드 만료됨",
+  LOCKED: "인증 코드 잠김",
+  REVOKED: "인증 코드 폐기됨",
+  NEEDS_REISSUE: "인증 코드 재발급 필요",
 };
 
 export default async function InvitationsPage({
   searchParams,
 }: InvitationsPageProps) {
   await requireOwner();
-  const { inviteUrl, error, success } = await searchParams;
+  const { inviteUrl, verificationCode, error, success } = await searchParams;
   const prisma = getPrisma();
   const [teams, invitations] = await Promise.all([
     prisma.team.findMany({
@@ -72,6 +83,29 @@ export default async function InvitationsPage({
               className="h-9 min-w-0 flex-1 rounded-md border border-emerald-200 bg-white px-3 text-sm"
             />
             <CopyButton value={inviteUrl} />
+          </div>
+        </div>
+      ) : null}
+      {inviteUrl && verificationCode ? (
+        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
+          <p className="text-sm font-medium text-amber-900">
+            가입 인증 코드는 지금 한 번만 표시됩니다.
+          </p>
+          <p className="mt-1 text-sm leading-relaxed text-amber-800">
+            직원에게 초대 링크와 가입 인증 코드를 함께 전달해 주세요. 코드를 분실한 경우 초대를 재발급해야 합니다.
+          </p>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+            <input
+              readOnly
+              value={verificationCode}
+              className="h-9 min-w-0 flex-1 rounded-md border border-amber-200 bg-white px-3 font-mono text-sm tracking-widest"
+            />
+            <CopyButton value={verificationCode} />
+          </div>
+          <div className="mt-3">
+            <CopyButton
+              value={`아래 링크로 접속한 뒤 가입 인증 코드를 입력해 주세요.\n\n초대 링크:\n${inviteUrl}\n\n가입 인증 코드:\n${verificationCode}`}
+            />
           </div>
         </div>
       ) : null}
@@ -131,8 +165,8 @@ export default async function InvitationsPage({
         </button>
       </form>
 
-      <div className="mt-6 overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-sm">
-        <table className="w-full min-w-[980px] text-left text-sm">
+      <div className="mt-6 overflow-x-auto rounded-lg border border-neutral-200 bg-white shadow-sm">
+        <table className="w-full min-w-[1100px] text-left text-sm">
           <thead className="bg-neutral-50 text-neutral-500">
             <tr>
               <th className="px-4 py-3">이름</th>
@@ -141,6 +175,7 @@ export default async function InvitationsPage({
               <th className="px-4 py-3">팀</th>
               <th className="px-4 py-3">사전 정보</th>
               <th className="px-4 py-3">상태</th>
+              <th className="px-4 py-3">가입 인증 코드</th>
               <th className="px-4 py-3">만료일</th>
               <th className="px-4 py-3">관리</th>
             </tr>
@@ -148,7 +183,7 @@ export default async function InvitationsPage({
           <tbody className="divide-y divide-neutral-100">
             {invitations.length === 0 ? (
               <tr>
-                <td className="px-4 py-6 text-neutral-500" colSpan={8}>
+                <td className="px-4 py-6 text-neutral-500" colSpan={9}>
                   진행 중인 초대가 없습니다.
                 </td>
               </tr>
@@ -168,6 +203,13 @@ export default async function InvitationsPage({
                   </td>
                   <td className="px-4 py-3">
                     <InvitationStatusBadge status={invitation.status} />
+                  </td>
+                  <td className="px-4 py-3">
+                    {
+                      verificationCodeStatusLabels[
+                        getInvitationVerificationCodeStatus(invitation)
+                      ]
+                    }
                   </td>
                   <td className="px-4 py-3">{toDisplayDate(invitation.expiresAt)}</td>
                   <td className="px-4 py-3">

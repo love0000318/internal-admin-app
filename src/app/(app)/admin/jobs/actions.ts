@@ -109,7 +109,10 @@ async function runSupportedDryRun(jobName: string) {
     };
   }
 
-  if (jobName === JOB_NAMES.AUTO_CONFIRM_PENDING_LEAVES) {
+  if (
+    jobName === JOB_NAMES.AUTO_CONFIRM_PAST_START_LEAVES ||
+    jobName === JOB_NAMES.AUTO_CONFIRM_PENDING_LEAVES
+  ) {
     const result = await autoConfirmPendingLeaveRequestsForDate({ dryRun: true, prisma });
 
     return {

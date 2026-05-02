@@ -54,3 +54,7 @@
 
 - [2차 smoke test](../smoke-test.md)
 - [보안 smoke test](../security-smoke-test.md)
+
+## 추가 운영 문서
+
+- [휴가 자동 확정 가이드](../leave-auto-confirm-guide.md)

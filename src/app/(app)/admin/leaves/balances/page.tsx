@@ -118,7 +118,7 @@ export default async function EmployeeLeaveBalancesPage({
         </p>
       ) : null}
 
-      <form className="mt-6 grid gap-3 rounded-lg border border-neutral-200 bg-white p-4 shadow-sm md:grid-cols-4">
+      <form className="mt-6 grid grid-cols-1 gap-3 rounded-lg border border-neutral-200 bg-white p-4 shadow-sm sm:grid-cols-2 xl:grid-cols-4">
         <input
           name="q"
           defaultValue={filters.q ?? ""}
@@ -150,7 +150,7 @@ export default async function EmployeeLeaveBalancesPage({
 
       <form
         action={createLeaveAdjustment}
-        className="mt-4 grid gap-3 rounded-lg border border-neutral-200 bg-white p-4 shadow-sm md:grid-cols-5"
+        className="mt-4 grid grid-cols-1 gap-3 rounded-lg border border-neutral-200 bg-white p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5"
       >
         <select
           name="userId"
@@ -190,8 +190,8 @@ export default async function EmployeeLeaveBalancesPage({
         </button>
       </form>
 
-      <div className="mt-6 overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-sm">
-        <table className="w-full min-w-[1150px] text-left text-sm">
+      <div className="mt-6 overflow-x-auto rounded-lg border border-neutral-200 bg-white shadow-sm">
+        <table className="w-full min-w-[1150px] table-auto text-left text-sm [&_td]:break-keep [&_th]:break-keep [&_th]:whitespace-nowrap">
           <thead className="bg-neutral-50 text-neutral-500">
             <tr>
               <th className="px-4 py-3">직원 이름</th>
@@ -263,7 +263,7 @@ export default async function EmployeeLeaveBalancesPage({
         </table>
       </div>
 
-      <div className="mt-6 overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-sm">
+      <div className="mt-6 overflow-x-auto rounded-lg border border-neutral-200 bg-white shadow-sm">
         <div className="border-b border-neutral-100 px-4 py-3">
           <h2 className="text-base font-semibold">맞춤휴가 현황</h2>
           <p className="mt-1 text-sm text-neutral-500">
@@ -271,7 +271,7 @@ export default async function EmployeeLeaveBalancesPage({
             맞춤휴가는 이 영역에서 확인합니다.
           </p>
         </div>
-        <table className="w-full min-w-[950px] text-left text-sm">
+        <table className="w-full min-w-[950px] table-auto text-left text-sm [&_td]:break-keep [&_th]:break-keep [&_th]:whitespace-nowrap">
           <thead className="bg-neutral-50 text-neutral-500">
             <tr>
               <th className="px-4 py-3">직원</th>

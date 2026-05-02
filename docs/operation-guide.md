@@ -252,3 +252,40 @@ pnpm jobs:expire-annual-leaves -- --dry-run
 - ÷�������� public ������ �ƴ� private storage�� ����Ǹ�, �ٿ�ε� route���� ������ �ٽ� Ȯ���մϴ�.
 - �ڼ��� ������ docs/leave-attachment-guide.md�� Ȯ���մϴ�.
 
+
+## 미승인 휴가 시작일 경과 자동 확정
+
+- 기준: Asia/Seoul date-only 기준 `today > startDate`인 `PENDING` 휴가 요청만 자동 확정 대상입니다.
+- 시작일 당일에는 자동 확정하지 않습니다.
+- 증명자료 확인 후 승인 필수 정책(`requireAttachmentAcceptedBeforeApproval`)이 켜진 요청은 증명자료가 `ACCEPTED`가 아니면 제외됩니다.
+- 실행 전 미리보기: `pnpm jobs:auto-confirm-past-start-leaves -- --dry-run`
+- 기준일 지정: `pnpm jobs:auto-confirm-past-start-leaves -- --date=YYYY-MM-DD --dry-run`
+- Cron endpoint: `POST /api/cron/auto-confirm-past-start-leaves`
+- Cron 보안: `CRON_SECRET`을 `X-Cron-Secret` 또는 `Authorization: Bearer` header로 전달해야 합니다.
+- LeaveLedger는 `USED` + `LEAVE_AUTO_CONFIRM`으로 기록하며 idempotencyKey는 `auto-confirm-used:{leaveRequestId}`입니다.
+
+## Vercel 운영 배포 준비
+
+운영 배포 절차는 `docs/deployment-vercel-guide.md`를 기준으로 진행합니다.
+
+- 운영 DB migration: `pnpm db:deploy`
+- 운영 DB에서 금지: `prisma migrate reset`, `prisma migrate dev`
+- 최초 OWNER 초대가 필요한 경우에만 seed 실행: `pnpm db:seed`
+- 자동 확정 cron endpoint: `/api/cron/auto-confirm-past-start-leaves`
+- Vercel cron schedule: `10 15 * * *` (UTC, Asia/Seoul 00:10)
+- cron 보안: `CRON_SECRET` 필수
+
+배포 후에는 `docs/deployment-smoke-test.md`를 따라 OWNER 로그인, 직원 초대, 휴가 요청/승인, 자동 확정 dry-run, 리포트 export, 권한 차단을 확인합니다.
+
+첨부파일 운영 주의: 현재 local private storage만 구현되어 있으므로 Vercel serverless 운영에서 증명자료 파일을 실제로 사용할 경우 Vercel Blob 또는 외부 object storage 연동이 필요합니다.
+
+## 초대별 1회용 가입 인증 코드
+
+- OWNER가 직원을 초대하면 초대 링크와 별도의 가입 인증 코드가 함께 생성된다.
+- 가입 인증 코드는 생성 직후 관리자 화면에 한 번만 표시된다. 분실하면 초대를 재발급해야 한다.
+- 직원은 초대 링크에 접속한 뒤 총괄 관리자가 전달한 가입 인증 코드를 입력해 가입한다.
+- 인증 코드는 기본 8자리 숫자이며 `INVITATION_VERIFICATION_CODE_LENGTH`, `INVITATION_VERIFICATION_CODE_MAX_ATTEMPTS`, `INVITATION_VERIFICATION_CODE_EXPIRES_IN_DAYS`로 조정할 수 있다.
+- DB에는 인증 코드 원문을 저장하지 않고 `verificationCodeHash`만 저장한다.
+- 실패 횟수는 기본 5회이며 초과하면 해당 초대 인증 코드는 잠긴다.
+- 초대 취소 또는 재발급 시 기존 인증 코드는 폐기된다.
+- production에서는 `mock-verified` 본인인증을 계속 차단하며, 이메일/휴대폰 외부 인증 API는 사용하지 않는다.

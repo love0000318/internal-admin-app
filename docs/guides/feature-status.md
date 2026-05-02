@@ -33,3 +33,10 @@
 | Cron endpoint 보안 | PARTIAL | 현재 `/api/cron/*` route 없음 | `JobRun` | CLI jobs | 운영자 | helper는 있으나 endpoint는 3차/TODO |
 | 보안/권한 | COMPLETE | protected routes/actions | RBAC/security helpers | `preflight` | 전체 | 서버 guard 중심 |
 | AuditLog | COMPLETE | `/admin/audit-logs` | `AuditLog` | 없음 | OWNER | metadata sanitize |
+
+## 2026-05-02 추가 상태
+
+| 기능 | 상태 | 실제 route | 관련 모델 | 관련 script | 사용자 | 비고 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 미승인 휴가 자동 확정 | COMPLETE | `/api/cron/auto-confirm-past-start-leaves` | `LeaveRequest`, `ApprovalPolicy`, `LeaveLedger`, `JobRun` | `jobs:auto-confirm-past-start-leaves` | Job/OWNER | PENDING 시작일 다음 날부터 APPROVED 전환, `LEAVE_AUTO_CONFIRM` ledger 기록, 중복 차감 방지 |
+| Cron endpoint 보안 | PARTIAL | `/api/cron/auto-confirm-past-start-leaves` | `JobRun` | `jobs:auto-confirm-past-start-leaves` | 운영자 | 자동 확정 cron은 `CRON_SECRET` 보호 구현, 다른 운영 job cron endpoint는 TODO |

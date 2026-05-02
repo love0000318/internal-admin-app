@@ -54,17 +54,18 @@ export function InvitationSignupForm({ token }: InvitationSignupFormProps) {
           className="text-sm font-medium text-neutral-800"
           htmlFor="verificationCode"
         >
-          본인인증 코드
+          가입 인증 코드
         </label>
         <input
-          id="verificationToken"
-          name="verificationToken"
-          defaultValue="mock-verified"
+          id="verificationCode"
+          name="verificationCode"
+          inputMode="numeric"
+          autoComplete="one-time-code"
           className="h-10 rounded-md border border-neutral-300 px-3 text-sm outline-none focus:border-neutral-900"
           required
         />
-        <p className="text-xs text-neutral-500">
-          개발 환경에서는 `mock-verified` 값을 사용합니다.
+        <p className="text-xs leading-relaxed text-neutral-500">
+          총괄 관리자가 전달한 1회용 가입 인증 코드를 입력해 주세요.
         </p>
       </div>
       <div className="grid gap-1.5">

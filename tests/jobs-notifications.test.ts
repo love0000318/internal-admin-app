@@ -7,6 +7,7 @@ import { getNotificationGroup } from "@/lib/notifications/notifications";
 describe("notifications and job operations", () => {
   it("groups notification types for filtering", () => {
     expect(getNotificationGroup("LEAVE_APPROVED")).toBe("LEAVE");
+    expect(getNotificationGroup("LEAVE_AUTO_CONFIRMED")).toBe("LEAVE");
     expect(getNotificationGroup("LEAVE_ATTACHMENT_REJECTED")).toBe("ATTACHMENT");
     expect(getNotificationGroup("ANNUAL_LEAVE_PROMOTION")).toBe("ANNUAL_PROMOTION");
     expect(getNotificationGroup("HR_PROFILE_CHANGE_REQUEST_CREATED")).toBe("HR");

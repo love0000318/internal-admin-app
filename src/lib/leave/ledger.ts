@@ -503,7 +503,7 @@ export async function recordLeaveRequestAutoConfirmedLedger({
     effectiveDate: new Date(),
     referenceYear: Number(dateToDateOnly(leaveRequest.startDate).slice(0, 4)),
     source: "LEAVE_AUTO_CONFIRM",
-    idempotencyKey: `auto-confirm:${leaveRequest.id}`,
+    idempotencyKey: `auto-confirm-used:${leaveRequest.id}`,
     reason: "Leave request auto-confirmed after start date",
     metadata: {
       approvalSource: "AUTO_START_DATE",

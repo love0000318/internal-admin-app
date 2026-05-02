@@ -129,7 +129,7 @@ export default async function AuditLogsPage({ searchParams }: AuditLogsPageProps
         description="권한 변경, 초대, 조직, 휴가 정책 및 휴가 승인 이력을 조회합니다."
       />
 
-      <form className="mt-6 grid gap-3 rounded-lg border border-neutral-200 bg-white p-4 shadow-sm md:grid-cols-6">
+      <form className="mt-6 grid grid-cols-1 gap-3 rounded-lg border border-neutral-200 bg-white p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
         <select
           name="action"
           defaultValue={filters.action ?? ""}
@@ -189,13 +189,13 @@ export default async function AuditLogsPage({ searchParams }: AuditLogsPageProps
         </button>
       </form>
 
-      <div className="mt-6 overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-sm">
+      <div className="mt-6 overflow-x-auto rounded-lg border border-neutral-200 bg-white shadow-sm">
         {logs.length === 0 ? (
           <div className="p-4">
             <EmptyState title="감사 로그가 없습니다." />
           </div>
         ) : (
-          <table className="w-full min-w-[1100px] text-left text-sm">
+          <table className="w-full min-w-[1100px] table-auto text-left text-sm [&_td]:break-keep [&_th]:break-keep [&_th]:whitespace-nowrap">
             <thead className="bg-neutral-50 text-neutral-500">
               <tr>
                 <th className="px-4 py-3">발생일시</th>

@@ -22,7 +22,7 @@ import { assertNoOverlappingLeaveRequest } from "@/lib/leave/overlap";
 import { getLeavePolicyMap, getUserLeaveBalance } from "@/lib/leave/queries";
 import type { DateOnly, LeaveOverlapCandidate } from "@/lib/leave/types";
 
-const AUTO_CONFIRM_REASON = "휴가 시작일 경과로 자동 확정되었습니다.";
+const AUTO_CONFIRM_REASON = "휴가 시작일 경과로 자동 확정";
 
 export type AutoConfirmSkipReason =
   | "NOT_PENDING"
@@ -49,8 +49,6 @@ export type AutoConfirmRunResult = {
   skippedReasons: Record<string, number>;
   failedRequestIds: string[];
 };
-
-type AutoConfirmDb = PrismaClient | Prisma.TransactionClient;
 
 const autoConfirmLeaveRequestInclude = {
   user: true,
@@ -86,10 +84,13 @@ function isStartDateEligible({
   today: DateOnly;
   timing: ApprovalPolicy["autoConfirmTiming"];
 }) {
+  // Current operating policy is strictly "today > startDate".
+  // `timing` remains for stored policy compatibility and future expansion.
+  void timing;
   const start = dateToDateOnly(startDate);
   const comparison = compareDateOnly(today, start);
 
-  return timing === "AFTER_START_DATE" ? comparison > 0 : comparison >= 0;
+  return comparison > 0;
 }
 
 export function shouldAutoConfirmLeaveRequest({
@@ -169,7 +170,7 @@ async function assertAutoConfirmStillValid({
   leaveRequest: AutoConfirmLeaveRequest;
 }) {
   const existingAutoConfirmLedger = await tx.leaveLedger.findUnique({
-    where: { idempotencyKey: `auto-confirm:${leaveRequest.id}` },
+    where: { idempotencyKey: `auto-confirm-used:${leaveRequest.id}` },
   });
 
   if (existingAutoConfirmLedger) {
@@ -242,7 +243,7 @@ export async function findPendingLeaveRequestsToAutoConfirm({
     where: {
       status: "PENDING",
       autoConfirmedAt: null,
-      startDate: { lte: dateOnlyToDate(date) },
+      startDate: { lt: dateOnlyToDate(date) },
       user: { status: "ACTIVE" },
     },
     include: autoConfirmLeaveRequestInclude,
@@ -347,7 +348,7 @@ export async function autoConfirmPendingLeaveRequest({
           userId: leaveRequest.userId,
           type: "LEAVE_AUTO_CONFIRMED",
           title: "휴가 요청이 자동 확정되었습니다.",
-          message: "휴가 시작일이 도래하여 승인 대기 중이던 휴가가 자동 확정되었습니다.",
+          message: "휴가 시작일이 지나 승인 대기 중이던 휴가 요청이 자동 확정되었습니다.",
           linkUrl: `/leaves/me/requests/${leaveRequest.id}`,
           metadata: toJsonValue({ leaveRequestId: leaveRequest.id }),
         },
@@ -358,7 +359,7 @@ export async function autoConfirmPendingLeaveRequest({
           actorId: null,
           actorUserId: null,
           targetUserId: leaveRequest.userId,
-          action: "LEAVE_REQUEST_AUTO_CONFIRMED",
+          action: "LEAVE_REQUEST_AUTO_CONFIRMED_AFTER_START_DATE",
           targetType: "LEAVE_REQUEST",
           targetId: leaveRequest.id,
           metadata: toJsonValue({
@@ -371,7 +372,7 @@ export async function autoConfirmPendingLeaveRequest({
             previousStatus: leaveRequest.status,
             newStatus: "APPROVED",
             autoConfirmedAt: autoConfirmedAt.toISOString(),
-            reason: "START_DATE_REACHED",
+            reason: "START_DATE_PASSED",
             approvalPolicy: approvalPolicySummary(approvalPolicy),
           }),
         },
@@ -448,8 +449,8 @@ export async function autoConfirmPendingLeaveRequestsForDate({
       actorId: null,
       actorUserId: null,
       action: dryRun
-        ? "AUTO_CONFIRM_PENDING_LEAVES_DRY_RUN"
-        : "AUTO_CONFIRM_PENDING_LEAVES_RUN",
+        ? "AUTO_CONFIRM_PAST_START_LEAVES_DRY_RUN"
+        : "AUTO_CONFIRM_PAST_START_LEAVES_RUN",
       targetType: "JOB_RUN",
       metadata: toJsonValue({
         date,

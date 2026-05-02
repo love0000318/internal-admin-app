@@ -2,6 +2,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 
 import { PrismaClient } from "../src/generated/prisma/client";
 import { createInvitationTokenPayload } from "../src/lib/auth/invitation-token";
+import { createInvitationVerificationCodePayload } from "../src/lib/auth/invitation-verification-code";
 
 const connectionString = process.env.DATABASE_URL;
 
@@ -332,7 +333,7 @@ async function seedDefaultApprovalPolicies() {
       requireAttachmentAcceptedBeforeApproval: false,
       autoApproveIfNoApprover: false,
       autoConfirmWhenStartDatePassed: true,
-      autoConfirmTiming: "ON_START_DATE",
+      autoConfirmTiming: "AFTER_START_DATE",
       isEnabled: true,
     },
     create: {
@@ -347,7 +348,7 @@ async function seedDefaultApprovalPolicies() {
       requireAttachmentAcceptedBeforeApproval: false,
       autoApproveIfNoApprover: false,
       autoConfirmWhenStartDatePassed: true,
-      autoConfirmTiming: "ON_START_DATE",
+      autoConfirmTiming: "AFTER_START_DATE",
       isEnabled: true,
     },
   });
@@ -363,7 +364,7 @@ async function seedDefaultApprovalPolicies() {
       requireCommentOnCancel: true,
       requireAttachmentAcceptedBeforeApproval: false,
       autoConfirmWhenStartDatePassed: true,
-      autoConfirmTiming: "ON_START_DATE",
+      autoConfirmTiming: "AFTER_START_DATE",
       isEnabled: true,
     },
     create: {
@@ -378,7 +379,7 @@ async function seedDefaultApprovalPolicies() {
       requireAttachmentAcceptedBeforeApproval: false,
       autoApproveIfNoApprover: false,
       autoConfirmWhenStartDatePassed: true,
-      autoConfirmTiming: "ON_START_DATE",
+      autoConfirmTiming: "AFTER_START_DATE",
       isEnabled: true,
     },
   });
@@ -394,7 +395,7 @@ async function seedDefaultApprovalPolicies() {
       requireCommentOnCancel: true,
       requireAttachmentAcceptedBeforeApproval: false,
       autoConfirmWhenStartDatePassed: true,
-      autoConfirmTiming: "ON_START_DATE",
+      autoConfirmTiming: "AFTER_START_DATE",
       isEnabled: true,
     },
     create: {
@@ -409,7 +410,7 @@ async function seedDefaultApprovalPolicies() {
       requireAttachmentAcceptedBeforeApproval: false,
       autoApproveIfNoApprover: true,
       autoConfirmWhenStartDatePassed: true,
-      autoConfirmTiming: "ON_START_DATE",
+      autoConfirmTiming: "AFTER_START_DATE",
       isEnabled: true,
     },
   });
@@ -425,7 +426,7 @@ async function seedDefaultApprovalPolicies() {
       requireCommentOnCancel: true,
       requireAttachmentAcceptedBeforeApproval: false,
       autoConfirmWhenStartDatePassed: true,
-      autoConfirmTiming: "ON_START_DATE",
+      autoConfirmTiming: "AFTER_START_DATE",
       isEnabled: true,
     },
     create: {
@@ -440,7 +441,7 @@ async function seedDefaultApprovalPolicies() {
       requireAttachmentAcceptedBeforeApproval: false,
       autoApproveIfNoApprover: false,
       autoConfirmWhenStartDatePassed: true,
-      autoConfirmTiming: "ON_START_DATE",
+      autoConfirmTiming: "AFTER_START_DATE",
       isEnabled: true,
     },
   });
@@ -531,11 +532,15 @@ async function main() {
     console.log(
       "Raw invite tokens are never stored, so the existing token cannot be printed again.",
     );
+    console.log(
+      "Raw verification codes are never stored, so the existing code cannot be printed again.",
+    );
     console.log("Default leave policies and leave type definitions were checked.");
     return;
   }
 
   const { rawToken, tokenHash, expiresAt } = createInvitationTokenPayload();
+  const verificationCode = createInvitationVerificationCodePayload();
 
   const invitation = await prisma.invitation.create({
     data: {
@@ -547,6 +552,9 @@ async function main() {
       jobTitle: ownerTitle,
       tokenHash,
       expiresAt,
+      verificationCodeHash: verificationCode.codeHash,
+      verificationCodeExpiresAt: verificationCode.expiresAt,
+      verificationCodeMaxAttempts: verificationCode.maxAttempts,
     },
   });
 
@@ -567,7 +575,10 @@ async function main() {
   console.log("========================================");
   console.log("Owner invitation URL");
   console.log(`${appBaseUrl}/invitations/accept?token=${rawToken}`);
+  console.log("Owner invitation verification code");
+  console.log(verificationCode.rawCode);
   console.log("========================================");
+  console.log("This verification code is shown only once.");
   console.log("이 링크로 접속해 대표 계정을 생성하세요.");
   console.log("가입이 완료되면 이 링크는 다시 사용할 수 없습니다.");
   console.log("초대 token 원문은 지금 한 번만 표시되며 DB에는 hash만 저장됩니다.");

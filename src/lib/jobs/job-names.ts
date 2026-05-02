@@ -4,6 +4,7 @@ export const JOB_NAMES = {
   SEND_ANNUAL_PROMOTION_NOTICES: "send-annual-promotion-notices",
   EXPIRE_ANNUAL_LEAVES: "expire-annual-leaves",
   AUTO_CONFIRM_PENDING_LEAVES: "auto-confirm-pending-leaves",
+  AUTO_CONFIRM_PAST_START_LEAVES: "auto-confirm-past-start-leaves",
   LEAVE_LEDGER_REBUILD: "leave-ledger-rebuild",
   LEAVE_LEDGER_VALIDATE: "leave-ledger-validate",
   HR_EMPLOYEE_MASTER_IMPORT: "hr-employee-master-import",
@@ -32,9 +33,9 @@ export const MANUAL_JOB_OPTIONS = [
     dryRunOnly: true,
   },
   {
-    jobName: JOB_NAMES.AUTO_CONFIRM_PENDING_LEAVES,
+    jobName: JOB_NAMES.AUTO_CONFIRM_PAST_START_LEAVES,
     label: "미승인 휴가 자동 확정",
-    description: "휴가 시작일이 도래한 승인 대기 휴가를 자동 확정할 대상을 미리 확인합니다.",
+    description: "휴가 시작일이 지난 승인 대기 휴가를 자동 확정할 대상을 미리 확인합니다.",
     dryRunOnly: true,
   },
   {

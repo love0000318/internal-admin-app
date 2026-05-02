@@ -16,6 +16,7 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
+    "db:reissue-owner-invitation": "tsx scripts/reissue-owner-invitation.ts",
     "db:validate": "prisma validate",
     "db:status": "prisma migrate status",
     "db:seed": "prisma db seed",
@@ -28,7 +29,8 @@
     "jobs:schedule-annual-promotion-notices": "tsx scripts/schedule-annual-leave-promotion-notices.ts",
     "jobs:send-annual-promotion-notices": "tsx scripts/send-annual-leave-promotion-notices.ts",
     "jobs:expire-annual-leaves": "tsx scripts/expire-annual-leaves.ts",
-    "jobs:auto-confirm-pending-leaves": "tsx scripts/auto-confirm-pending-leaves.ts"
+    "jobs:auto-confirm-pending-leaves": "tsx scripts/auto-confirm-pending-leaves.ts",
+    "jobs:auto-confirm-past-start-leaves": "tsx scripts/auto-confirm-past-start-leaves.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",

@@ -73,7 +73,7 @@ export async function AdminReportPage({ reportType, searchParams }: ReportPagePr
         </p>
       ) : null}
 
-      <form className="mt-6 grid gap-3 rounded-lg border border-neutral-200 bg-white p-4 shadow-sm md:grid-cols-6">
+      <form className="mt-6 grid grid-cols-1 gap-3 rounded-lg border border-neutral-200 bg-white p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
         <input
           name="year"
           type="number"
@@ -175,9 +175,9 @@ export async function AdminReportPage({ reportType, searchParams }: ReportPagePr
         내보냅니다.
       </p>
 
-      <div className="mt-4 overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-sm">
+      <div className="mt-4 overflow-x-auto rounded-lg border border-neutral-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1200px] text-left text-sm">
+          <table className="w-full min-w-[1200px] table-auto text-left text-sm [&_td]:break-keep [&_th]:break-keep [&_th]:whitespace-nowrap">
             <thead className="bg-neutral-50 text-neutral-500">
               <tr>
                 {definition.columns.map((column) => (

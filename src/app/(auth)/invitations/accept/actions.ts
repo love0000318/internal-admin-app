@@ -3,13 +3,14 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
-import { createSessionForUser } from "@/lib/auth/session";
-import { createIdentityVerificationProvider } from "@/lib/auth/identity-verification-provider";
 import { hashInvitationToken, isInvitationExpired } from "@/lib/auth/invitation-token";
+import { verifyInvitationVerificationCode } from "@/lib/auth/invitation-verification-code";
 import { hashPassword, validatePasswordPolicy } from "@/lib/auth/password";
 import { normalizePhoneNumber } from "@/lib/auth/phone";
+import { createSessionForUser } from "@/lib/auth/session";
 import { getPrisma } from "@/lib/db/prisma";
 import { createEmployeeProfilesFromPrejoin } from "@/lib/hr/profile-provisioning";
+import { maskEmail } from "@/lib/security/masking";
 
 export type AcceptInvitationFormState = {
   error: string | null;
@@ -22,12 +23,14 @@ const acceptInvitationSchema = z
     phone: z.string().trim().min(1),
     password: z.string().min(8),
     passwordConfirm: z.string().min(8),
-    verificationToken: z.string().trim().min(1),
+    verificationCode: z.string().trim().min(1),
   })
   .refine((data) => data.password === data.passwordConfirm, {
     path: ["passwordConfirm"],
     message: "PASSWORD_CONFIRM_MISMATCH",
   });
+
+const invalidCodeMessage = "가입 인증 코드가 올바르지 않거나 만료되었습니다.";
 
 export async function acceptInvitationAction(
   _prevState: AcceptInvitationFormState,
@@ -39,7 +42,7 @@ export async function acceptInvitationAction(
     phone: formData.get("phone"),
     password: formData.get("password"),
     passwordConfirm: formData.get("passwordConfirm"),
-    verificationToken: formData.get("verificationToken"),
+    verificationCode: formData.get("verificationCode"),
   });
 
   if (!parsed.success) {
@@ -83,6 +86,56 @@ export async function acceptInvitationAction(
     return { error: "만료된 초대 링크입니다." };
   }
 
+  const codeResult = verifyInvitationVerificationCode({
+    invitation,
+    code: parsed.data.verificationCode,
+  });
+
+  if (!codeResult.ok) {
+    const nextAttemptCount =
+      codeResult.reason === "mismatch"
+        ? Math.min(
+            invitation.verificationCodeAttemptCount + 1,
+            invitation.verificationCodeMaxAttempts,
+          )
+        : invitation.verificationCodeAttemptCount;
+
+    if (codeResult.reason === "mismatch") {
+      await prisma.invitation.update({
+        where: { id: invitation.id },
+        data: {
+          verificationCodeAttemptCount: {
+            increment: 1,
+          },
+        },
+      });
+    }
+
+    await prisma.auditLog.create({
+      data: {
+        action: "INVITATION_VERIFICATION_CODE_FAILED",
+        targetType: "INVITATION",
+        targetId: invitation.id,
+        metadata: {
+          invitationId: invitation.id,
+          targetEmailMasked: maskEmail(invitation.email),
+          role: invitation.role,
+          attemptCount: nextAttemptCount,
+          status:
+            nextAttemptCount >= invitation.verificationCodeMaxAttempts
+              ? "LOCKED"
+              : "FAILED",
+        },
+      },
+    });
+
+    return { error: invalidCodeMessage };
+  }
+
+  if (parsed.data.name !== invitation.expectedName) {
+    return { error: "가입 정보를 다시 확인해 주세요." };
+  }
+
   const existingPhoneUser = await prisma.user.findUnique({
     where: {
       phone,
@@ -104,32 +157,13 @@ export async function acceptInvitationAction(
   }
 
   if (!validatePasswordPolicy(parsed.data.password)) {
-    return { error: "비밀번호는 영문, 숫자, 특수문자를 포함한 8자 이상이어야 합니다." };
+    return {
+      error: "비밀번호는 영문, 숫자, 특수문자를 포함한 8자 이상이어야 합니다.",
+    };
   }
 
   const passwordHash = await hashPassword(parsed.data.password);
-  const identityProvider = createIdentityVerificationProvider();
-  let verification;
-
-  try {
-    verification = await identityProvider.verify({
-      name: parsed.data.name,
-      phoneNumber: phone,
-      verificationToken: parsed.data.verificationToken,
-    });
-  } catch {
-    return { error: "본인인증에 실패했습니다." };
-  }
-
-  if (
-    !verification.verified ||
-    verification.verifiedName !== invitation.expectedName ||
-    verification.verifiedName !== parsed.data.name ||
-    verification.verifiedPhoneNumber !== phone
-  ) {
-    return { error: "본인인증 이름이 초대 정보와 일치하지 않습니다." };
-  }
-
+  const now = new Date();
   let user: { id: string };
 
   try {
@@ -137,7 +171,7 @@ export async function acceptInvitationAction(
       const createdUser = await tx.user.create({
         data: {
           email: invitation.email,
-          phone: verification.verifiedPhoneNumber,
+          phone,
           name: parsed.data.name,
           title: invitation.title ?? invitation.jobTitle,
           teamId: invitation.teamId,
@@ -161,11 +195,11 @@ export async function acceptInvitationAction(
         data: {
           userId: createdUser.id,
           invitationId: invitation.id,
-          provider: verification.provider,
-          verifiedName: verification.verifiedName,
-          verifiedPhone: verification.verifiedPhoneNumber,
-          providerRef: verification.providerRef,
-          verifiedAt: verification.verifiedAt,
+          provider: "invitation-code",
+          verifiedName: parsed.data.name,
+          verifiedPhone: phone,
+          providerRef: null,
+          verifiedAt: now,
         },
       });
 
@@ -175,13 +209,19 @@ export async function acceptInvitationAction(
           status: "PENDING",
           acceptedAt: null,
           usedAt: null,
+          verificationCodeConsumedAt: null,
+          verificationCodeRevokedAt: null,
+          verificationCodeAttemptCount: {
+            lt: invitation.verificationCodeMaxAttempts,
+          },
         },
         data: {
           status: "ACCEPTED",
-          usedAt: new Date(),
-          acceptedAt: new Date(),
+          usedAt: now,
+          acceptedAt: now,
           acceptedUserId: createdUser.id,
           acceptedByUserId: createdUser.id,
+          verificationCodeConsumedAt: now,
         },
       });
 
@@ -199,7 +239,7 @@ export async function acceptInvitationAction(
           targetId: createdUser.id,
           metadata: {
             role: invitation.role,
-            email: invitation.email,
+            targetEmailMasked: maskEmail(invitation.email),
           },
         },
       });
@@ -214,7 +254,24 @@ export async function acceptInvitationAction(
           targetId: invitation.id,
           metadata: {
             role: invitation.role,
-            email: invitation.email,
+            targetEmailMasked: maskEmail(invitation.email),
+          },
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          actorId: createdUser.id,
+          actorUserId: createdUser.id,
+          targetUserId: createdUser.id,
+          action: "INVITATION_VERIFICATION_CODE_CONSUMED",
+          targetType: "INVITATION",
+          targetId: invitation.id,
+          metadata: {
+            invitationId: invitation.id,
+            targetEmailMasked: maskEmail(invitation.email),
+            role: invitation.role,
+            status: "CONSUMED",
           },
         },
       });
@@ -230,7 +287,7 @@ export async function acceptInvitationAction(
           data: {
             userId: createdUser.id,
             type: "SYSTEM",
-            title: "내 정보를 확인해 주세요.",
+            title: "인사정보를 확인해 주세요.",
             message:
               "초대 가입 시 등록된 인사정보가 자동으로 입력되었습니다. 내용을 확인하고 필요한 항목을 수정해 주세요.",
             linkUrl: "/profile/confirm",

@@ -705,3 +705,90 @@ MANAGER 타인 접근 차단, LEAD 범위 밖 차단.
 
 ### 남은 TODO
 MFA/SSO/IP allowlist.
+
+## 미승인 휴가 자동 확정
+
+### 목적
+휴가 시작일이 도래했지만 승인 대기 상태로 남아 있는 요청을 정책에 따라 시스템이 자동 확정한다.
+
+### 사용자
+직접 실행은 CLI/cron 또는 OWNER 수동 dry-run 중심이다. 직원은 자동 확정 결과를 내 휴가 상세와 알림으로 확인한다.
+
+### 주요 화면
+`/leaves/me`, `/leaves/me/requests/[requestId]`, `/leaves/approvals/[requestId]`, `/admin/jobs`
+
+### 주요 데이터 모델
+`ApprovalPolicy`, `LeaveRequest`, `LeaveLedger`, `Notification`, `AuditLog`, `JobRun`
+
+### 주요 동작
+`jobs:auto-confirm-past-start-leaves`가 시작일이 지난 `PENDING` 요청을 찾아 `APPROVED`로 변경하고 `LEAVE_AUTO_CONFIRM` 장부를 기록한다.
+
+### 권한
+수동 Job 실행은 OWNER만 가능하다. Cron 실행은 `CRON_SECRET`이 필요하다.
+
+### AuditLog
+`LEAVE_REQUEST_AUTO_CONFIRMED_AFTER_START_DATE`, `AUTO_CONFIRM_PAST_START_LEAVES_RUN`, `AUTO_CONFIRM_PAST_START_LEAVES_DRY_RUN`
+
+### Notification
+직원에게 `LEAVE_AUTO_CONFIRMED` 알림을 생성한다.
+
+### 테스트 포인트
+중복 실행 방지, 잔여 중복 차감 방지, 증명자료 확인 필수 정책 skip, JobRun 기록.
+
+### 남은 TODO
+증명자료 미확인으로 제외된 요청에 대한 별도 알림.
+
+## 반응형 UI
+
+### 목적
+PC, 태블릿, 모바일에서 관리자 표와 휴가 관리 form을 사용할 수 있게 한다.
+
+### 사용자
+OWNER, LEAD, MANAGER 등 내부 사용자. 관리자 화면은 기존 권한 정책을 그대로 따른다.
+
+### 주요 화면
+`/admin/leaves/types`, `/admin/leaves/settings`, `/admin/leaves/annual-policy`, `/admin/leaves/birthday-policy`, `/admin/leaves/approval-policies`, `/admin/leaves/balances`, `/admin/leaves/grants`, `/admin/reports/*`
+
+### 주요 동작
+넓은 표는 `overflow-x-auto`와 `min-w-*`를 사용해 내부 스크롤로 처리한다. form grid는 모바일 1열, 중간 화면 2열, 큰 화면 최대 4열로 표시한다.
+
+### 권한
+UI 레이아웃만 조정하며 server action/API 권한 검증은 기존 정책을 유지한다.
+
+### 테스트 포인트
+1440px, 1024px, 768px, 430px, 390px, 360px 폭에서 한글 컬럼명이 세로로 깨지지 않는지, form이 화면 밖으로 나가지 않는지 확인한다.
+
+### 남은 TODO
+모바일 전용 햄버거 메뉴와 주요 표의 카드형 전환은 후속 UI 고도화 후보로 관리한다.
+
+## 초대 가입 인증 코드
+
+### 목적
+외부 이메일/휴대폰 인증 API 없이 OWNER가 직접 전달하는 1회용 코드로 초대 가입을 검증한다.
+
+### 사용자
+OWNER, 초대받은 직원.
+
+### 주요 화면
+`/organization/invitations`, `/invitations/accept`.
+
+### 주요 데이터 모델
+`Invitation.verificationCodeHash`, `verificationCodeExpiresAt`, `verificationCodeConsumedAt`, `verificationCodeRevokedAt`, `verificationCodeAttemptCount`, `verificationCodeMaxAttempts`.
+
+### 주요 동작
+초대 생성/재발급 시 원문 코드를 한 번 표시하고, 가입 성공 시 consumed 처리한다.
+
+### 권한
+OWNER만 초대와 재발급을 수행한다. 직원은 자신이 받은 초대 링크와 코드로만 가입한다.
+
+### AuditLog
+`INVITATION_VERIFICATION_CODE_CREATED`, `INVITATION_VERIFICATION_CODE_FAILED`, `INVITATION_VERIFICATION_CODE_CONSUMED`, `INVITATION_REISSUED_WITH_VERIFICATION_CODE`.
+
+### Notification
+초대 코드 자체는 인앱 Notification으로 발송하지 않는다.
+
+### 테스트 포인트
+원문 코드 미저장, 실패 횟수 증가, consumed/revoked/expired/locked 코드 차단, production mock 차단.
+
+### 남은 TODO
+OWNER 초대 전용 재발급 CLI는 필요 시 추가한다.

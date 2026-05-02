@@ -188,3 +188,11 @@ HR import row 전체, 주소 전체, 가족 정보 원문, fileKey/private path,
 - 정기 권한 리뷰
 - 퇴사자 접근 자동 차단
 - 암호화 key rotation
+
+## 초대 가입 인증 코드 보안
+
+- 초대 가입 인증 코드는 원문을 DB, AuditLog, Notification metadata, CSV export에 저장하지 않는다.
+- 저장 값은 `verificationCodeHash`이며 화면에는 생성 직후 원문 코드만 1회 표시한다.
+- 실패 메시지는 `가입 인증 코드가 올바르지 않거나 만료되었습니다.`처럼 단일 문구로 유지해 공격자가 상태를 추측하지 못하게 한다.
+- 초대 token 원문은 기존처럼 DB에 저장하지 않고 `tokenHash`만 저장한다.
+- production에서 `mock-verified` 인증은 허용하지 않는다.

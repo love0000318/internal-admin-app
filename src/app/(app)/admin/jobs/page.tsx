@@ -68,7 +68,7 @@ export default async function AdminJobsPage({ searchParams }: AdminJobsPageProps
         </div>
       </div>
 
-      <form className="mt-6 grid gap-3 rounded-lg border border-neutral-200 bg-white p-4 shadow-sm md:grid-cols-5">
+      <form className="mt-6 grid grid-cols-1 gap-3 rounded-lg border border-neutral-200 bg-white p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
         <input
           name="jobName"
           defaultValue={filters.jobName ?? ""}
@@ -110,8 +110,8 @@ export default async function AdminJobsPage({ searchParams }: AdminJobsPageProps
         </button>
       </form>
 
-      <div className="mt-6 overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-sm">
-        <table className="w-full min-w-[1200px] text-left text-sm">
+      <div className="mt-6 overflow-x-auto rounded-lg border border-neutral-200 bg-white shadow-sm">
+        <table className="w-full min-w-[1200px] table-auto text-left text-sm [&_td]:break-keep [&_th]:break-keep [&_th]:whitespace-nowrap">
           <thead className="bg-neutral-50 text-neutral-500">
             <tr>
               <th className="px-4 py-3">작업명</th>

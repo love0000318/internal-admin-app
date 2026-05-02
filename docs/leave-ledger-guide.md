@@ -76,3 +76,14 @@ pnpm leave:ledger:validate
 사용계획 제출은 실제 휴가 요청이 아니므로 장부 수량을 바꾸지 않는다. 장부 수량 변화는 휴가 요청/승인/반려/취소, 수동 조정, 맞춤휴가 지급/회수, 연차 소멸에서만 발생한다.
 
 소멸 이벤트는 `expire:userId:annual:referenceYear:expirationDate` 형식의 idempotencyKey로 중복 생성을 방지한다.
+
+## 자동 확정 장부 기록
+
+미승인 휴가 자동 확정은 수동 승인과 같은 `USED` 이벤트를 사용하되 source를 `LEAVE_AUTO_CONFIRM`으로 기록한다.
+
+- eventType: `USED`
+- source: `LEAVE_AUTO_CONFIRM`
+- idempotencyKey: `auto-confirm-used:{leaveRequestId}`
+- metadata: `approvalSource=AUTO_START_DATE`, 요청 종류, 휴가 유형, 시작일, 종료일
+
+PENDING 요청 생성 시 이미 잔여가 차감되어 있으므로 자동 확정 시 remaining을 다시 줄이지 않는다. 장부 계산에서는 `USED`가 pending을 used로 이동시키는 역할을 한다.

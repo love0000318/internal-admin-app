@@ -19,7 +19,20 @@ export type ApprovalPolicyWithApprover = ApprovalPolicy & {
   customApprover?: Pick<User, "id" | "role" | "status" | "teamId"> | null;
 };
 
-export type LeaveRequestWithPolicy = LeaveRequest & {
+export type LeaveRequestWithPolicy = Pick<
+  LeaveRequest,
+  | "id"
+  | "userId"
+  | "type"
+  | "requestKind"
+  | "leaveTypeId"
+  | "status"
+  | "startDate"
+  | "endDate"
+  | "halfDayPeriod"
+  | "dayCount"
+  | "attachmentStatus"
+> & {
   user: Pick<User, "id" | "role" | "status" | "teamId" | "name">;
   customLeaveType?: (LeaveTypeDefinition & {
     approvalPolicy?: ApprovalPolicyWithApprover | null;
@@ -61,7 +74,7 @@ export const fallbackApprovalPolicy: Pick<
   requireAttachmentAcceptedBeforeApproval: false,
   autoApproveIfNoApprover: false,
   autoConfirmWhenStartDatePassed: true,
-  autoConfirmTiming: "ON_START_DATE",
+  autoConfirmTiming: "AFTER_START_DATE",
   isEnabled: true,
   createdAt: new Date(0),
   updatedAt: new Date(0),

@@ -125,3 +125,14 @@ preflight는 다음 항목을 점검한다.
 - 외부 모니터링 연동
 - 이메일/Slack/Kakao 알림
 - 비동기 대량 export 완료 알림
+
+## 미승인 휴가 자동 확정 Job
+
+- Job name: `auto-confirm-past-start-leaves`
+- package script: `pnpm jobs:auto-confirm-past-start-leaves`
+- dry-run: `pnpm jobs:auto-confirm-past-start-leaves -- --dry-run`
+- 기준일 지정: `--date=YYYY-MM-DD`
+- Cron endpoint: `POST /api/cron/auto-confirm-past-start-leaves`
+- 보안: `CRON_SECRET`을 `X-Cron-Secret` 또는 `Authorization: Bearer`로 전달한다.
+
+이 Job은 시작일이 지난 `PENDING` 휴가를 자동 확정하고 `JobRun`에 checked/created/skipped/failed 건수를 기록한다. 시작일 당일은 자동 확정하지 않는다. JobRun resultSummary에는 요청 사유나 민감정보를 저장하지 않는다.

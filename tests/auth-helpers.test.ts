@@ -14,6 +14,13 @@ import {
   isInvitationExpired,
   verifyInvitationToken,
 } from "@/lib/auth/invitation-token";
+import {
+  createInvitationVerificationCodePayload,
+  generateInvitationVerificationCode,
+  hashInvitationVerificationCode,
+  verifyInvitationVerificationCode,
+  verifyInvitationVerificationCodeHash,
+} from "@/lib/auth/invitation-verification-code";
 import { MockIdentityVerificationProvider } from "@/lib/auth/identity-verification-provider";
 import { normalizePhoneNumber } from "@/lib/auth/phone";
 import {
@@ -67,6 +74,91 @@ describe("auth helpers", () => {
     expect(tokenHash).toHaveLength(64);
     expect(verifyInvitationToken(token, tokenHash)).toBe(true);
     expect(verifyInvitationToken(`${token}-wrong`, tokenHash)).toBe(false);
+  });
+
+  it("generates and verifies one-time invitation verification codes", () => {
+    vi.stubEnv("INVITATION_VERIFICATION_CODE_LENGTH", "8");
+
+    const code = generateInvitationVerificationCode();
+    const codeHash = hashInvitationVerificationCode(code);
+
+    expect(code).toMatch(/^[2-9]{8}$/);
+    expect(codeHash).toHaveLength(64);
+    expect(codeHash).not.toEqual(code);
+    expect(verifyInvitationVerificationCodeHash(code, codeHash)).toBe(true);
+    expect(verifyInvitationVerificationCodeHash("22222222", codeHash)).toBe(
+      code === "22222222",
+    );
+
+    vi.unstubAllEnvs();
+  });
+
+  it("validates invitation verification code state", () => {
+    const now = new Date("2026-05-01T00:00:00.000Z");
+    const payload = createInvitationVerificationCodePayload(now);
+    const invitation = {
+      verificationCodeHash: payload.codeHash,
+      verificationCodeExpiresAt: new Date("2026-05-02T00:00:00.000Z"),
+      verificationCodeConsumedAt: null,
+      verificationCodeRevokedAt: null,
+      verificationCodeAttemptCount: 0,
+      verificationCodeMaxAttempts: 5,
+    };
+
+    expect(
+      verifyInvitationVerificationCode({
+        invitation,
+        code: payload.rawCode,
+        now,
+      }),
+    ).toEqual({ ok: true });
+    expect(
+      verifyInvitationVerificationCode({
+        invitation,
+        code: "22222222",
+        now,
+      }).ok,
+    ).toBe(payload.rawCode === "22222222");
+    expect(
+      verifyInvitationVerificationCode({
+        invitation: {
+          ...invitation,
+          verificationCodeExpiresAt: new Date("2026-04-30T00:00:00.000Z"),
+        },
+        code: payload.rawCode,
+        now,
+      }),
+    ).toEqual({ ok: false, reason: "expired" });
+    expect(
+      verifyInvitationVerificationCode({
+        invitation: {
+          ...invitation,
+          verificationCodeConsumedAt: now,
+        },
+        code: payload.rawCode,
+        now,
+      }),
+    ).toEqual({ ok: false, reason: "consumed" });
+    expect(
+      verifyInvitationVerificationCode({
+        invitation: {
+          ...invitation,
+          verificationCodeRevokedAt: now,
+        },
+        code: payload.rawCode,
+        now,
+      }),
+    ).toEqual({ ok: false, reason: "revoked" });
+    expect(
+      verifyInvitationVerificationCode({
+        invitation: {
+          ...invitation,
+          verificationCodeAttemptCount: 5,
+        },
+        code: payload.rawCode,
+        now,
+      }),
+    ).toEqual({ ok: false, reason: "locked" });
   });
 
   it("hashes and verifies generic secure tokens", () => {

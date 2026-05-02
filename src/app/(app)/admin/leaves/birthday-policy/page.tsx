@@ -117,7 +117,7 @@ export default async function BirthdayLeavePolicyPage({
           </label>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
           <label className="text-sm">
             지급 휴가 유형
             <input
@@ -179,14 +179,14 @@ export default async function BirthdayLeavePolicyPage({
         </button>
       </form>
 
-      <div className="mt-6 overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-sm">
+      <div className="mt-6 overflow-x-auto rounded-lg border border-neutral-200 bg-white shadow-sm">
         <div className="border-b border-neutral-100 px-4 py-3">
           <h2 className="text-base font-semibold">최근 자동 지급 내역</h2>
           <p className="mt-1 text-sm text-neutral-500">
             전체 내역은 맞춤휴가 지급 화면에서 확인할 수 있습니다.
           </p>
         </div>
-        <table className="w-full min-w-[900px] text-left text-sm">
+        <table className="w-full min-w-[900px] table-auto text-left text-sm [&_td]:break-keep [&_th]:break-keep [&_th]:whitespace-nowrap">
           <thead className="bg-neutral-50 text-neutral-500">
             <tr>
               <th className="px-4 py-3">직원</th>

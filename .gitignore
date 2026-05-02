@@ -47,3 +47,5 @@ next-env.d.ts
 private/imports/
 *.xlsx
 !docs/**/*.xlsx
+
+.vercel

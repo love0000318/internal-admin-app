@@ -319,3 +319,14 @@ LeaveLedger는 다음 이벤트를 기록한다.
 - 순차 승인(`SEQUENTIAL`)은 데이터 구조와 문서상 확장 포인트로만 둔다.
 - 반려 사유와 승인 취소 사유의 필수 여부는 정책별로 설정할 수 있다.
 - 요청자 본인은 어떤 정책에서도 자기 휴가를 직접 승인할 수 없다.
+
+## 미승인 휴가 시작일 경과 자동 확정
+
+- 기준: Asia/Seoul date-only 기준 `today > startDate`인 `PENDING` 휴가 요청만 자동 확정 대상입니다.
+- 시작일 당일에는 자동 확정하지 않습니다.
+- 증명자료 확인 후 승인 필수 정책(`requireAttachmentAcceptedBeforeApproval`)이 켜진 요청은 증명자료가 `ACCEPTED`가 아니면 제외됩니다.
+- 실행 전 미리보기: `pnpm jobs:auto-confirm-past-start-leaves -- --dry-run`
+- 기준일 지정: `pnpm jobs:auto-confirm-past-start-leaves -- --date=YYYY-MM-DD --dry-run`
+- Cron endpoint: `POST /api/cron/auto-confirm-past-start-leaves`
+- Cron 보안: `CRON_SECRET`을 `X-Cron-Secret` 또는 `Authorization: Bearer` header로 전달해야 합니다.
+- LeaveLedger는 `USED` + `LEAVE_AUTO_CONFIRM`으로 기록하며 idempotencyKey는 `auto-confirm-used:{leaveRequestId}`입니다.

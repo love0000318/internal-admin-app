@@ -4,7 +4,9 @@ import { redirect } from "next/navigation";
 
 import { Prisma } from "@/generated/prisma/client";
 import { createInvitationTokenPayload } from "@/lib/auth/invitation-token";
+import { createInvitationVerificationCodePayload } from "@/lib/auth/invitation-verification-code";
 import { getPrisma } from "@/lib/db/prisma";
+import { maskEmail } from "@/lib/security/masking";
 import {
   buildInvitationUrl,
   getAppBaseUrl,
@@ -317,6 +319,7 @@ export async function createEmployeeInvitation(formData: FormData) {
     normalizeOptionalDate(parsed.data.birthDate) ?? prejoinProfile?.birthDate ?? null;
 
   const { rawToken, tokenHash, expiresAt } = createInvitationTokenPayload();
+  const verificationCode = createInvitationVerificationCodePayload();
   const invitation = await prisma.invitation.create({
     data: {
       email: parsed.data.email,
@@ -331,6 +334,9 @@ export async function createEmployeeInvitation(formData: FormData) {
       birthday: nextBirthDate,
       tokenHash,
       expiresAt,
+      verificationCodeHash: verificationCode.codeHash,
+      verificationCodeExpiresAt: verificationCode.expiresAt,
+      verificationCodeMaxAttempts: verificationCode.maxAttempts,
       invitedByUserId: actor.id,
       createdById: actor.id,
       employeePrejoinProfileId: prejoinProfile?.id ?? null,
@@ -372,7 +378,7 @@ export async function createEmployeeInvitation(formData: FormData) {
       metadata: {
         invitationId: invitation.id,
         after: {
-          email: invitation.email,
+          targetEmailMasked: maskEmail(invitation.email),
           name: invitation.expectedName,
           role: invitation.role,
           teamId: invitation.teamId,
@@ -382,9 +388,27 @@ export async function createEmployeeInvitation(formData: FormData) {
     },
   });
 
+  await prisma.auditLog.create({
+    data: {
+      actorId: actor.id,
+      actorUserId: actor.id,
+      action: "INVITATION_VERIFICATION_CODE_CREATED",
+      targetType: "INVITATION",
+      targetId: invitation.id,
+      metadata: {
+        invitationId: invitation.id,
+        targetEmailMasked: maskEmail(invitation.email),
+        role: invitation.role,
+        expiresAt: verificationCode.expiresAt,
+        maxAttempts: verificationCode.maxAttempts,
+        status: "ISSUED",
+      },
+    },
+  });
+
   const inviteUrl = buildInvitationUrl(getAppBaseUrl(), rawToken);
   redirect(
-    `/organization/invitations?success=invitation-created&inviteUrl=${encodeURIComponent(inviteUrl)}`,
+    `/organization/invitations?success=invitation-created&inviteUrl=${encodeURIComponent(inviteUrl)}&verificationCode=${encodeURIComponent(verificationCode.rawCode)}`,
   );
 }
 
@@ -410,6 +434,7 @@ export async function cancelInvitation(formData: FormData) {
     data: {
       status: "CANCELLED",
       cancelledAt: new Date(),
+      verificationCodeRevokedAt: new Date(),
     },
   });
 
@@ -424,11 +449,11 @@ export async function cancelInvitation(formData: FormData) {
         invitationId: invitation.id,
         before: {
           status: before.status,
-          email: before.email,
+          targetEmailMasked: maskEmail(before.email),
         },
         after: {
           status: invitation.status,
-          email: invitation.email,
+          targetEmailMasked: maskEmail(invitation.email),
         },
       },
     },
@@ -455,12 +480,14 @@ export async function reissueInvitation(formData: FormData) {
   }
 
   const { rawToken, tokenHash, expiresAt } = createInvitationTokenPayload();
+  const verificationCode = createInvitationVerificationCodePayload();
   const nextInvitation = await prisma.$transaction(async (tx) => {
     await tx.invitation.update({
       where: { id: before.id },
       data: {
         status: "CANCELLED",
         cancelledAt: new Date(),
+        verificationCodeRevokedAt: new Date(),
       },
     });
 
@@ -478,6 +505,9 @@ export async function reissueInvitation(formData: FormData) {
         birthday: before.birthday ?? before.birthDate,
         tokenHash,
         expiresAt,
+        verificationCodeHash: verificationCode.codeHash,
+        verificationCodeExpiresAt: verificationCode.expiresAt,
+        verificationCodeMaxAttempts: verificationCode.maxAttempts,
         invitedByUserId: actor.id,
         createdById: actor.id,
         employeePrejoinProfileId: before.employeePrejoinProfileId,
@@ -489,20 +519,23 @@ export async function reissueInvitation(formData: FormData) {
     data: {
       actorId: actor.id,
       actorUserId: actor.id,
-      action: "INVITATION_REISSUED",
+      action: "INVITATION_REISSUED_WITH_VERIFICATION_CODE",
       targetType: "INVITATION",
       targetId: nextInvitation.id,
       metadata: {
         beforeInvitationId: before.id,
         invitationId: nextInvitation.id,
-        email: nextInvitation.email,
+        targetEmailMasked: maskEmail(nextInvitation.email),
+        role: nextInvitation.role,
+        expiresAt: verificationCode.expiresAt,
+        status: "ISSUED",
       },
     },
   });
 
   const inviteUrl = buildInvitationUrl(getAppBaseUrl(), rawToken);
   redirect(
-    `/organization/invitations?success=invitation-reissued&inviteUrl=${encodeURIComponent(inviteUrl)}`,
+    `/organization/invitations?success=invitation-reissued&inviteUrl=${encodeURIComponent(inviteUrl)}&verificationCode=${encodeURIComponent(verificationCode.rawCode)}`,
   );
 }
 

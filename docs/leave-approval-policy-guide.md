@@ -54,3 +54,14 @@ OWNER는 `/admin/leaves/approval-policies`에서 승인 정책을 생성한 뒤 
 - 대리 승인자
 - 승인 SLA와 에스컬레이션
 - 휴가 취소 요청용 별도 승인 정책
+
+## 휴가 시작일 경과 시 자동 확정
+
+승인 정책에는 휴가 시작일이 도래했을 때 승인 대기 요청을 자동 확정할지 설정하는 항목이 있다.
+
+- 사용 여부: `autoConfirmWhenStartDatePassed`
+- 확정 시점: `autoConfirmTiming`
+  - `ON_START_DATE`: 시작일 당일부터 확정
+  - `AFTER_START_DATE`: 시작일 다음 날부터 확정
+
+증명자료 확인 후 승인 필수 정책(`requireAttachmentAcceptedBeforeApproval`)이 켜져 있으면 증명자료가 `ACCEPTED`인 요청만 자동 확정한다.

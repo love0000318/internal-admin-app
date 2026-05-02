@@ -40,7 +40,7 @@ function policyPayload(formData: FormData) {
   const approverRule = textValue(formData, "approverRule");
   const appliesTo = textValue(formData, "appliesTo") || "LEAVE_REQUEST";
   const customApproverUserId = optionalText(formData, "customApproverUserId");
-  const autoConfirmTiming = textValue(formData, "autoConfirmTiming") || "ON_START_DATE";
+  const autoConfirmTiming = textValue(formData, "autoConfirmTiming") || "AFTER_START_DATE";
 
   if (!name || !code) {
     redirectToPolicies("invalid");

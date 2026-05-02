@@ -349,6 +349,12 @@ enum AuditAction {
   TEAM_DEACTIVATED
   INVITATION_CANCELLED
   INVITATION_REISSUED
+  INVITATION_VERIFICATION_CODE_CREATED
+  INVITATION_VERIFICATION_CODE_FAILED
+  INVITATION_VERIFICATION_CODE_CONSUMED
+  INVITATION_VERIFICATION_CODE_REVOKED
+  INVITATION_REISSUED_WITH_VERIFICATION_CODE
+  OWNER_INVITATION_REISSUED_WITH_VERIFICATION_CODE
   USER_PROFILE_UPDATED
   USER_ROLE_UPDATED
   USER_TEAM_UPDATED
@@ -419,9 +425,12 @@ enum AuditAction {
   LEAVE_TYPE_APPROVAL_POLICY_UPDATED
   LEAVE_REQUEST_AUTO_APPROVED
   LEAVE_REQUEST_AUTO_CONFIRMED
+  LEAVE_REQUEST_AUTO_CONFIRMED_AFTER_START_DATE
   LEAVE_REQUEST_APPROVER_RESOLVED
   AUTO_CONFIRM_PENDING_LEAVES_RUN
   AUTO_CONFIRM_PENDING_LEAVES_DRY_RUN
+  AUTO_CONFIRM_PAST_START_LEAVES_RUN
+  AUTO_CONFIRM_PAST_START_LEAVES_DRY_RUN
   REPORT_VIEWED
   REPORT_EXPORTED
   JOB_RUN_STARTED
@@ -698,6 +707,12 @@ model Invitation {
   createdById    String?
   acceptedUserId String?          @unique
   employeePrejoinProfileId String?
+  verificationCodeHash String?
+  verificationCodeExpiresAt DateTime?
+  verificationCodeConsumedAt DateTime?
+  verificationCodeRevokedAt DateTime?
+  verificationCodeAttemptCount Int @default(0)
+  verificationCodeMaxAttempts Int @default(5)
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
 
@@ -821,7 +836,7 @@ model ApprovalPolicy {
   requireAttachmentAcceptedBeforeApproval Boolean @default(false)
   autoApproveIfNoApprover  Boolean            @default(false)
   autoConfirmWhenStartDatePassed Boolean      @default(true)
-  autoConfirmTiming        AutoConfirmTiming   @default(ON_START_DATE)
+  autoConfirmTiming        AutoConfirmTiming   @default(AFTER_START_DATE)
   isEnabled                Boolean            @default(true)
   createdAt                DateTime           @default(now())
   updatedAt                DateTime           @updatedAt

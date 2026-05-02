@@ -115,7 +115,7 @@ export default async function AnnualLeavePromotionsPage({
         </button>
       </form>
 
-      <div className="mt-6 grid gap-4 md:grid-cols-5">
+      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
         <div className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm">
           <p className="text-sm text-neutral-500">촉진 대상자</p>
           <p className="mt-2 text-2xl font-semibold">{candidates.length}</p>
@@ -140,11 +140,11 @@ export default async function AnnualLeavePromotionsPage({
         </div>
       </div>
 
-      <div className="mt-6 overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-sm">
+      <div className="mt-6 overflow-x-auto rounded-lg border border-neutral-200 bg-white shadow-sm">
         <div className="border-b border-neutral-100 px-4 py-3">
           <h2 className="text-base font-semibold">촉진 알림 현황</h2>
         </div>
-        <table className="w-full min-w-[1100px] text-left text-sm">
+        <table className="w-full min-w-[1100px] table-auto text-left text-sm [&_td]:break-keep [&_th]:break-keep [&_th]:whitespace-nowrap">
           <thead className="bg-neutral-50 text-neutral-500">
             <tr>
               <th className="px-4 py-3">직원</th>

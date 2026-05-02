@@ -312,3 +312,25 @@ pnpm hr:import private/imports/employee-master.xlsx
 - [다음 작업 목록](docs/guides/next-actions.md)
 
 실제 구현 상태는 `docs/guides/feature-status.md`를 우선 기준으로 봅니다. 구현되지 않은 기능은 완료된 기능으로 운영하지 말고 TODO 또는 다음 개발 항목으로 분리합니다.
+## 운영 배포 준비 문서
+
+- [Vercel 운영 배포 가이드](docs/deployment-vercel-guide.md)
+- [배포 후 Smoke Test](docs/deployment-smoke-test.md)
+- [2차 최종 인수 보고서](docs/v2-final-acceptance-report.md)
+- [운영 가이드](docs/operation-guide.md)
+- [보안/개인정보 가이드](docs/security-and-privacy-guide.md)
+
+운영 DB에는 `pnpm db:deploy`를 사용합니다. 운영 DB에서 `prisma migrate reset` 또는 `prisma migrate dev`를 실행하지 마세요. 실제 secret 값은 코드, 문서, git에 저장하지 말고 Vercel 환경변수로 등록합니다.
+
+### Vercel 배포 요약
+
+1. Managed PostgreSQL을 준비하고 `DATABASE_URL`을 Vercel production 환경변수로 등록합니다.
+2. `.env.production.example` 기준으로 production 환경변수를 등록합니다.
+3. `pnpm db:deploy`로 production migration을 적용합니다.
+4. 최초 OWNER 초대가 필요한 경우에만 `pnpm db:seed`를 실행합니다.
+5. `vercel --prod` 또는 Git 연동 production deploy를 실행합니다.
+6. 배포 후 `docs/deployment-smoke-test.md`를 따라 검수합니다.
+
+### 첨부파일 운영 제한
+
+현재 증명자료 파일 storage adapter는 local private storage입니다. Vercel serverless 환경에서는 local filesystem을 영구 파일 저장소로 사용하지 않는 것을 권장합니다. 증명자료 파일을 실제 운영에서 사용할 경우 Vercel Blob private storage 또는 S3/GCS 같은 외부 object storage adapter 연동 후 운영하세요.

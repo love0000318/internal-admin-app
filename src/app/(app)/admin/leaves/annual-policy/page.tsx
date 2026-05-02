@@ -137,7 +137,7 @@ export default async function AnnualLeavePolicyPage({
               직원이 휴가를 등록하거나 취소할 때의 승인 기준과 사용 단위를 정합니다.
             </p>
           </div>
-          <div className="grid gap-3 md:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
             <CheckField
               name="isEnabled"
               label="연차 정책 사용"
@@ -159,7 +159,7 @@ export default async function AnnualLeavePolicyPage({
               defaultChecked={policy.allowAdvanceUse}
             />
           </div>
-          <div className="grid gap-3 md:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
             <label className="text-sm">
               부여 기준
               <select
@@ -216,7 +216,7 @@ export default async function AnnualLeavePolicyPage({
               장기근속 추가 최대 25일 기준입니다.
             </p>
           </div>
-          <div className="grid gap-3 md:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
             <CheckField
               name="monthlyLeaveEnabled"
               label="월차 부여 사용"
@@ -238,7 +238,7 @@ export default async function AnnualLeavePolicyPage({
               defaultChecked={policy.expirationEnabled}
             />
           </div>
-          <div className="grid gap-3 md:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
             <label className="text-sm">
               월차 부여량
               <input
@@ -287,7 +287,7 @@ export default async function AnnualLeavePolicyPage({
               />
             </label>
           </div>
-          <div className="grid gap-3 md:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
             <label className="text-sm">
               최대 연차 한도
               <input
@@ -335,7 +335,7 @@ export default async function AnnualLeavePolicyPage({
               관리합니다.
             </p>
           </div>
-          <div className="grid gap-3 md:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
             <CheckField
               name="promotionEnabled"
               label="스마트 연차 촉진 사용"
@@ -367,7 +367,7 @@ export default async function AnnualLeavePolicyPage({
               </select>
             </label>
           </div>
-          <div className="grid gap-3 md:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
             <label className="text-sm">
               사용 계획 알림 시점
               <input

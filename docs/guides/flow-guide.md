@@ -129,3 +129,29 @@
 3. LEAD는 담당 범위 밖 요청과 첨부를 처리할 수 없다.
 4. EXTERNAL_PARTNER는 내부 기능에 접근할 수 없다.
 5. token/fileKey/private path/민감 원문은 화면, CSV, AuditLog, Notification, JobRun에 넣지 않는다.
+
+## 승인 대기 휴가 자동 확정 플로우
+
+1. 직원이 휴가를 요청하고 요청이 `PENDING` 상태로 저장된다.
+2. 요청 생성 시 기존 흐름대로 PENDING ledger 또는 LeaveGrant pending 수량이 반영된다.
+3. 매일 `jobs:auto-confirm-past-start-leaves` 또는 `/api/cron/auto-confirm-past-start-leaves`가 실행된다.
+4. 시스템은 Asia/Seoul date-only 기준으로 시작일이 도래한 PENDING 요청을 조회한다.
+5. 승인 정책의 자동 확정 사용 여부와 자동 확정 시점을 확인한다.
+6. 증명자료 확인 후 승인 필수 정책이면 `attachmentStatus=ACCEPTED`인 요청만 처리한다.
+7. 수량/중복 검증을 다시 수행한다.
+8. 요청을 `APPROVED`로 변경하고 `autoConfirmedAt`, `autoConfirmReason`, `approvalSource=AUTO_START_DATE`를 저장한다.
+9. LeaveGrant 기반 요청은 pending 수량을 used 수량으로 이동한다.
+10. LeaveLedger에 `USED` 이벤트와 `LEAVE_AUTO_CONFIRM` source를 기록한다.
+11. 직원 Notification과 AuditLog, JobRun 결과를 기록한다.
+12. 이미 처리된 요청은 `status`와 `auto-confirm-used:{leaveRequestId}` idempotencyKey로 중복 처리하지 않는다.
+
+## 초대 가입 인증 코드 흐름
+
+1. OWNER가 `/organization/invitations`에서 직원을 초대한다.
+2. 시스템이 초대 token과 1회용 가입 인증 코드를 생성한다.
+3. DB에는 tokenHash와 verificationCodeHash만 저장한다.
+4. 관리자 화면에 초대 링크와 가입 인증 코드를 생성 직후 한 번 표시한다.
+5. 직원은 초대 링크에서 가입 인증 코드를 입력한다.
+6. 코드가 유효하면 가입을 진행하고 `verificationCodeConsumedAt`을 저장한다.
+7. 코드가 틀리면 attemptCount를 증가시키고 최대 횟수 이후 잠근다.
+8. 초대 재발급 시 기존 초대와 코드는 폐기되고 새 링크/코드가 생성된다.

@@ -31,8 +31,25 @@
 | `pnpm jobs:send-annual-promotion-notices` | due notice 인앱 알림 발송 | schedule 존재 | sent 처리 |
 | `pnpm jobs:expire-annual-leaves -- --dry-run` | 연차 소멸 미리보기 | ledger/정책 준비 | 변경 없이 대상 출력 |
 | `pnpm jobs:expire-annual-leaves` | 연차 소멸 실행 | dry-run/운영 승인 | EXPIRED ledger 생성 |
+| `pnpm jobs:auto-confirm-past-start-leaves -- --dry-run` | 미승인 휴가 자동 확정 미리보기 | 승인 정책/ledger 준비 | 변경 없이 시작일이 지난 대상 출력 |
+| `pnpm jobs:auto-confirm-past-start-leaves` | 미승인 휴가 자동 확정 실행 | dry-run/운영 승인 | APPROVED 전환 및 USED ledger 생성 |
 
 ## 현재 없는 명령 / TODO
 
 - `attachments:check`: 첨부 metadata와 local private storage 파일 존재 여부를 점검하는 명령은 현재 package.json에 없다.
 - 통합 `jobs:annual-leave-maintenance`: 개별 연차 촉진/발송/소멸 명령은 있으나 통합 명령은 현재 없다.
+
+## 초대 가입 인증 코드 운영
+
+- `INVITATION_VERIFICATION_CODE_EXPIRES_IN_DAYS`: 가입 인증 코드 유효기간. 기본값은 초대 유효기간과 동일하게 둔다.
+- `INVITATION_VERIFICATION_CODE_MAX_ATTEMPTS`: 실패 허용 횟수. 기본 5회.
+- `INVITATION_VERIFICATION_CODE_LENGTH`: 코드 길이. 기본 8자리.
+- 별도 이메일/휴대폰 API는 필요하지 않으며, OWNER가 링크와 코드를 직접 전달한다.
+
+### OWNER 초대 재발급
+
+명령: `pnpm db:reissue-owner-invitation`
+
+- ACTIVE OWNER가 아직 없고 기존 OWNER 초대 코드/링크를 분실했을 때만 사용한다.
+- 기존 PENDING OWNER 초대와 인증 코드는 폐기하고 새 초대 링크와 가입 인증 코드를 한 번 출력한다.
+- ACTIVE OWNER가 이미 있으면 실행이 차단된다.

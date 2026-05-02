@@ -123,6 +123,20 @@ function checkNodeEnv() {
     : fail("NODE_ENV", `${nodeEnv} is not allowed`);
 }
 
+function checkPackageScript(scriptName: string) {
+  try {
+    const packageJson = JSON.parse(readFileSync("package.json", "utf8")) as {
+      scripts?: Record<string, string>;
+    };
+
+    return packageJson.scripts?.[scriptName]
+      ? pass(`package script ${scriptName}`)
+      : warn(`package script ${scriptName}`, "not configured");
+  } catch {
+    return fail("package scripts", "package.json could not be read");
+  }
+}
+
 function checkPositiveIntegerEnv(name: string, required = true) {
   const value = process.env[name];
 
@@ -304,6 +318,7 @@ async function main() {
     checkSecretLength("ENCRYPTION_SECRET"),
     checkCronSecret(),
     checkDistinctSecrets(),
+    checkPackageScript("jobs:auto-confirm-past-start-leaves"),
     checkPositiveIntegerEnv("INVITATION_EXPIRES_IN_DAYS"),
     checkPositiveIntegerEnv("SESSION_EXPIRES_IN_DAYS"),
     checkPositiveIntegerEnv("MAX_LEAVE_ATTACHMENT_SIZE_MB", false),

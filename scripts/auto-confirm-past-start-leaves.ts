@@ -34,7 +34,7 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const jobRun = await runJobWithTracking(
     {
-      jobName: JOB_NAMES.AUTO_CONFIRM_PENDING_LEAVES,
+      jobName: JOB_NAMES.AUTO_CONFIRM_PAST_START_LEAVES,
       triggeredBy: "SYSTEM",
       dryRun: args.dryRun,
     },
@@ -61,7 +61,7 @@ async function main() {
     },
   );
 
-  console.log("Auto confirm pending leaves completed.");
+  console.log("Auto confirm past-start leaves completed.");
   console.log(`Date: ${args.date}`);
   console.log(`Dry run: ${args.dryRun ? "yes" : "no"}`);
   console.log(`Checked: ${jobRun.checkedCount ?? 0}`);

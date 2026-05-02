@@ -21,7 +21,7 @@ export async function POST(request: Request) {
 
   const jobRun = await runJobWithTracking(
     {
-      jobName: JOB_NAMES.AUTO_CONFIRM_PENDING_LEAVES,
+      jobName: JOB_NAMES.AUTO_CONFIRM_PAST_START_LEAVES,
       triggeredBy: "CRON",
       dryRun,
     },
