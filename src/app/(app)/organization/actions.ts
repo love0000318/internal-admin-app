@@ -10,12 +10,18 @@ import { getPrisma } from "@/lib/db/prisma";
 import { dispatchInvitationEmail } from "@/lib/external-notifications/dispatch-external-notification";
 import { maskEmail } from "@/lib/security/masking";
 import {
+  assertStepUpPassword,
+  isHighRiskEmployeeChange,
+  resolveEmployeeChangeStepUpPurpose,
+} from "@/lib/security/step-up";
+import {
   buildInvitationUrl,
   buildShortInvitationUrl,
   getAppBaseUrl,
 } from "@/lib/organization/invitations";
 import {
   assertCanMutateEmployee,
+  getEmployeeMutationBlockReason,
   wouldCreateTeamCycle,
 } from "@/lib/organization/rules";
 import {
@@ -522,9 +528,20 @@ export async function cancelInvitation(formData: FormData) {
 export async function reissueInvitation(formData: FormData) {
   const actor = await requireOwner();
   const invitationId = getRequiredFormValue(formData, "invitationId");
+  const stepUpPassword = getRequiredFormValue(formData, "stepUpPassword");
 
   if (!invitationId) {
     redirect("/organization/invitations?error=invalid");
+  }
+
+  try {
+    await assertStepUpPassword({
+      userId: actor.id,
+      purpose: "INVITATION_REISSUE",
+      password: stepUpPassword,
+    });
+  } catch {
+    redirect("/organization/invitations?error=step-up-required");
   }
 
   const prisma = getPrisma();
@@ -574,6 +591,24 @@ export async function reissueInvitation(formData: FormData) {
         employeePrejoinProfileId: before.employeePrejoinProfileId,
       },
     });
+  });
+
+  await prisma.auditLog.create({
+    data: {
+      actorId: actor.id,
+      actorUserId: actor.id,
+      action: "INVITATION_REISSUED_WITH_STEP_UP",
+      targetType: "INVITATION",
+      targetId: nextInvitation.id,
+      metadata: {
+        beforeInvitationId: before.id,
+        invitationId: nextInvitation.id,
+        targetEmailMasked: maskEmail(nextInvitation.email),
+        role: nextInvitation.role,
+        expiresAt: verificationCode.expiresAt,
+        status: "ISSUED",
+      },
+    },
   });
 
   await prisma.auditLog.create({
@@ -634,6 +669,7 @@ export async function updateEmployeeProfile(formData: FormData) {
     hireDate: formData.get("hireDate"),
     birthDate: formData.get("birthDate"),
   });
+  const stepUpPassword = getRequiredFormValue(formData, "stepUpPassword");
 
   if (!userId || !parsed.success) {
     redirect(`/organization/employees/${userId || ""}?error=invalid`);
@@ -662,6 +698,13 @@ export async function updateEmployeeProfile(formData: FormData) {
       status: "ACTIVE",
     },
   });
+  const blockReason = getEmployeeMutationBlockReason({
+    actorId: actor.id,
+    target: before,
+    nextRole: parsed.data.role,
+    nextStatus: parsed.data.status,
+    activeOwnerCount,
+  });
 
   try {
     assertCanMutateEmployee({
@@ -672,7 +715,60 @@ export async function updateEmployeeProfile(formData: FormData) {
       activeOwnerCount,
     });
   } catch {
+    const action =
+      blockReason === "SELF_DEACTIVATION_BLOCKED" ||
+      blockReason === "SELF_OWNER_ROLE_DOWNGRADE_BLOCKED"
+        ? "SELF_ROLE_CHANGE_BLOCKED"
+        : blockReason === "LAST_OWNER_DEACTIVATION_BLOCKED" ||
+            blockReason === "LAST_OWNER_ROLE_CHANGE_BLOCKED"
+          ? "LAST_OWNER_PROTECTION_TRIGGERED"
+          : parsed.data.status === "DEACTIVATED"
+            ? "EMPLOYEE_DEACTIVATION_BLOCKED"
+            : "ROLE_CHANGE_BLOCKED";
+
+    await prisma.auditLog.create({
+      data: {
+        actorId: actor.id,
+        actorUserId: actor.id,
+        targetUserId: before.id,
+        action,
+        targetType: "USER",
+        targetId: before.id,
+        metadata: {
+          actorUserId: actor.id,
+          targetUserId: before.id,
+          reasonCode: blockReason ?? "FORBIDDEN_CHANGE",
+          previousRole: before.role,
+          newRole: parsed.data.role,
+          previousStatus: before.status,
+          newStatus: parsed.data.status,
+        },
+      },
+    });
     redirect(`/organization/employees/${userId}?error=forbidden-change`);
+  }
+
+  if (
+    isHighRiskEmployeeChange({
+      beforeRole: before.role,
+      nextRole: parsed.data.role,
+      beforeStatus: before.status,
+      nextStatus: parsed.data.status,
+    })
+  ) {
+    try {
+      await assertStepUpPassword({
+        userId: actor.id,
+        purpose: resolveEmployeeChangeStepUpPurpose({
+          beforeRole: before.role,
+          nextRole: parsed.data.role,
+          nextStatus: parsed.data.status,
+        }),
+        password: stepUpPassword,
+      });
+    } catch {
+      redirect(`/organization/employees/${userId}?error=step-up-required`);
+    }
   }
 
   const nextTeamId = normalizeOptionalId(parsed.data.teamId);
@@ -724,7 +820,10 @@ export async function updateEmployeeProfile(formData: FormData) {
   if (parsed.data.status === "DEACTIVATED") {
     await prisma.session.updateMany({
       where: { userId },
-      data: { revokedAt: new Date() },
+      data: {
+        revokedAt: new Date(),
+        revokedReason: "EMPLOYEE_DEACTIVATED",
+      },
     });
   }
 
@@ -752,9 +851,12 @@ export async function updateEmployeeProfile(formData: FormData) {
 
   const actions = new Set(["USER_PROFILE_UPDATED"]);
   if (before.role !== user.role) actions.add("USER_ROLE_UPDATED");
+  if (before.role !== "OWNER" && user.role === "OWNER") actions.add("OWNER_ROLE_GRANTED");
+  if (before.role === "OWNER" && user.role !== "OWNER") actions.add("OWNER_ROLE_REVOKED");
   if (before.teamId !== user.teamId) actions.add("USER_TEAM_UPDATED");
   if (user.status === "DEACTIVATED" && before.status !== "DEACTIVATED") {
     actions.add("USER_DEACTIVATED");
+    actions.add("EMPLOYEE_DEACTIVATED_WITH_STEP_UP");
   }
   if (user.status === "ACTIVE" && before.status === "DEACTIVATED") {
     actions.add("USER_REACTIVATED");
@@ -775,6 +877,25 @@ export async function updateEmployeeProfile(formData: FormData) {
       }),
     ),
   );
+
+  if (before.role !== user.role || before.status !== user.status) {
+    await prisma.notification.create({
+      data: {
+        userId: user.id,
+        type: "SYSTEM",
+        priority: "HIGH",
+        title: "계정 권한 또는 상태가 변경되었습니다.",
+        message: "계정 권한 또는 상태가 변경되었습니다. 자세한 내용은 관리자에게 문의해 주세요.",
+        linkUrl: "/dashboard",
+        metadata: {
+          changedFields: [
+            ...(before.role !== user.role ? ["role"] : []),
+            ...(before.status !== user.status ? ["status"] : []),
+          ],
+        },
+      },
+    });
+  }
 
   redirect(`/organization/employees/${user.id}?success=employee-updated`);
 }

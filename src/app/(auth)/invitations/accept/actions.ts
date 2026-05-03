@@ -40,7 +40,40 @@ const acceptInvitationSchema = z
     message: "INVITATION_TOKEN_REQUIRED",
   });
 
-const invalidCodeMessage = "가입 인증 코드가 올바르지 않거나 만료되었습니다.";
+const INVALID_INVITATION_MESSAGE =
+  "초대 링크가 유효하지 않거나 만료되었습니다.";
+const INVALID_CODE_MESSAGE =
+  "가입 인증 코드가 올바르지 않거나 만료되었습니다.";
+const INVALID_FORM_MESSAGE = "가입 정보를 다시 확인해 주세요.";
+const DUPLICATE_PHONE_MESSAGE = "이미 등록된 전화번호입니다.";
+const DUPLICATE_EMAIL_MESSAGE = "이미 등록된 이메일입니다.";
+const PASSWORD_POLICY_MESSAGE =
+  "비밀번호는 영문, 숫자, 특수문자를 포함해 8자 이상이어야 합니다.";
+const ACCEPT_FAILED_MESSAGE =
+  "초대 가입을 처리할 수 없습니다. 다시 시도해 주세요.";
+
+async function writeInvitationTokenFailureAudit(params: {
+  invitationId?: string | null;
+  email?: string | null;
+  role?: string | null;
+  reasonCode: string;
+}) {
+  await getPrisma().auditLog.create({
+    data: {
+      actorId: null,
+      actorUserId: null,
+      action: "INVITATION_TOKEN_FAILED",
+      targetType: "INVITATION",
+      targetId: params.invitationId ?? null,
+      metadata: {
+        invitationId: params.invitationId ?? null,
+        targetEmailMasked: params.email ? maskEmail(params.email) : null,
+        role: params.role ?? null,
+        reasonCode: params.reasonCode,
+      },
+    },
+  });
+}
 
 export async function acceptInvitationAction(
   _prevState: AcceptInvitationFormState,
@@ -62,7 +95,7 @@ export async function acceptInvitationAction(
   });
 
   if (!parsed.success) {
-    return { error: "가입 정보를 다시 확인해 주세요." };
+    return { error: INVALID_FORM_MESSAGE };
   }
 
   const prisma = getPrisma();
@@ -89,15 +122,32 @@ export async function acceptInvitationAction(
       : null;
 
   if (!invitation) {
-    return { error: "유효하지 않은 초대 링크입니다." };
+    await writeInvitationTokenFailureAudit({
+      reasonCode: "NOT_FOUND_OR_INVALID_FORMAT",
+    });
+    return { error: INVALID_INVITATION_MESSAGE };
   }
 
+  const failureAuditBase = {
+    invitationId: invitation.id,
+    email: invitation.email,
+    role: invitation.role,
+  };
+
   if (invitation.status === "ACCEPTED" || invitation.acceptedAt || invitation.usedAt) {
-    return { error: "이미 사용된 초대 링크입니다." };
+    await writeInvitationTokenFailureAudit({
+      ...failureAuditBase,
+      reasonCode: "ALREADY_USED",
+    });
+    return { error: INVALID_INVITATION_MESSAGE };
   }
 
   if (invitation.status !== "PENDING") {
-    return { error: "유효하지 않은 초대 링크입니다." };
+    await writeInvitationTokenFailureAudit({
+      ...failureAuditBase,
+      reasonCode: "NOT_PENDING",
+    });
+    return { error: INVALID_INVITATION_MESSAGE };
   }
 
   if (isInvitationExpired(invitation.expiresAt)) {
@@ -110,7 +160,11 @@ export async function acceptInvitationAction(
       },
     });
 
-    return { error: "만료된 초대 링크입니다." };
+    await writeInvitationTokenFailureAudit({
+      ...failureAuditBase,
+      reasonCode: "EXPIRED",
+    });
+    return { error: INVALID_INVITATION_MESSAGE };
   }
 
   const shortTokenResult = parsed.data.shortToken
@@ -118,7 +172,11 @@ export async function acceptInvitationAction(
     : { ok: true as const };
 
   if (!shortTokenResult.ok) {
-    return { error: "?좏슚?섏? ?딆? 珥덈? 留곹겕?낅땲??" };
+    await writeInvitationTokenFailureAudit({
+      ...failureAuditBase,
+      reasonCode: `SHORT_TOKEN_${shortTokenResult.reason.toUpperCase()}`,
+    });
+    return { error: INVALID_INVITATION_MESSAGE };
   }
 
   const codeResult = verifyInvitationVerificationCode({
@@ -155,6 +213,7 @@ export async function acceptInvitationAction(
           invitationId: invitation.id,
           targetEmailMasked: maskEmail(invitation.email),
           role: invitation.role,
+          reasonCode: codeResult.reason.toUpperCase(),
           attemptCount: nextAttemptCount,
           status:
             nextAttemptCount >= invitation.verificationCodeMaxAttempts
@@ -164,11 +223,11 @@ export async function acceptInvitationAction(
       },
     });
 
-    return { error: invalidCodeMessage };
+    return { error: INVALID_CODE_MESSAGE };
   }
 
   if (parsed.data.name !== invitation.expectedName) {
-    return { error: "가입 정보를 다시 확인해 주세요." };
+    return { error: INVALID_FORM_MESSAGE };
   }
 
   const existingPhoneUser = await prisma.user.findUnique({
@@ -178,7 +237,7 @@ export async function acceptInvitationAction(
   });
 
   if (existingPhoneUser) {
-    return { error: "이미 등록된 전화번호입니다." };
+    return { error: DUPLICATE_PHONE_MESSAGE };
   }
 
   const existingEmailUser = await prisma.user.findUnique({
@@ -188,12 +247,12 @@ export async function acceptInvitationAction(
   });
 
   if (existingEmailUser) {
-    return { error: "이미 등록된 이메일입니다." };
+    return { error: DUPLICATE_EMAIL_MESSAGE };
   }
 
   if (!validatePasswordPolicy(parsed.data.password)) {
     return {
-      error: "비밀번호는 영문, 숫자, 특수문자를 포함한 8자 이상이어야 합니다.",
+      error: PASSWORD_POLICY_MESSAGE,
     };
   }
 
@@ -302,6 +361,23 @@ export async function acceptInvitationAction(
           actorId: createdUser.id,
           actorUserId: createdUser.id,
           targetUserId: createdUser.id,
+          action: "INVITATION_TOKEN_CONSUMED",
+          targetType: "INVITATION",
+          targetId: invitation.id,
+          metadata: {
+            invitationId: invitation.id,
+            targetEmailMasked: maskEmail(invitation.email),
+            role: invitation.role,
+            status: "CONSUMED",
+          },
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          actorId: createdUser.id,
+          actorUserId: createdUser.id,
+          targetUserId: createdUser.id,
           action: "INVITATION_VERIFICATION_CODE_CONSUMED",
           targetType: "INVITATION",
           targetId: invitation.id,
@@ -344,9 +420,9 @@ export async function acceptInvitationAction(
           data: {
             userId: createdUser.id,
             type: "SYSTEM",
-            title: "인사정보를 확인해 주세요.",
+            title: "인사정보를 확인해 주세요",
             message:
-              "초대 가입 시 등록된 인사정보가 자동으로 입력되었습니다. 내용을 확인하고 필요한 항목을 수정해 주세요.",
+              "초대 가입과 함께 인사정보가 자동으로 입력되었습니다. 내용을 확인하고 필요한 항목을 수정해 주세요.",
             linkUrl: "/profile/confirm",
           },
         });
@@ -370,7 +446,7 @@ export async function acceptInvitationAction(
       return createdUser;
     });
   } catch {
-    return { error: "초대 링크를 처리할 수 없습니다. 다시 시도해 주세요." };
+    return { error: ACCEPT_FAILED_MESSAGE };
   }
 
   await createSessionForUser(user.id);

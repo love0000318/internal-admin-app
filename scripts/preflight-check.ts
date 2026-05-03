@@ -4,6 +4,11 @@ import path from "node:path";
 
 import { PrismaClient } from "../src/generated/prisma/client";
 import { MockIdentityVerificationProvider } from "../src/lib/auth/identity-verification-provider";
+import {
+  SECURITY_SECRET_ENV_KEYS,
+  validateDistinctSecrets,
+  validateSecretLength,
+} from "../src/lib/security/env-validation";
 
 type CheckResult = {
   ok: boolean;
@@ -81,11 +86,13 @@ function checkRequiredEnv() {
     : fail("required env", `missing: ${missing.join(", ")}`);
 }
 
-function checkSecretLength(name: string) {
-  const value = process.env[name] ?? "";
-  return value.length >= 32
-    ? pass(`${name} length`)
-    : fail(`${name} length`, "use a secret with at least 32 characters");
+function checkSecretLength(name: string, required = true) {
+  if (!process.env[name] && !required) {
+    return warn(`${name} length`, "not set; fallback secret is used outside production");
+  }
+
+  const result = validateSecretLength(name, process.env[name]);
+  return result.ok ? pass(`${name} length`) : fail(`${name} length`, result.detail);
 }
 
 function checkCronSecret() {
@@ -105,15 +112,15 @@ function checkCronSecret() {
 }
 
 function checkDistinctSecrets() {
-  const sessionSecret = process.env.SESSION_SECRET;
-  const encryptionSecret = process.env.ENCRYPTION_SECRET;
+  const result = validateDistinctSecrets(
+    Object.fromEntries(
+      SECURITY_SECRET_ENV_KEYS.map((key) => [key, process.env[key]]),
+    ),
+  );
 
-  return sessionSecret && encryptionSecret && sessionSecret !== encryptionSecret
-    ? pass("SESSION_SECRET / ENCRYPTION_SECRET distinct")
-    : fail(
-        "SESSION_SECRET / ENCRYPTION_SECRET distinct",
-        "session and encryption secrets must be different",
-      );
+  return result.ok
+    ? pass("security secrets distinct")
+    : fail("security secrets distinct", result.detail);
 }
 
 function checkNodeEnv() {
@@ -365,12 +372,44 @@ async function main() {
     checkSecretLength("SESSION_SECRET"),
     checkSecretLength("TOKEN_SECRET"),
     checkSecretLength("INVITATION_TOKEN_SECRET"),
+    checkSecretLength(
+      "INVITATION_SHORT_TOKEN_SECRET",
+      process.env.NODE_ENV === "production",
+    ),
+    checkSecretLength(
+      "INVITATION_VERIFICATION_CODE_SECRET",
+      process.env.NODE_ENV === "production",
+    ),
     checkSecretLength("ENCRYPTION_SECRET"),
     checkCronSecret(),
     checkDistinctSecrets(),
     checkPackageScript("jobs:auto-confirm-past-start-leaves"),
     checkPositiveIntegerEnv("INVITATION_EXPIRES_IN_DAYS"),
+    checkPositiveIntegerEnv(
+      "INVITATION_VERIFICATION_CODE_EXPIRES_IN_DAYS",
+      process.env.NODE_ENV === "production",
+    ),
+    checkPositiveIntegerEnv(
+      "INVITATION_VERIFICATION_CODE_MAX_ATTEMPTS",
+      process.env.NODE_ENV === "production",
+    ),
+    checkPositiveIntegerEnv(
+      "INVITATION_VERIFICATION_CODE_LENGTH",
+      process.env.NODE_ENV === "production",
+    ),
     checkPositiveIntegerEnv("SESSION_EXPIRES_IN_DAYS"),
+    checkPositiveIntegerEnv(
+      "REMEMBER_ME_SESSION_EXPIRES_IN_DAYS",
+      process.env.NODE_ENV === "production",
+    ),
+    checkPositiveIntegerEnv(
+      "STEP_UP_EXPIRES_IN_MINUTES",
+      process.env.NODE_ENV === "production",
+    ),
+    checkPositiveIntegerEnv(
+      "STEP_UP_MAX_ATTEMPTS",
+      process.env.NODE_ENV === "production",
+    ),
     checkPositiveIntegerEnv("MAX_LEAVE_ATTACHMENT_SIZE_MB", false),
     checkAttachmentStorage(),
     checkPrivateUploadDir(),

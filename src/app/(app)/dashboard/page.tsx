@@ -1,20 +1,37 @@
 import Link from "next/link";
 
+import { Badge, buttonClassName, Card } from "@/components/design-system/primitives";
 import { RoleLabel } from "@/components/ui/status-badge";
 import { getPrisma } from "@/lib/db/prisma";
 import { formatLeaveDays } from "@/lib/display/format";
 import { listPendingLeaveApprovals } from "@/lib/leave/approval-queries";
-import { getUserLeaveBalance } from "@/lib/leave/queries";
 import { todayInSeoul } from "@/lib/leave/calculate-business-days";
+import { getUserLeaveBalance } from "@/lib/leave/queries";
 import { requireRouteAccess } from "@/lib/rbac/server-guards";
 
 export const dynamic = "force-dynamic";
 
-const dashboardCards = [
-  "오늘 해야 할 업무 리스트",
-  "오늘 회의 일정 리스트",
-  "이번 주 해야 할 업무 리스트",
-  "이번 주 회의 일정 리스트",
+const quickCards = [
+  {
+    title: "휴가 요청",
+    description: "연차, 반차, 지급 휴가를 신청합니다.",
+    href: "/leaves/me/requests/new",
+  },
+  {
+    title: "내 휴가 현황",
+    description: "잔여, 대기, 사용 내역을 확인합니다.",
+    href: "/leaves/me",
+  },
+  {
+    title: "휴가 캘린더",
+    description: "팀 휴가 일정을 공개 범위에 맞게 확인합니다.",
+    href: "/leaves/calendar",
+  },
+  {
+    title: "알림센터",
+    description: "읽지 않은 알림과 처리할 일을 확인합니다.",
+    href: "/notifications",
+  },
 ];
 
 export default async function DashboardPage() {
@@ -27,63 +44,75 @@ export default async function DashboardPage() {
     myPendingCount,
     unreadNotificationCount,
     pendingApprovalRequests,
-  ] =
-    await Promise.all([
-      prisma.user.findUnique({
-        where: { id: user.id },
-        include: { team: true, profile: true },
-      }),
-      getUserLeaveBalance({ userId: user.id, year, prisma }),
-      prisma.leaveRequest.count({
-        where: { userId: user.id, status: "PENDING" },
-      }),
-      prisma.notification.count({
-        where: { userId: user.id, readAt: null },
-      }),
-      user.role === "OWNER" || user.role === "LEAD"
-        ? listPendingLeaveApprovals({
-            actor: user,
-            filters: { status: "PENDING" },
-            prisma,
-          })
-        : Promise.resolve([]),
-    ]);
+  ] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: user.id },
+      include: { team: true, profile: true },
+    }),
+    getUserLeaveBalance({ userId: user.id, year, prisma }),
+    prisma.leaveRequest.count({
+      where: { userId: user.id, status: "PENDING" },
+    }),
+    prisma.notification.count({
+      where: { userId: user.id, readAt: null },
+    }),
+    user.role === "OWNER" || user.role === "LEAD"
+      ? listPendingLeaveApprovals({
+          actor: user,
+          filters: { status: "PENDING" },
+          prisma,
+        })
+      : Promise.resolve([]),
+  ]);
 
   return (
-    <section>
-      <p className="text-sm font-medium text-neutral-500">MVP 진입 화면</p>
-      <h1 className="mt-2 text-2xl font-semibold tracking-normal">
-        {user.name}님 대시보드
-      </h1>
+    <section className="min-w-0 space-y-6">
+      <div className="rounded-3xl border border-blue-100 bg-gradient-to-br from-white to-blue-50 p-5 shadow-sm sm:p-6">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-blue-700">대시보드</p>
+            <h1 className="mt-2 break-keep text-2xl font-bold tracking-normal text-slate-950 sm:text-3xl">
+              {user.name}님, 오늘도 차분하게 운영해 볼까요.
+            </h1>
+            <p className="mt-2 break-keep text-sm leading-relaxed text-slate-600">
+              휴가, 승인, 알림, 조직 운영 현황을 한눈에 확인합니다.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <RoleLabel role={user.role} />
+            <Badge tone="primary">{dbUser?.team?.name ?? "팀 미지정"}</Badge>
+          </div>
+        </div>
+      </div>
 
-      <dl className="mt-4 grid gap-2 rounded-lg border border-neutral-200 bg-white p-4 text-sm sm:grid-cols-4">
+      <dl className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-sm shadow-sm sm:grid-cols-4">
         <div>
-          <dt className="text-neutral-500">사용자 이름</dt>
-          <dd className="mt-1 font-semibold text-neutral-950">{user.name}</dd>
+          <dt className="text-slate-500">사용자</dt>
+          <dd className="mt-1 font-semibold text-slate-950">{user.name}</dd>
         </div>
         <div>
-          <dt className="text-neutral-500">직급</dt>
-          <dd className="mt-1 font-semibold text-neutral-950">
+          <dt className="text-slate-500">직책</dt>
+          <dd className="mt-1 font-semibold text-slate-950">
             {user.title ?? dbUser?.title ?? dbUser?.profile?.jobTitle ?? "미설정"}
           </dd>
         </div>
         <div>
-          <dt className="text-neutral-500">역할</dt>
+          <dt className="text-slate-500">역할</dt>
           <dd className="mt-1">
             <RoleLabel role={user.role} />
           </dd>
         </div>
         <div>
-          <dt className="text-neutral-500">소속 팀</dt>
-          <dd className="mt-1 font-semibold text-neutral-950">
+          <dt className="text-slate-500">소속 팀</dt>
+          <dd className="mt-1 font-semibold text-slate-950">
             {dbUser?.team?.name ?? "미설정"}
           </dd>
         </div>
       </dl>
 
-      <div className="mt-6 grid gap-3 md:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-3">
         <MetricCard
-          label="내 휴가 잔여 일수"
+          label="내 휴가 잔여"
           value={formatLeaveDays(balance.remainingDays)}
           href="/leaves/me"
         />
@@ -99,7 +128,7 @@ export default async function DashboardPage() {
         />
         {user.role === "OWNER" || user.role === "LEAD" ? (
           <MetricCard
-            label="승인 대기 중인 휴가"
+            label="승인 대기 휴가"
             value={`${pendingApprovalRequests.length}건`}
             href="/leaves/approvals"
           />
@@ -107,33 +136,36 @@ export default async function DashboardPage() {
       </div>
 
       {user.role === "OWNER" || user.role === "LEAD" ? (
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
           {user.role === "OWNER" ? (
             <Link
               href="/organization"
-              className="inline-flex h-10 items-center rounded-md border border-neutral-300 bg-white px-4 text-sm font-medium"
+              className={buttonClassName({ tone: "neutral", className: "w-full sm:w-auto" })}
             >
               조직 관리 바로가기
             </Link>
           ) : null}
           <Link
             href="/leaves/approvals"
-            className="inline-flex h-10 items-center rounded-md border border-neutral-300 bg-white px-4 text-sm font-medium"
+            className={buttonClassName({ className: "w-full sm:w-auto" })}
           >
-            휴가 승인 요청 사항
+            휴가 승인 요청
           </Link>
         </div>
       ) : null}
 
-      <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {dashboardCards.map((title) => (
-          <div
-            key={title}
-            className="min-h-28 rounded-lg border border-neutral-200 bg-white p-4 shadow-sm"
-          >
-            <p className="text-sm font-semibold text-neutral-900">{title}</p>
-            <p className="mt-3 text-sm text-neutral-500">준비 중</p>
-          </div>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {quickCards.map((card) => (
+          <Link key={card.href} href={card.href}>
+            <Card className="min-h-32 transition hover:border-blue-200 hover:shadow-md">
+              <p className="break-keep text-base font-semibold text-slate-950">
+                {card.title}
+              </p>
+              <p className="mt-3 break-keep text-sm leading-relaxed text-slate-500">
+                {card.description}
+              </p>
+            </Card>
+          </Link>
         ))}
       </div>
     </section>
@@ -150,12 +182,11 @@ function MetricCard({
   href: string;
 }) {
   return (
-    <Link
-      href={href}
-      className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm transition hover:border-neutral-300"
-    >
-      <p className="text-sm font-medium text-neutral-500">{label}</p>
-      <p className="mt-2 text-2xl font-semibold">{value}</p>
+    <Link href={href}>
+      <Card className="transition hover:border-blue-200 hover:shadow-md">
+        <p className="break-keep text-sm font-medium text-slate-500">{label}</p>
+        <p className="mt-2 text-3xl font-bold text-slate-950">{value}</p>
+      </Card>
     </Link>
   );
 }

@@ -176,3 +176,14 @@
 5. 자동 로그인 유지가 선택되었으면 `REMEMBER_ME_SESSION_EXPIRES_IN_DAYS`, 선택되지 않았으면 `SESSION_EXPIRES_IN_DAYS` 기준으로 `expiresAt`을 설정한다.
 6. 사용자가 `/login`에 다시 접근했을 때 유효한 세션이 있으면 `/dashboard`로 이동한다.
 7. 로그아웃하면 현재 세션의 `revokedAt`을 기록하고 cookie를 삭제한다.
+
+## 외부 캘린더 구독 플로우
+
+1. 사용자가 `/leaves/calendar/settings`에서 구독 범위를 선택한다.
+2. 서버가 권한을 확인한 뒤 raw token을 생성하고 DB에는 tokenHash만 저장한다.
+3. 화면에는 `/api/calendar/ical?token=...` URL을 생성 직후 1회 표시한다.
+4. 외부 캘린더 앱이 URL을 호출하면 token hash를 검증한다.
+5. 서버는 token 소유자의 권한 범위로 승인 완료 휴가만 조회한다.
+6. 공개 범위 정책을 적용한 이벤트만 ICS `VEVENT`로 변환한다.
+7. 휴가 사유, 증명자료, 반려 사유, HR 민감정보는 ICS에 포함하지 않는다.
+8. 링크 비활성화 또는 재발급 시 기존 token은 더 이상 사용할 수 없다.

@@ -273,6 +273,14 @@ export default async function InvitationsPage({
                             type="hidden"
                             value={invitation.id}
                           />
+                          <input
+                            name="stepUpPassword"
+                            type="password"
+                            autoComplete="current-password"
+                            className="mb-2 h-9 w-36 rounded-md border border-amber-200 px-2 text-sm"
+                            placeholder="현재 비밀번호"
+                            required
+                          />
                           <button className="h-9 rounded-md border border-neutral-300 px-3 text-sm">
                             재발급
                           </button>

@@ -1,0 +1,25 @@
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'INVITATION_TOKEN_FAILED';
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'INVITATION_TOKEN_CONSUMED';
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'LOGIN_BLOCKED';
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'SESSION_EXPIRED';
+
+ALTER TABLE "Session" ADD COLUMN IF NOT EXISTS "rememberMe" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "Session" ADD COLUMN IF NOT EXISTS "revokedReason" TEXT;
+ALTER TABLE "Session" ADD COLUMN IF NOT EXISTS "ipAddressHash" TEXT;
+ALTER TABLE "Session" ADD COLUMN IF NOT EXISTS "userAgentHash" TEXT;
+
+CREATE INDEX IF NOT EXISTS "Session_revokedAt_idx" ON "Session"("revokedAt");
+
+CREATE TABLE IF NOT EXISTS "LoginAttempt" (
+  "id" TEXT NOT NULL,
+  "identifierHash" TEXT NOT NULL,
+  "success" BOOLEAN NOT NULL,
+  "ipHash" TEXT,
+  "userAgentHash" TEXT,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  CONSTRAINT "LoginAttempt_pkey" PRIMARY KEY ("id")
+);
+
+CREATE INDEX IF NOT EXISTS "LoginAttempt_identifierHash_idx" ON "LoginAttempt"("identifierHash");
+CREATE INDEX IF NOT EXISTS "LoginAttempt_createdAt_idx" ON "LoginAttempt"("createdAt");

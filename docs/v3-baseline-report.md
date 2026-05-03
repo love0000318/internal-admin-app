@@ -29,3 +29,17 @@
 - 관리자 리포트 세부 report별 모바일 카드 패턴 확대
 - 직원 상세/조직 관리의 긴 table/card UX 추가 개선
 - Playwright 기반 모바일 viewport smoke test 자동화
+## 3차 1단계 모바일 UX 기준
+
+- 공통 protected layout은 TopBar, NotificationBell, 모바일 가로 nav,
+  PC sidebar 구조를 사용한다.
+- 모바일에서 body 전체 가로 스크롤이 생기지 않도록 main content는
+  `min-w-0`와 `overflow-x-hidden`을 유지한다.
+- 넓은 데이터는 PC table, 모바일 card list 패턴을 우선 적용한다.
+- 짧은 한글 label, badge, tab, table header는 `whitespace-nowrap`와
+  `break-keep` 기준으로 검수한다.
+- 이번 기준에서 우선 정리된 화면은 로그인, 초대 가입, 대시보드,
+  휴가 요청, 연차 사용계획, 휴가 캘린더, 알림센터, 휴가 관리 설정,
+  휴가 유형 관리다.
+- 근태/출퇴근 route는 현재 코드 구조에서 확인되지 않아 실제 route가
+  추가된 뒤 동일한 디자인 시스템 적용이 필요하다.

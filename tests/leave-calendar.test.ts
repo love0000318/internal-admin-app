@@ -238,6 +238,6 @@ describe("leave calendar visibility", () => {
         leaveTypeLabel: "생일 반차",
         isPrivate: false,
       }),
-    ).toContain("bg-slate-100");
+    ).toContain("bg-purple-100");
   });
 });

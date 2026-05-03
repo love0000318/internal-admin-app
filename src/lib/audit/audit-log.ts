@@ -1,10 +1,13 @@
 import type { AuditAction, AuditTargetType } from "@/types/audit";
+import { classifyAuditAction } from "@/lib/audit/audit-classification";
+import { sanitizeAuditMetadata } from "@/lib/audit/sanitize-audit-metadata";
 
 export type AuditLogInput = {
   actorId: string | null;
   action: AuditAction;
   targetType: AuditTargetType;
   targetId: string | null;
+  metadata?: unknown;
   beforeJson?: unknown;
   afterJson?: unknown;
   ipAddress?: string | null;
@@ -24,6 +27,8 @@ export const AUDIT_REQUIRED_ACTIONS: AuditAction[] = [
   "LEAVE_REQUEST_CANCELLED",
   "USER_CREATED",
   "INVITATION_ACCEPTED",
+  "INVITATION_TOKEN_FAILED",
+  "INVITATION_TOKEN_CONSUMED",
   "INVITATION_CANCELLED",
   "INVITATION_REISSUED",
   "INVITATION_VERIFICATION_CODE_CREATED",
@@ -38,8 +43,10 @@ export const AUDIT_REQUIRED_ACTIONS: AuditAction[] = [
   "INVITATION_REISSUED_WITH_SHORT_URL",
   "LOGIN_SUCCEEDED",
   "LOGIN_FAILED",
+  "LOGIN_BLOCKED",
   "LOGOUT",
   "SESSION_REVOKED",
+  "SESSION_EXPIRED",
   "TEAM_CREATED",
   "TEAM_UPDATED",
   "TEAM_DEACTIVATED",
@@ -107,12 +114,34 @@ export const AUDIT_REQUIRED_ACTIONS: AuditAction[] = [
   "AUTO_CONFIRM_PAST_START_LEAVES_RUN",
   "AUTO_CONFIRM_PAST_START_LEAVES_DRY_RUN",
   "REPORT_EXPORTED",
+  "AUDIT_LOG_EXPORTED",
   "EXTERNAL_EMAIL_SENT",
   "EXTERNAL_EMAIL_FAILED",
   "EXTERNAL_SLACK_SENT",
   "EXTERNAL_SLACK_FAILED",
   "INVITATION_EMAIL_SENT",
   "INVITATION_EMAIL_FAILED",
+  "CALENDAR_SUBSCRIPTION_CREATED",
+  "CALENDAR_SUBSCRIPTION_REVOKED",
+  "CALENDAR_SUBSCRIPTION_REGENERATED",
+  "STEP_UP_VERIFICATION_SUCCEEDED",
+  "STEP_UP_VERIFICATION_FAILED",
+  "STEP_UP_VERIFICATION_CONSUMED",
+  "OWNER_ROLE_GRANTED",
+  "OWNER_ROLE_REVOKED",
+  "ROLE_CHANGE_BLOCKED",
+  "LAST_OWNER_PROTECTION_TRIGGERED",
+  "SELF_ROLE_CHANGE_BLOCKED",
+  "EMPLOYEE_DEACTIVATION_BLOCKED",
+  "EMPLOYEE_DEACTIVATED_WITH_STEP_UP",
+  "INVITATION_REISSUED_WITH_STEP_UP",
+  "SESSION_REVOKED_BY_ADMIN",
+  "REPORT_EXPORT_STEP_UP_REQUIRED",
+  "POLICY_CHANGE_WITH_STEP_UP",
+  "SECURITY_SETTING_CHANGED",
+  "SUSPICIOUS_LOGIN_DETECTED",
+  "CSRF_BLOCKED",
+  "UNAUTHORIZED_ACCESS_BLOCKED",
   "JOB_RUN_STARTED",
   "JOB_RUN_COMPLETED",
   "JOB_RUN_FAILED",
@@ -140,15 +169,19 @@ export function isAuditRequiredAction(action: AuditAction): boolean {
 }
 
 export function buildAuditLogInput(input: AuditLogInput): AuditLogInput {
-  if (!isAuditRequiredAction(input.action) && input.action !== "INVITATION_CREATED") {
-    return input;
-  }
-
-  if (!input.targetType) {
+  if ((isAuditRequiredAction(input.action) || input.action === "INVITATION_CREATED") && !input.targetType) {
     throw new Error("Audit targetType is required.");
   }
 
-  return input;
+  const classification = classifyAuditAction(input.action);
+
+  return {
+    ...input,
+    metadata: input.metadata ? sanitizeAuditMetadata(input.metadata) : input.metadata,
+    beforeJson: input.beforeJson ? sanitizeAuditMetadata(input.beforeJson) : input.beforeJson,
+    afterJson: input.afterJson ? sanitizeAuditMetadata(input.afterJson) : input.afterJson,
+    ...classification,
+  } as AuditLogInput;
 }
 
 // TODO: Wire this to Prisma in server actions once API/server action files exist.

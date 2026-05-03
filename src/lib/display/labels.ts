@@ -12,8 +12,8 @@ import type {
 export const ROLE_LABELS: Record<Role, string> = {
   OWNER: "총괄 관리자",
   LEAD: "중간 관리자",
-  MANAGER: "일반 관리자",
-  EXTERNAL_PARTNER: "외부 연계 대상자",
+  MANAGER: "직원",
+  EXTERNAL_PARTNER: "외부 협력자",
 };
 
 export const USER_STATUS_LABELS: Record<UserStatus, string> = {
@@ -67,7 +67,8 @@ export const AUDIT_ACTION_LABELS: Partial<Record<AuditAction, string>> = {
   INVITATION_VERIFICATION_CODE_CONSUMED: "초대 가입 인증 코드 사용",
   INVITATION_VERIFICATION_CODE_REVOKED: "초대 가입 인증 코드 폐기",
   INVITATION_REISSUED_WITH_VERIFICATION_CODE: "초대 링크와 인증 코드 재발급",
-  OWNER_INVITATION_REISSUED_WITH_VERIFICATION_CODE: "OWNER 초대 인증 코드 재발급",
+  OWNER_INVITATION_REISSUED_WITH_VERIFICATION_CODE:
+    "OWNER 초대 인증 코드 재발급",
   USER_CREATED: "사용자 생성",
   USER_PROFILE_UPDATED: "직원 정보 수정",
   USER_ROLE_UPDATED: "직원 권한 변경",
@@ -100,10 +101,10 @@ export const AUDIT_ACTION_LABELS: Partial<Record<AuditAction, string>> = {
   CUSTOM_LEAVE_REQUEST_CANCELLED: "맞춤휴가 승인 취소",
   LEAVE_GRANT_PENDING_AMOUNT_UPDATED: "맞춤휴가 대기 수량 변경",
   LEAVE_GRANT_USED_AMOUNT_UPDATED: "맞춤휴가 사용 수량 변경",
-  EMPLOYEE_MASTER_IMPORTED: "인사정보 원장 import",
-  EMPLOYEE_PREJOIN_PROFILE_CREATED: "가입 전 인사정보 생성",
-  EMPLOYEE_PREJOIN_PROFILE_UPDATED: "가입 전 인사정보 수정",
-  EMPLOYEE_PREJOIN_PROFILE_LINKED_TO_INVITATION: "가입 전 인사정보 초대 연결",
+  EMPLOYEE_MASTER_IMPORTED: "인사정보 import",
+  EMPLOYEE_PREJOIN_PROFILE_CREATED: "사전 인사정보 생성",
+  EMPLOYEE_PREJOIN_PROFILE_UPDATED: "사전 인사정보 수정",
+  EMPLOYEE_PREJOIN_PROFILE_LINKED_TO_INVITATION: "사전 인사정보 초대 연결",
   EMPLOYEE_PROFILE_CREATED_FROM_IMPORT: "import 기반 인사 프로필 생성",
   EMPLOYEE_PROFILE_CONFIRMED: "직원 인사정보 확인",
   EMPLOYEE_PROFILE_UPDATED_BY_SELF: "직원 본인 정보 수정",

@@ -21,7 +21,7 @@ export async function logoutAction() {
     });
   }
 
-  await destroyCurrentSession();
+  await destroyCurrentSession("LOGOUT");
   if (user) {
     await getPrisma().auditLog.create({
       data: {

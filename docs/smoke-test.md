@@ -514,3 +514,73 @@
 - [ ] AuditLog를 확인한다.
   - 기대 결과: API key, Slack webhook URL, 초대 token, 가입 인증 코드 원문, codeHash/tokenHash가 저장되어 있지 않다.
   - 실패 시 확인할 것: `sanitizeAuditMetadata`, external notification metadata allowlist.
+## 외부 캘린더 ICS 구독 smoke test
+
+- [ ] `/leaves/calendar/settings`에서 내 휴가 캘린더 구독 링크를 생성한다.
+  - 기대 결과: 생성 직후 ICS URL이 1회 표시된다.
+  - 실패 시 확인할 것: 사용자 권한, DB migration, APP_BASE_URL.
+- [ ] 생성된 URL을 브라우저에서 열어 `.ics` 응답을 확인한다.
+  - 기대 결과: `BEGIN:VCALENDAR`와 승인 완료 휴가 `VEVENT`가 표시된다.
+  - 실패 시 확인할 것: token hash, revokedAt, expiresAt, 사용자 상태.
+- [ ] PENDING/REJECTED/CANCELLED/WITHDRAWN 휴가가 ICS에 없는지 확인한다.
+  - 기대 결과: APPROVED 휴가만 포함된다.
+  - 실패 시 확인할 것: ICS route의 status 필터.
+- [ ] PUBLIC_AS_LEAVE 휴가가 “휴가”로만 표시되는지 확인한다.
+  - 기대 결과: 민감 유형을 summary나 색상으로 유추할 수 없다.
+  - 실패 시 확인할 것: 내부 캘린더 공개 범위 helper 재사용 여부.
+- [ ] 구독 링크를 비활성화한 뒤 다시 접근한다.
+  - 기대 결과: 404 응답이 반환된다.
+  - 실패 시 확인할 것: revokedAt/isEnabled 검증.
+## 보안 강화 smoke test
+
+- [ ] OWNER가 직원 상세에서 일반 정보만 수정한다.
+  - 기대 결과: 비밀번호 재입력 없이 저장된다.
+- [ ] OWNER가 직원 역할을 변경하면서 비밀번호를 입력하지 않는다.
+  - 기대 결과: 저장이 거부된다.
+- [ ] OWNER가 직원 역할을 변경하면서 현재 비밀번호를 입력한다.
+  - 기대 결과: 저장되고 AuditLog에 step-up 성공과 역할 변경이 기록된다.
+- [ ] 마지막 OWNER를 비활성화하거나 OWNER 권한 제거를 시도한다.
+  - 기대 결과: 서버에서 차단된다.
+## 모바일 UX / 디자인 시스템 검수
+
+- [ ] 390px 모바일 화면에서 `/login`에 접속한다.
+  - 기대 결과: 로그인 카드가 화면 밖으로 벗어나지 않고 전화번호, 비밀번호, 자동 로그인 유지 체크박스, 로그인 버튼이 1열로 표시된다.
+  - 실패 시 확인할 것: auth layout, input width, body horizontal overflow.
+- [ ] 390px 모바일 화면에서 `/invitations/accept` 또는 `/i/[shortToken]` 가입 화면에 접속한다.
+  - 기대 결과: 초대 요약 카드와 가입 인증 코드 입력 필드가 1열로 표시되고 버튼을 터치하기 쉽다.
+  - 실패 시 확인할 것: invitation signup form, max-width, input min-width.
+- [ ] 로그인 후 모든 protected page 우측 상단에 알림 아이콘이 표시되는지 확인한다.
+  - 기대 결과: 읽지 않은 알림이 있으면 빨간 badge와 진동 애니메이션이 보이고, 클릭 시 `/notifications`로 이동한다.
+  - 실패 시 확인할 것: AppShell, NotificationBell, unread count 조회.
+- [ ] 모바일에서 `/admin/leaves/settings`와 `/admin/leaves/types`를 확인한다.
+  - 기대 결과: 휴가 관리 탭이 가로 스크롤 탭으로 보이며 한글이 세로로 깨지지 않는다.
+  - 실패 시 확인할 것: ResponsiveTabs, whitespace-nowrap, break-keep.
+- [ ] 모바일에서 휴가 유형 목록을 확인한다.
+  - 기대 결과: 모바일은 카드형 목록, PC는 table 형태로 표시된다.
+  - 실패 시 확인할 것: MobileCardList, ResponsiveTable, table min-width.
+- [ ] 모바일에서 `/leaves/me/requests/new`를 확인한다.
+  - 기대 결과: 휴가 유형, 날짜, 반차 구분, 증명자료, 제출 버튼이 1열 흐름으로 표시된다.
+  - 실패 시 확인할 것: LeaveRequestForm form grid, input width.
+- [ ] 모바일에서 `/leaves/me/use-plan`을 확인한다.
+  - 기대 결과: 사용계획 항목이 카드형으로 보이고 자동 계산 수량이 badge로 표시된다.
+  - 실패 시 확인할 것: AnnualUsePlanForm layout, calculated amount rendering.
+- [ ] `/leaves/calendar`에서 색상 표시를 확인한다.
+  - 기대 결과: 연차는 파란색, 반차는 주황색, 생일 반차는 보라색 계열, 비공개/유형 숨김 휴가는 중립색으로 표시된다.
+  - 실패 시 확인할 것: getLeaveCalendarEventColorClass, 공개 범위 처리.
+## 보안 대시보드 / AuditLog
+
+- [ ] OWNER가 `/admin/security`에 접근할 수 있다.
+  - 기대 결과: 최근 CRITICAL/HIGH 이벤트와 로그인 차단, 권한 변경, export, 실패 Job 카드가 표시된다.
+  - 실패 시 확인할 것: OWNER 권한, route policy, DB migration 적용 여부.
+- [ ] MANAGER/LEAD는 `/admin/security`에 접근할 수 없다.
+  - 기대 결과: 접근 권한 없음 화면으로 이동한다.
+  - 실패 시 확인할 것: protected layout과 server guard.
+- [ ] OWNER가 `/admin/audit-logs`에서 category/severity/action 필터를 사용할 수 있다.
+  - 기대 결과: 필터 결과가 표시되고 metadata는 sanitize된 값만 보인다.
+  - 실패 시 확인할 것: AuditLog category/severity migration, sanitize helper.
+- [ ] AuditLog CSV export는 Step-up 재인증 없이는 실패한다.
+  - 기대 결과: 403 또는 step-up-required 응답.
+  - 실패 시 확인할 것: `/admin/audit-logs/export` route의 Step-up 검증.
+- [ ] AuditLog CSV export 후 `AUDIT_LOG_EXPORTED` 로그가 남는다.
+  - 기대 결과: CSV 내용 전체, token, tokenHash, secret은 AuditLog에 저장되지 않는다.
+  - 실패 시 확인할 것: export route와 metadata sanitizer.

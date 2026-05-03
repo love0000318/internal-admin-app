@@ -114,11 +114,7 @@ export function canViewCalendarLeaveDetail(
   actor: RbacUser,
   request: CalendarLeaveRequest,
 ) {
-  if (isSelf(actor, request)) {
-    return true;
-  }
-
-  if (isOwner(actor)) {
+  if (isSelf(actor, request) || isOwner(actor)) {
     return true;
   }
 
@@ -154,7 +150,11 @@ export function canViewCalendarLeaveEvent({
 }
 
 function canViewActualLeaveType(actor: RbacUser, request: CalendarLeaveRequest) {
-  return isSelf(actor, request) || isOwner(actor) || (isLead(actor) && isInManagedTeam(actor, request.user.teamId));
+  return (
+    isSelf(actor, request) ||
+    isOwner(actor) ||
+    (isLead(actor) && isInManagedTeam(actor, request.user.teamId))
+  );
 }
 
 export function formatCalendarLeaveTitle({
@@ -174,7 +174,7 @@ export function formatCalendarLeaveTitle({
       : "";
 
   if (canViewActualLeaveType(actor, request)) {
-    const prefix = isSelf(actor, request) ? "내" : request.user.name;
+    const prefix = isSelf(actor, request) ? "나" : request.user.name;
 
     return `${prefix} - ${leaveTypeLabel}${suffix}`;
   }
@@ -195,19 +195,18 @@ export function getLeaveCalendarEventColorClass(event: {
     return "border-slate-200 bg-slate-100 text-slate-700";
   }
 
-  if (event.leaveTypeCode === "HALF_DAY") {
+  const code = event.leaveTypeCode ?? "";
+  const label = event.leaveTypeLabel ?? "";
+
+  if (code === "BIRTHDAY_HALF_DAY" || label.includes("생일 반차")) {
+    return "border-purple-200 bg-purple-100 text-purple-800";
+  }
+
+  if (code === "HALF_DAY" || label.includes("반차")) {
     return "border-orange-200 bg-orange-100 text-orange-800";
   }
 
-  if (event.leaveTypeCode === "ANNUAL") {
-    return "border-blue-200 bg-blue-100 text-blue-800";
-  }
-
-  if (!event.leaveTypeCode && event.leaveTypeLabel?.includes("반차")) {
-    return "border-orange-200 bg-orange-100 text-orange-800";
-  }
-
-  if (!event.leaveTypeCode && event.leaveTypeLabel?.includes("연차")) {
+  if (code === "ANNUAL" || label.includes("연차")) {
     return "border-blue-200 bg-blue-100 text-blue-800";
   }
 
@@ -216,7 +215,10 @@ export function getLeaveCalendarEventColorClass(event: {
 
 function resolveLeaveTypeDefinition(
   request: CalendarLeaveRequest,
-  definitionsByCode: Map<string, Pick<LeaveTypeDefinition, "id" | "code" | "name" | "visibility">>,
+  definitionsByCode: Map<
+    string,
+    Pick<LeaveTypeDefinition, "id" | "code" | "name" | "visibility">
+  >,
 ) {
   return request.customLeaveType ?? definitionsByCode.get(request.type) ?? null;
 }
@@ -244,7 +246,10 @@ export function buildLeaveCalendarEventsFromRequest({
 }: {
   actor: RbacUser;
   request: CalendarLeaveRequest;
-  definitionsByCode: Map<string, Pick<LeaveTypeDefinition, "id" | "code" | "name" | "visibility">>;
+  definitionsByCode: Map<
+    string,
+    Pick<LeaveTypeDefinition, "id" | "code" | "name" | "visibility">
+  >;
 }) {
   const definition = resolveLeaveTypeDefinition(request, definitionsByCode);
   const visibility = resolveCalendarEventVisibility(request, definition);
@@ -288,7 +293,8 @@ export function buildLeaveCalendarEventsFromRequest({
     halfDayPeriod: request.halfDayPeriod ?? undefined,
     amount: Number(request.dayCount),
     unit: "DAY",
-    isPrivate: visibility !== "PUBLIC_WITH_TYPE" && !canViewActualLeaveType(actor, request),
+    isPrivate:
+      visibility !== "PUBLIC_WITH_TYPE" && !canViewActualLeaveType(actor, request),
     canViewDetail,
     detailUrl,
   }));
@@ -301,10 +307,15 @@ function statusWhere(actor: RbacUser, statuses?: LeaveRequestStatus[]) {
     return requested;
   }
 
-  return requested.filter((status) => status === "APPROVED" || status === "PENDING");
+  return requested.filter(
+    (status) => status === "APPROVED" || status === "PENDING",
+  );
 }
 
-function baseUserWhere(actor: RbacUser, scope: CalendarScope): Prisma.UserWhereInput {
+function baseUserWhere(
+  actor: RbacUser,
+  scope: CalendarScope,
+): Prisma.UserWhereInput {
   if (scope === "ME") {
     return { id: actor.id };
   }
@@ -315,10 +326,7 @@ function baseUserWhere(actor: RbacUser, scope: CalendarScope): Prisma.UserWhereI
 
   if (isLead(actor)) {
     return {
-      OR: [
-        { id: actor.id },
-        { teamId: { in: actor.managedTeamIds ?? [] } },
-      ],
+      OR: [{ id: actor.id }, { teamId: { in: actor.managedTeamIds ?? [] } }],
     };
   }
 
@@ -346,7 +354,9 @@ export async function listCalendarLeaveEvents({
   const definitions = await prisma.leaveTypeDefinition.findMany({
     select: { id: true, code: true, name: true, visibility: true },
   });
-  const definitionsByCode = new Map(definitions.map((definition) => [definition.code, definition]));
+  const definitionsByCode = new Map(
+    definitions.map((definition) => [definition.code, definition]),
+  );
   const selectedType = leaveTypeId
     ? definitions.find((definition) => definition.id === leaveTypeId)
     : null;
@@ -390,7 +400,10 @@ export async function listCalendarLeaveEvents({
         return true;
       }
 
-      return request.leaveTypeId === selectedType.id || request.type === selectedType.code;
+      return (
+        request.leaveTypeId === selectedType.id ||
+        request.type === selectedType.code
+      );
     })
     .flatMap((request) =>
       buildLeaveCalendarEventsFromRequest({
@@ -400,7 +413,11 @@ export async function listCalendarLeaveEvents({
       }),
     )
     .filter((event) => event.date >= fromDate && event.date <= toDate)
-    .sort((left, right) => left.date.localeCompare(right.date) || left.title.localeCompare(right.title));
+    .sort(
+      (left, right) =>
+        left.date.localeCompare(right.date) ||
+        left.title.localeCompare(right.title),
+    );
 }
 
 export async function listCalendarFilterOptions({
@@ -419,7 +436,10 @@ export async function listCalendarFilterOptions({
         ? { id: scopedActor.teamId, status: "ACTIVE" }
         : { id: "__no_team__" };
 
-  const userWhere = baseUserWhere(scopedActor, isOwner(scopedActor) ? "ALL" : "TEAM");
+  const userWhere = baseUserWhere(
+    scopedActor,
+    isOwner(scopedActor) ? "ALL" : "TEAM",
+  );
 
   const [teams, users, leaveTypes] = await Promise.all([
     prisma.team.findMany({
@@ -443,7 +463,9 @@ export async function listCalendarFilterOptions({
 }
 
 export function monthRange(month: string | undefined, today: DateOnly) {
-  const normalized = /^\d{4}-\d{2}$/.test(month ?? "") ? month! : today.slice(0, 7);
+  const normalized = /^\d{4}-\d{2}$/.test(month ?? "")
+    ? month!
+    : today.slice(0, 7);
   const [year, monthNumber] = normalized.split("-").map(Number);
   const first = new Date(Date.UTC(year, monthNumber - 1, 1));
   const last = new Date(Date.UTC(year, monthNumber, 0));

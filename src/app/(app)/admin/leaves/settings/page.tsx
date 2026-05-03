@@ -1,6 +1,7 @@
-import Link from "next/link";
-
 import { updateLeavePolicy } from "@/app/(app)/admin/leaves/actions";
+import { Badge, buttonClassName, Card, EmptyState } from "@/components/design-system/primitives";
+import { MobileCardList, ResponsiveTable } from "@/components/design-system/responsive";
+import { LeaveAdminNav } from "@/components/leave/leave-admin-nav";
 import { LEAVE_TYPE_LABELS } from "@/lib/leave/labels";
 import { listLeavePolicies } from "@/lib/leave/queries";
 import { requireOwner } from "@/lib/rbac/server-guards";
@@ -15,6 +16,103 @@ function numberInputValue(value: number | null | undefined) {
   return value === null || value === undefined ? "" : String(value);
 }
 
+function yesNo(value: boolean | null | undefined) {
+  return value ? "예" : "아니오";
+}
+
+function PolicyForm({ policy }: { policy: Awaited<ReturnType<typeof listLeavePolicies>>[number] }) {
+  return (
+    <form action={updateLeavePolicy} className="grid min-w-0 gap-3">
+      <input name="id" type="hidden" value={policy.id} />
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <label className="text-sm font-medium text-slate-800">
+          정책명
+          <input
+            name="name"
+            defaultValue={policy.name ?? LEAVE_TYPE_LABELS[policy.type]}
+            className="mt-1 h-10 w-full min-w-0 rounded-lg border border-slate-300 px-3"
+            required
+          />
+        </label>
+        <label className="text-sm font-medium text-slate-800">
+          설명
+          <input
+            name="description"
+            defaultValue={policy.description ?? ""}
+            className="mt-1 h-10 w-full min-w-0 rounded-lg border border-slate-300 px-3"
+            placeholder="직원에게 보이는 안내"
+          />
+        </label>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-3">
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input
+            name="deductsAnnualBalance"
+            type="checkbox"
+            defaultChecked={policy.deductsAnnualBalance ?? policy.deductsAnnual}
+          />
+          연차 차감
+        </label>
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input
+            name="requiresAttachment"
+            type="checkbox"
+            defaultChecked={policy.requiresAttachment}
+          />
+          증명자료 필요
+        </label>
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input name="isEnabled" type="checkbox" defaultChecked={policy.isEnabled} />
+          사용
+        </label>
+      </div>
+      <div className="grid gap-3 md:grid-cols-3">
+        <label className="text-sm font-medium text-slate-800">
+          최소 요청 일수
+          <input
+            name="minRequestDays"
+            type="number"
+            step="0.5"
+            min="0.5"
+            defaultValue={numberInputValue(policy.minRequestDays)}
+            className="mt-1 h-10 w-full min-w-0 rounded-lg border border-slate-300 px-3"
+            placeholder="0.5"
+          />
+        </label>
+        <label className="text-sm font-medium text-slate-800">
+          최대 요청 일수
+          <input
+            name="maxRequestDays"
+            type="number"
+            step="0.5"
+            min="0.5"
+            defaultValue={numberInputValue(
+              policy.maxRequestDays ?? policy.maxDaysPerRequest,
+            )}
+            className="mt-1 h-10 w-full min-w-0 rounded-lg border border-slate-300 px-3"
+            placeholder="선택"
+          />
+        </label>
+        <label className="text-sm font-medium text-slate-800">
+          연간 최대 일수
+          <input
+            name="maxDaysPerYear"
+            type="number"
+            step="0.5"
+            min="0.5"
+            defaultValue={numberInputValue(policy.maxDaysPerYear)}
+            className="mt-1 h-10 w-full min-w-0 rounded-lg border border-slate-300 px-3"
+            placeholder="선택"
+          />
+        </label>
+      </div>
+      <button className={buttonClassName({ className: "w-full sm:w-auto" })}>
+        저장
+      </button>
+    </form>
+  );
+}
+
 export default async function LeaveSettingsPage({
   searchParams,
 }: LeaveSettingsPageProps) {
@@ -23,201 +121,120 @@ export default async function LeaveSettingsPage({
   const policies = await listLeavePolicies();
 
   return (
-    <section>
-      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+    <section className="min-w-0 space-y-5">
+      <div className="space-y-4">
         <div>
-          <p className="text-sm font-medium text-neutral-500">휴가 관리</p>
-          <h1 className="mt-2 text-2xl font-semibold tracking-normal">
+          <p className="text-sm font-semibold text-blue-700">휴가 관리</p>
+          <h1 className="mt-2 break-keep text-2xl font-bold tracking-normal text-slate-950 sm:text-3xl">
             휴가 관리 설정
           </h1>
+          <p className="mt-2 max-w-3xl break-keep text-sm leading-relaxed text-slate-600">
+            기본 휴가 정책의 차감 여부, 증명자료 필요 여부, 요청 가능 범위를
+            운영 정책에 맞게 조정합니다.
+          </p>
         </div>
-        <div className="flex w-full min-w-0 gap-2 overflow-x-auto whitespace-nowrap pb-1">
-          <Link
-            href="/admin/leaves/types"
-            className="inline-flex h-10 shrink-0 items-center whitespace-nowrap break-keep rounded-md border border-neutral-300 px-4 text-sm font-medium"
-          >
-            휴가 유형 관리
-          </Link>
-          <Link
-            href="/admin/leaves/approval-policies"
-            className="inline-flex h-10 shrink-0 items-center whitespace-nowrap break-keep rounded-md border border-neutral-300 px-4 text-sm font-medium"
-          >
-            휴가 승인 정책
-          </Link>
-          <Link
-            href="/admin/leaves/grants"
-            className="inline-flex h-10 shrink-0 items-center whitespace-nowrap break-keep rounded-md border border-neutral-300 px-4 text-sm font-medium"
-          >
-            맞춤휴가 지급
-          </Link>
-          <Link
-            href="/admin/leaves/birthday-policy"
-            className="inline-flex h-10 shrink-0 items-center whitespace-nowrap break-keep rounded-md border border-neutral-300 px-4 text-sm font-medium"
-          >
-            생일 반차 설정
-          </Link>
-          <Link
-            href="/admin/leaves/annual-policy"
-            className="inline-flex h-10 shrink-0 items-center whitespace-nowrap break-keep rounded-md border border-neutral-300 px-4 text-sm font-medium"
-          >
-            연차 정책 설정
-          </Link>
-          <Link
-            href="/admin/leaves/promotions"
-            className="inline-flex h-10 shrink-0 items-center whitespace-nowrap break-keep rounded-md border border-neutral-300 px-4 text-sm font-medium"
-          >
-            연차 촉진 관리
-          </Link>
-          <Link
-            href="/admin/leaves/holidays"
-            className="inline-flex h-10 shrink-0 items-center whitespace-nowrap break-keep rounded-md border border-neutral-300 px-4 text-sm font-medium"
-          >
-            회사 휴일 관리
-          </Link>
-          <Link
-            href="/admin/leaves/balances"
-            className="inline-flex h-10 shrink-0 items-center whitespace-nowrap break-keep rounded-md border border-neutral-300 px-4 text-sm font-medium"
-          >
-            직원별 현황
-          </Link>
-        </div>
+        <LeaveAdminNav activeHref="/admin/leaves/settings" />
       </div>
 
       {error ? (
-        <p className="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           정책을 저장할 수 없습니다. 입력값을 확인해 주세요.
         </p>
       ) : null}
       {success ? (
-        <p className="mt-4 rounded-md bg-green-50 px-3 py-2 text-sm text-green-700">
+        <p className="rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
           휴가 정책이 저장되었습니다.
         </p>
       ) : null}
 
-      <div className="mt-6 overflow-x-auto rounded-lg border border-neutral-200 bg-white shadow-sm">
-        <table className="w-full min-w-[1100px] table-auto text-left text-sm [&_td]:break-keep [&_th]:break-keep [&_th]:whitespace-nowrap">
-          <thead className="bg-neutral-50 text-neutral-500">
-            <tr>
-              <th className="px-4 py-3">휴가 유형</th>
-              <th className="px-4 py-3">설명</th>
-              <th className="px-4 py-3">연차 차감</th>
-              <th className="px-4 py-3">증빙 필요</th>
-              <th className="px-4 py-3">연간 최대</th>
-              <th className="px-4 py-3">사용 여부</th>
-              <th className="px-4 py-3">수정</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-neutral-100">
-            {policies.length === 0 ? (
+      {policies.length === 0 ? (
+        <EmptyState title="등록된 휴가 정책이 없습니다." />
+      ) : (
+        <>
+          <MobileCardList>
+            {policies.map((policy) => (
+              <Card key={policy.id} className="space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h2 className="break-keep text-base font-semibold text-slate-950">
+                      {LEAVE_TYPE_LABELS[policy.type]}
+                    </h2>
+                    <p className="mt-1 break-keep text-sm text-slate-500">
+                      {policy.description ?? "설명 없음"}
+                    </p>
+                  </div>
+                  <Badge tone={policy.isEnabled ? "success" : "default"}>
+                    {policy.isEnabled ? "사용" : "중지"}
+                  </Badge>
+                </div>
+                <dl className="grid gap-2 text-sm">
+                  <div className="flex justify-between gap-3">
+                    <dt className="shrink-0 whitespace-nowrap text-slate-500">
+                      연차 차감
+                    </dt>
+                    <dd className="text-right">
+                      {yesNo(policy.deductsAnnualBalance ?? policy.deductsAnnual)}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt className="shrink-0 whitespace-nowrap text-slate-500">
+                      증명자료
+                    </dt>
+                    <dd className="text-right">{yesNo(policy.requiresAttachment)}</dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt className="shrink-0 whitespace-nowrap text-slate-500">
+                      연간 최대
+                    </dt>
+                    <dd className="text-right">
+                      {policy.maxDaysPerYear ? `${policy.maxDaysPerYear}일` : "-"}
+                    </dd>
+                  </div>
+                </dl>
+                <details className="rounded-xl border border-slate-200 p-3">
+                  <summary className="cursor-pointer whitespace-nowrap break-keep text-sm font-semibold">
+                    수정
+                  </summary>
+                  <div className="mt-4">
+                    <PolicyForm policy={policy} />
+                  </div>
+                </details>
+              </Card>
+            ))}
+          </MobileCardList>
+
+          <ResponsiveTable minWidth="1120px">
+            <thead className="bg-slate-50 text-slate-500">
               <tr>
-                <td className="px-4 py-6 text-neutral-500" colSpan={7}>
-                  등록된 휴가 정책이 없습니다.
-                </td>
+                <th>휴가 유형</th>
+                <th>설명</th>
+                <th>연차 차감</th>
+                <th>증명자료</th>
+                <th>연간 최대</th>
+                <th>상태</th>
+                <th className="min-w-[520px]">수정</th>
               </tr>
-            ) : (
-              policies.map((policy) => (
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {policies.map((policy) => (
                 <tr key={policy.id} className="align-top">
-                  <td className="px-4 py-3 font-medium">
+                  <td className="font-semibold text-slate-950">
                     {LEAVE_TYPE_LABELS[policy.type]}
                   </td>
-                  <td className="px-4 py-3">{policy.description ?? "-"}</td>
-                  <td className="px-4 py-3">
-                    {(policy.deductsAnnualBalance ?? policy.deductsAnnual)
-                      ? "예"
-                      : "아니오"}
-                  </td>
-                  <td className="px-4 py-3">
-                    {policy.requiresAttachment ? "예" : "아니오"}
-                  </td>
-                  <td className="px-4 py-3">
-                    {policy.maxDaysPerYear ? `${policy.maxDaysPerYear}일` : "-"}
-                  </td>
-                  <td className="px-4 py-3">{policy.isEnabled ? "사용" : "중지"}</td>
-                  <td className="px-4 py-3">
-                    <form action={updateLeavePolicy} className="grid min-w-80 gap-2">
-                      <input name="id" type="hidden" value={policy.id} />
-                      <input
-                        name="name"
-                        defaultValue={policy.name ?? LEAVE_TYPE_LABELS[policy.type]}
-                        className="h-9 rounded-md border px-2"
-                        required
-                      />
-                      <input
-                        name="description"
-                        defaultValue={policy.description ?? ""}
-                        className="h-9 rounded-md border px-2"
-                        placeholder="설명"
-                      />
-                      <div className="grid gap-2 md:grid-cols-3">
-                        <label className="flex items-center gap-2">
-                          <input
-                            name="deductsAnnualBalance"
-                            type="checkbox"
-                            defaultChecked={
-                              policy.deductsAnnualBalance ?? policy.deductsAnnual
-                            }
-                          />
-                          연차 차감
-                        </label>
-                        <label className="flex items-center gap-2">
-                          <input
-                            name="requiresAttachment"
-                            type="checkbox"
-                            defaultChecked={policy.requiresAttachment}
-                          />
-                          증빙 필요
-                        </label>
-                        <label className="flex items-center gap-2">
-                          <input
-                            name="isEnabled"
-                            type="checkbox"
-                            defaultChecked={policy.isEnabled}
-                          />
-                          사용
-                        </label>
-                      </div>
-                      <div className="grid gap-2 md:grid-cols-3">
-                        <input
-                          name="minRequestDays"
-                          type="number"
-                          step="0.5"
-                          min="0.5"
-                          defaultValue={numberInputValue(policy.minRequestDays)}
-                          className="h-9 rounded-md border px-2"
-                          placeholder="최소 요청일"
-                        />
-                        <input
-                          name="maxRequestDays"
-                          type="number"
-                          step="0.5"
-                          min="0.5"
-                          defaultValue={numberInputValue(
-                            policy.maxRequestDays ?? policy.maxDaysPerRequest,
-                          )}
-                          className="h-9 rounded-md border px-2"
-                          placeholder="최대 요청일"
-                        />
-                        <input
-                          name="maxDaysPerYear"
-                          type="number"
-                          step="0.5"
-                          min="0.5"
-                          defaultValue={numberInputValue(policy.maxDaysPerYear)}
-                          className="h-9 rounded-md border px-2"
-                          placeholder="연간 최대"
-                        />
-                      </div>
-                      <button className="h-9 rounded-md bg-neutral-950 px-3 text-sm font-medium text-white">
-                        저장
-                      </button>
-                    </form>
+                  <td>{policy.description ?? "-"}</td>
+                  <td>{yesNo(policy.deductsAnnualBalance ?? policy.deductsAnnual)}</td>
+                  <td>{yesNo(policy.requiresAttachment)}</td>
+                  <td>{policy.maxDaysPerYear ? `${policy.maxDaysPerYear}일` : "-"}</td>
+                  <td>{policy.isEnabled ? "사용" : "중지"}</td>
+                  <td>
+                    <PolicyForm policy={policy} />
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              ))}
+            </tbody>
+          </ResponsiveTable>
+        </>
+      )}
     </section>
   );
 }

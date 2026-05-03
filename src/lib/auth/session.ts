@@ -138,6 +138,7 @@ export async function createSessionForUser(
       userId,
       tokenHash,
       expiresAt,
+      rememberMe: options.rememberMe ?? false,
       lastUsedAt: new Date(),
     },
   });
@@ -168,12 +169,56 @@ export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
     },
   });
 
-  if (
-    !session ||
-    session.revokedAt ||
-    isSessionExpired(session.expiresAt) ||
-    session.user.status !== "ACTIVE"
-  ) {
+  if (!session) {
+    cookieStore.delete(SESSION_COOKIE_NAME);
+    return null;
+  }
+
+  if (session.revokedAt) {
+    cookieStore.delete(SESSION_COOKIE_NAME);
+    return null;
+  }
+
+  if (isSessionExpired(session.expiresAt)) {
+    await prisma.session.update({
+      where: { id: session.id },
+      data: {
+        revokedAt: new Date(),
+        revokedReason: "EXPIRED",
+        lastUsedAt: new Date(),
+      },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        actorId: session.userId,
+        actorUserId: session.userId,
+        targetUserId: session.userId,
+        action: "SESSION_EXPIRED",
+        targetType: "SESSION",
+        targetId: session.id,
+        metadata: {
+          reasonCode: "EXPIRED",
+          rememberMe: session.rememberMe,
+        },
+      },
+    });
+
+    cookieStore.delete(SESSION_COOKIE_NAME);
+    return null;
+  }
+
+  if (session.user.status !== "ACTIVE") {
+    await prisma.session.update({
+      where: { id: session.id },
+      data: {
+        revokedAt: new Date(),
+        revokedReason: "USER_NOT_ACTIVE",
+        lastUsedAt: new Date(),
+      },
+    });
+
+    cookieStore.delete(SESSION_COOKIE_NAME);
     return null;
   }
 
@@ -213,7 +258,7 @@ export async function requireCurrentUser() {
   return user;
 }
 
-export async function destroyCurrentSession() {
+export async function destroyCurrentSession(reason = "LOGOUT") {
   const cookieStore = await getCookieStore();
   const rawToken = cookieStore.get(SESSION_COOKIE_NAME)?.value;
 
@@ -225,6 +270,7 @@ export async function destroyCurrentSession() {
       },
       data: {
         revokedAt: new Date(),
+        revokedReason: reason,
         lastUsedAt: new Date(),
       },
     });

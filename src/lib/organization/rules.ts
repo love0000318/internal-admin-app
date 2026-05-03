@@ -14,19 +14,27 @@ type AssertEmployeeMutationParams = {
   activeOwnerCount: number;
 };
 
-export function assertCanMutateEmployee({
+export type EmployeeMutationBlockReason =
+  | "SELF_DEACTIVATION_BLOCKED"
+  | "SELF_OWNER_ROLE_DOWNGRADE_BLOCKED"
+  | "LAST_OWNER_DEACTIVATION_BLOCKED"
+  | "LAST_OWNER_ROLE_CHANGE_BLOCKED"
+  | "OWNER_GRANT_TARGET_NOT_ACTIVE"
+  | "OWNER_GRANT_EXTERNAL_PARTNER_BLOCKED";
+
+export function getEmployeeMutationBlockReason({
   actorId,
   target,
   nextRole,
   nextStatus,
   activeOwnerCount,
-}: AssertEmployeeMutationParams) {
+}: AssertEmployeeMutationParams): EmployeeMutationBlockReason | null {
   if (target.id === actorId && nextStatus === "DEACTIVATED") {
-    throw new Error("자기 자신의 계정을 비활성화할 수 없습니다.");
+    return "SELF_DEACTIVATION_BLOCKED";
   }
 
   if (target.id === actorId && target.role === "OWNER" && nextRole !== "OWNER") {
-    throw new Error("자기 자신의 role을 낮출 수 없습니다.");
+    return "SELF_OWNER_ROLE_DOWNGRADE_BLOCKED";
   }
 
   if (
@@ -34,15 +42,29 @@ export function assertCanMutateEmployee({
     activeOwnerCount <= 1 &&
     nextStatus === "DEACTIVATED"
   ) {
-    throw new Error("마지막 OWNER 계정을 비활성화할 수 없습니다.");
+    return "LAST_OWNER_DEACTIVATION_BLOCKED";
   }
 
   if (target.role === "OWNER" && activeOwnerCount <= 1 && nextRole !== "OWNER") {
-    throw new Error("마지막 OWNER의 role을 변경할 수 없습니다.");
+    return "LAST_OWNER_ROLE_CHANGE_BLOCKED";
   }
 
-  if (target.role !== "OWNER" && nextRole === "OWNER") {
-    throw new Error("이번 단계에서는 OWNER role 부여를 지원하지 않습니다.");
+  if (nextRole === "OWNER" && nextStatus !== "ACTIVE") {
+    return "OWNER_GRANT_TARGET_NOT_ACTIVE";
+  }
+
+  if (target.role === "EXTERNAL_PARTNER" && nextRole === "OWNER") {
+    return "OWNER_GRANT_EXTERNAL_PARTNER_BLOCKED";
+  }
+
+  return null;
+}
+
+export function assertCanMutateEmployee(params: AssertEmployeeMutationParams) {
+  const reason = getEmployeeMutationBlockReason(params);
+
+  if (reason) {
+    throw new Error(reason);
   }
 }
 

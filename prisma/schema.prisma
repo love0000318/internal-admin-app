@@ -116,6 +116,24 @@ enum AutoConfirmTiming {
   AFTER_START_DATE
 }
 
+enum CalendarSubscriptionScope {
+  ME
+  TEAM
+  MANAGED_TEAMS
+  ALL_COMPANY
+}
+
+enum StepUpPurpose {
+  OWNER_ROLE_CHANGE
+  ROLE_CHANGE
+  EMPLOYEE_DEACTIVATION
+  INVITATION_REISSUE
+  SESSION_ADMIN
+  REPORT_EXPORT
+  SECURITY_ADMIN
+  POLICY_CHANGE
+}
+
 enum LeaveGrantStatus {
   ACTIVE
   REVOKED
@@ -341,15 +359,40 @@ enum ProfileChangeRequestStatus {
   CANCELLED
 }
 
+enum AuditCategory {
+  GENERAL
+  AUTH
+  INVITATION
+  HR
+  LEAVE
+  ATTENDANCE
+  SECURITY
+  REPORT
+  JOB
+  FILE
+  POLICY
+}
+
+enum AuditSeverity {
+  INFO
+  WARNING
+  HIGH
+  CRITICAL
+}
+
 enum AuditAction {
   INVITATION_CREATED
   INVITATION_ACCEPTED
+  INVITATION_TOKEN_FAILED
+  INVITATION_TOKEN_CONSUMED
   USER_CREATED
   LOGIN
   LOGIN_SUCCEEDED
   LOGIN_FAILED
+  LOGIN_BLOCKED
   LOGOUT
   SESSION_REVOKED
+  SESSION_EXPIRED
   TEAM_CREATED
   TEAM_UPDATED
   TEAM_DEACTIVATED
@@ -443,13 +486,36 @@ enum AuditAction {
   AUTO_CONFIRM_PAST_START_LEAVES_DRY_RUN
   REPORT_VIEWED
   REPORT_EXPORTED
+  AUDIT_LOG_EXPORTED
   EXTERNAL_EMAIL_SENT
   EXTERNAL_EMAIL_FAILED
   EXTERNAL_SLACK_SENT
   EXTERNAL_SLACK_FAILED
   INVITATION_EMAIL_SENT
   INVITATION_EMAIL_FAILED
-  JOB_RUN_STARTED
+    CALENDAR_SUBSCRIPTION_CREATED
+    CALENDAR_SUBSCRIPTION_REVOKED
+    CALENDAR_SUBSCRIPTION_REGENERATED
+    CALENDAR_SUBSCRIPTION_ACCESSED
+  STEP_UP_VERIFICATION_SUCCEEDED
+  STEP_UP_VERIFICATION_FAILED
+  STEP_UP_VERIFICATION_CONSUMED
+  OWNER_ROLE_GRANTED
+  OWNER_ROLE_REVOKED
+  ROLE_CHANGE_BLOCKED
+  LAST_OWNER_PROTECTION_TRIGGERED
+  SELF_ROLE_CHANGE_BLOCKED
+  EMPLOYEE_DEACTIVATION_BLOCKED
+  EMPLOYEE_DEACTIVATED_WITH_STEP_UP
+  INVITATION_REISSUED_WITH_STEP_UP
+  SESSION_REVOKED_BY_ADMIN
+  REPORT_EXPORT_STEP_UP_REQUIRED
+  POLICY_CHANGE_WITH_STEP_UP
+  SECURITY_SETTING_CHANGED
+    SUSPICIOUS_LOGIN_DETECTED
+    CSRF_BLOCKED
+    UNAUTHORIZED_ACCESS_BLOCKED
+    JOB_RUN_STARTED
   JOB_RUN_COMPLETED
   JOB_RUN_FAILED
   JOB_RUN_MANUALLY_TRIGGERED
@@ -499,6 +565,7 @@ enum AuditTargetType {
   EMPLOYEE_IMPORT_BATCH
   EMPLOYEE_PREJOIN_PROFILE
   PROFILE_CHANGE_REQUEST
+  CALENDAR_SUBSCRIPTION
 }
 
 model User {
@@ -543,6 +610,8 @@ model User {
   annualLeavePromotionNotices AnnualLeavePromotionNotice[]
   annualLeaveUsePlans AnnualLeaveUsePlan[]
   notifications         Notification[]
+  calendarSubscriptionTokens CalendarSubscriptionToken[]
+  stepUpVerifications   StepUpVerification[]
   triggeredJobRuns      JobRun[]                @relation("JobRunTriggeredByUser")
   auditLogs             AuditLog[]
   importedEmployeeBatches EmployeeImportBatch[] @relation("EmployeeImportImportedBy")
@@ -583,11 +652,54 @@ model Team {
   members     User[]            @relation("UserTeam")
   profiles    EmployeeProfile[]
   invitations Invitation[]
+  calendarSubscriptionTokens CalendarSubscriptionToken[]
 
   @@index([parentTeamId])
   @@index([leadUserId])
   @@index([status])
   @@unique([parentTeamId, name])
+}
+
+model CalendarSubscriptionToken {
+  id              String   @id @default(cuid())
+  userId          String
+  tokenHash       String   @unique
+  scope           CalendarSubscriptionScope
+  teamId          String?
+  name            String?
+  isEnabled       Boolean  @default(true)
+  lastUsedAt      DateTime?
+  revokedAt       DateTime?
+  expiresAt       DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team            Team?    @relation(fields: [teamId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([scope])
+  @@index([teamId])
+  @@index([revokedAt])
+}
+
+model StepUpVerification {
+  id         String        @id @default(cuid())
+  userId     String
+  purpose    StepUpPurpose
+  verifiedAt DateTime      @default(now())
+  expiresAt  DateTime
+  consumedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime      @default(now())
+
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([purpose])
+  @@index([expiresAt])
+  @@index([consumedAt])
+  @@index([revokedAt])
 }
 
 model EmployeeProfile {
@@ -773,15 +885,32 @@ model Session {
   userId    String
   tokenHash String    @unique
   expiresAt DateTime
+  rememberMe Boolean  @default(false)
   revokedAt DateTime?
+  revokedReason String?
   createdAt DateTime  @default(now())
   lastSeenAt DateTime?
   lastUsedAt DateTime?
+  ipAddressHash String?
+  userAgentHash String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([expiresAt])
+  @@index([revokedAt])
+}
+
+model LoginAttempt {
+  id             String   @id @default(cuid())
+  identifierHash String
+  success        Boolean
+  ipHash         String?
+  userAgentHash  String?
+  createdAt      DateTime @default(now())
+
+  @@index([identifierHash])
+  @@index([createdAt])
 }
 
 model LeavePolicy {
@@ -1632,6 +1761,8 @@ model AuditLog {
   actorUserId String?
   targetUserId String?
   action     AuditAction
+  category   AuditCategory   @default(GENERAL)
+  severity   AuditSeverity   @default(INFO)
   targetType AuditTargetType
   targetId   String?
   metadata   Json?
@@ -1646,6 +1777,9 @@ model AuditLog {
   @@index([actorId])
   @@index([actorUserId])
   @@index([targetUserId])
+  @@index([action])
+  @@index([category])
+  @@index([severity])
   @@index([targetType, targetId])
   @@index([createdAt])
 }

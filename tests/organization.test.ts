@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   assertCanMutateEmployee,
+  getEmployeeMutationBlockReason,
   wouldCreateTeamCycle,
 } from "@/lib/organization/rules";
 import { calculateTenureDays } from "@/lib/organization/tenure";
@@ -22,19 +23,19 @@ describe("organization rules", () => {
   });
 
   it("validates email and employee invitation input", () => {
-    expect(validateEmail("jack@curinginnos.com")).toBe(true);
+    expect(validateEmail("jack@example.com")).toBe(true);
     expect(validateEmail("not-email")).toBe(false);
 
     expect(
       inviteEmployeeSchema.safeParse({
-        name: "홍길동",
+        name: "Employee",
         email: "employee@example.com",
         role: "MANAGER",
       }).success,
     ).toBe(true);
     expect(
       inviteEmployeeSchema.safeParse({
-        name: "홍길동",
+        name: "Employee",
         email: "employee@example.com",
         role: "OWNER",
       }).success,
@@ -42,7 +43,7 @@ describe("organization rules", () => {
   });
 
   it("validates team input", () => {
-    expect(teamInputSchema.safeParse({ name: "사업팀" }).success).toBe(true);
+    expect(teamInputSchema.safeParse({ name: "Business" }).success).toBe(true);
     expect(teamInputSchema.safeParse({ name: "" }).success).toBe(false);
   });
 
@@ -52,16 +53,21 @@ describe("organization rules", () => {
     expect(isFutureDateOnly("2026-04-30", "2026-05-01")).toBe(false);
   });
 
-  it("prevents self deactivation and self role downgrade", () => {
-    expect(() =>
-      assertCanMutateEmployee({
-        actorId: "owner-1",
-        target: { id: "owner-1", role: "OWNER", status: "ACTIVE" },
-        nextRole: "OWNER",
-        nextStatus: "DEACTIVATED",
-        activeOwnerCount: 2,
-      }),
-    ).toThrow("자기 자신의 계정을 비활성화할 수 없습니다.");
+  it("prevents self deactivation and self owner downgrade", () => {
+    const selfDeactivate = {
+      actorId: "owner-1",
+      target: { id: "owner-1", role: "OWNER" as const, status: "ACTIVE" as const },
+      nextRole: "OWNER" as const,
+      nextStatus: "DEACTIVATED" as const,
+      activeOwnerCount: 2,
+    };
+
+    expect(getEmployeeMutationBlockReason(selfDeactivate)).toBe(
+      "SELF_DEACTIVATION_BLOCKED",
+    );
+    expect(() => assertCanMutateEmployee(selfDeactivate)).toThrow(
+      "SELF_DEACTIVATION_BLOCKED",
+    );
 
     expect(() =>
       assertCanMutateEmployee({
@@ -71,7 +77,7 @@ describe("organization rules", () => {
         nextStatus: "ACTIVE",
         activeOwnerCount: 2,
       }),
-    ).toThrow("자기 자신의 role을 낮출 수 없습니다.");
+    ).toThrow("SELF_OWNER_ROLE_DOWNGRADE_BLOCKED");
   });
 
   it("prevents last OWNER deactivation or role change", () => {
@@ -83,7 +89,7 @@ describe("organization rules", () => {
         nextStatus: "DEACTIVATED",
         activeOwnerCount: 1,
       }),
-    ).toThrow("마지막 OWNER 계정을 비활성화할 수 없습니다.");
+    ).toThrow("LAST_OWNER_DEACTIVATION_BLOCKED");
 
     expect(() =>
       assertCanMutateEmployee({
@@ -93,7 +99,45 @@ describe("organization rules", () => {
         nextStatus: "ACTIVE",
         activeOwnerCount: 1,
       }),
-    ).toThrow("마지막 OWNER의 role을 변경할 수 없습니다.");
+    ).toThrow("LAST_OWNER_ROLE_CHANGE_BLOCKED");
+  });
+
+  it("allows a different active OWNER to grant OWNER role after step-up", () => {
+    expect(() =>
+      assertCanMutateEmployee({
+        actorId: "owner-1",
+        target: { id: "manager-1", role: "MANAGER", status: "ACTIVE" },
+        nextRole: "OWNER",
+        nextStatus: "ACTIVE",
+        activeOwnerCount: 1,
+      }),
+    ).not.toThrow();
+  });
+
+  it("requires OWNER grants to target active internal users", () => {
+    expect(
+      getEmployeeMutationBlockReason({
+        actorId: "owner-1",
+        target: { id: "manager-1", role: "MANAGER", status: "SUSPENDED" },
+        nextRole: "OWNER",
+        nextStatus: "SUSPENDED",
+        activeOwnerCount: 1,
+      }),
+    ).toBe("OWNER_GRANT_TARGET_NOT_ACTIVE");
+
+    expect(
+      getEmployeeMutationBlockReason({
+        actorId: "owner-1",
+        target: {
+          id: "external-1",
+          role: "EXTERNAL_PARTNER",
+          status: "ACTIVE",
+        },
+        nextRole: "OWNER",
+        nextStatus: "ACTIVE",
+        activeOwnerCount: 1,
+      }),
+    ).toBe("OWNER_GRANT_EXTERNAL_PARTNER_BLOCKED");
   });
 
   it("prevents team parent cycles", () => {

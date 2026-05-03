@@ -1,4 +1,5 @@
 import { Prisma } from "@/generated/prisma/client";
+import { sanitizeAuditMetadata as sanitizeStrictAuditMetadata } from "@/lib/audit/sanitize-audit-metadata";
 
 const REDACTED = "[민감정보 숨김]";
 const MAX_ARRAY_ITEMS = 20;
@@ -59,7 +60,7 @@ export function sanitizeSecurityMetadata(value: unknown): Prisma.InputJsonValue 
 }
 
 export function sanitizeAuditMetadata(value: unknown): Prisma.InputJsonValue {
-  return sanitizeSecurityMetadata(value);
+  return sanitizeStrictAuditMetadata(value);
 }
 
 export function sanitizeNotificationMetadata(value: unknown): Prisma.InputJsonValue {

@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { verifyReportExportStepUp } from "@/app/(app)/admin/reports/actions";
 import { getPrisma } from "@/lib/db/prisma";
 import { listReportRows, type ReportFilters } from "@/lib/reports/data";
 import {
@@ -37,6 +38,7 @@ export async function AdminReportPage({ reportType, searchParams }: ReportPagePr
   ]);
   const safeRows = sanitizeReportRows(rows, reportType);
   const exportHref = buildExportHref(reportType, filters);
+  const returnHref = buildReportHref(definition.path, filters);
 
   return (
     <section>
@@ -65,6 +67,33 @@ export async function AdminReportPage({ reportType, searchParams }: ReportPagePr
           </Link>
         </div>
       </div>
+
+      <form
+        action={verifyReportExportStepUp}
+        className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4"
+      >
+        <input name="returnTo" type="hidden" value={returnHref} />
+        <p className="text-sm font-semibold text-amber-900">
+          CSV export 보안 확인
+        </p>
+        <p className="mt-1 text-sm leading-relaxed text-amber-800">
+          CSV export는 민감한 운영 데이터가 포함될 수 있으므로 5분 이내의
+          비밀번호 재인증이 필요합니다.
+        </p>
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+          <input
+            name="stepUpPassword"
+            type="password"
+            autoComplete="current-password"
+            className="h-10 min-w-0 rounded-md border border-amber-200 bg-white px-3 text-sm"
+            placeholder="현재 비밀번호"
+            required
+          />
+          <button className="h-10 rounded-md bg-amber-900 px-4 text-sm font-medium text-white">
+            export 재인증
+          </button>
+        </div>
+      </form>
 
       {reportType === "ANNUAL_PROMOTIONS" ? (
         <p className="mt-4 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
@@ -227,4 +256,17 @@ function buildExportHref(reportType: ReportType, filters: ReportFilters) {
   });
 
   return `/admin/reports/export?${params.toString()}`;
+}
+
+function buildReportHref(path: string, filters: ReportFilters) {
+  const params = new URLSearchParams();
+
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value) {
+      params.set(key, String(value));
+    }
+  });
+
+  const query = params.toString();
+  return query ? `${path}?${query}` : path;
 }

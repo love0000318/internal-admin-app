@@ -40,3 +40,5 @@
 | --- | --- | --- | --- | --- | --- | --- |
 | 미승인 휴가 자동 확정 | COMPLETE | `/api/cron/auto-confirm-past-start-leaves` | `LeaveRequest`, `ApprovalPolicy`, `LeaveLedger`, `JobRun` | `jobs:auto-confirm-past-start-leaves` | Job/OWNER | PENDING 시작일 다음 날부터 APPROVED 전환, `LEAVE_AUTO_CONFIRM` ledger 기록, 중복 차감 방지 |
 | Cron endpoint 보안 | PARTIAL | `/api/cron/auto-confirm-past-start-leaves` | `JobRun` | `jobs:auto-confirm-past-start-leaves` | 운영자 | 자동 확정 cron은 `CRON_SECRET` 보호 구현, 다른 운영 job cron endpoint는 TODO |
+
+| 외부 캘린더 ICS 구독 | COMPLETE | `/leaves/calendar/settings`, `/api/calendar/ical` | `CalendarSubscriptionToken`, `CalendarSubscriptionScope` | 없음 | OWNER/LEAD/MANAGER | Google/Apple/Samsung 표준 ICS 읽기 전용 구독. OAuth 양방향 동기화는 TODO. |

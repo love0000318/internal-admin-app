@@ -269,6 +269,22 @@ export default async function EmployeeDetailPage({
             className="h-10 rounded-md border px-3 text-sm"
           />
         </label>
+        <section className="rounded-lg border border-red-100 bg-red-50 p-4 md:col-span-2">
+          <h2 className="text-sm font-semibold text-red-900">고위험 변경 재인증</h2>
+          <p className="mt-1 text-sm leading-relaxed text-red-700">
+            역할 변경, OWNER 권한 부여/해제, 직원 비활성화는 현재 OWNER의 비밀번호를 다시 입력해야 저장됩니다.
+            일반 정보만 수정하는 경우 비워 둘 수 있습니다.
+          </p>
+          <label className="mt-3 grid gap-1 text-sm font-medium text-red-900">
+            현재 비밀번호
+            <input
+              name="stepUpPassword"
+              type="password"
+              autoComplete="current-password"
+              className="h-10 rounded-md border border-red-200 bg-white px-3 text-sm text-neutral-900"
+            />
+          </label>
+        </section>
         <div className="flex items-end gap-2 md:col-span-2">
           <button className="h-10 rounded-md bg-neutral-950 px-4 text-sm font-medium text-white">
             저장

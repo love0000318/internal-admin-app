@@ -43,6 +43,7 @@ describe("foundation contracts", () => {
       "/organization/invitations",
       "/admin/profile-change-requests",
       "/admin/audit-logs",
+      "/admin/security",
       "/admin/reports",
       "/admin/jobs",
       "/forbidden",
@@ -70,6 +71,7 @@ describe("foundation contracts", () => {
       "/admin/leaves/settings",
       "/organization",
       "/admin/audit-logs",
+      "/admin/security",
       "/admin/reports",
       "/admin/jobs",
     ]);

@@ -66,3 +66,14 @@
 - shortToken 원문은 생성 직후 한 번만 표시된다.
 - 분실 시 기존 초대를 재발급해 새 단축 URL과 새 가입 인증 코드를 생성한다.
 - 외부 URL 단축 서비스는 사용하지 않는다.
+
+## 외부 캘린더 구독 관련 명령
+
+별도 운영 script는 없다. DB 변경이 있으므로 배포 전 다음을 실행한다.
+
+```powershell
+corepack pnpm db:generate
+corepack pnpm db:deploy
+```
+
+운영 DB에서는 `migrate reset`을 사용하지 않는다.

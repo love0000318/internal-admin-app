@@ -58,3 +58,7 @@
 ## 추가 운영 문서
 
 - [휴가 자동 확정 가이드](../leave-auto-confirm-guide.md)
+
+## 외부 연동 문서
+
+- [외부 캘린더 연동 가이드](../external-calendar-integration-guide.md)

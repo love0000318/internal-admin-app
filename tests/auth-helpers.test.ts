@@ -31,6 +31,11 @@ import {
 import { MockIdentityVerificationProvider } from "@/lib/auth/identity-verification-provider";
 import { normalizePhoneNumber } from "@/lib/auth/phone";
 import {
+  hashLoginIdentifier,
+  isLoginFailureLimitReached,
+  LOGIN_ATTEMPT_MAX_FAILURES,
+} from "@/lib/auth/login-attempts";
+import {
   createSessionToken,
   getRememberMeSessionTtlDays,
   getSessionCookieOptions,
@@ -274,6 +279,17 @@ describe("auth helpers", () => {
 
     expect(token).not.toEqual(tokenHash);
     expect(tokenHash).toHaveLength(64);
+  });
+
+  it("hashes login identifiers and blocks after the configured failure limit", () => {
+    const identifierHash = hashLoginIdentifier("01012345678");
+
+    expect(identifierHash).toHaveLength(64);
+    expect(identifierHash).not.toContain("01012345678");
+    expect(isLoginFailureLimitReached(LOGIN_ATTEMPT_MAX_FAILURES - 1)).toBe(
+      false,
+    );
+    expect(isLoginFailureLimitReached(LOGIN_ATTEMPT_MAX_FAILURES)).toBe(true);
   });
 
   it("detects expired sessions", () => {

@@ -52,3 +52,12 @@
 - iCal feed
 - 캘린더에서 휴가 요청 생성
 - 캘린더에서 승인/반려 처리
+## 외부 캘린더 ICS 구독
+
+- 직원은 `/leaves/calendar/settings`에서 외부 캘린더 구독 링크를 생성할 수 있다.
+- 제공 URL은 `/api/calendar/ical?token=...` 형식의 표준 iCal/ICS 피드다.
+- Google Calendar, Apple Calendar, Samsung Calendar에는 읽기 전용 구독 캘린더로 추가한다.
+- ICS에는 승인 완료 휴가만 포함하며 PENDING/REJECTED/CANCELLED/WITHDRAWN 요청은 제외한다.
+- 휴가 사유, 증명자료, 반려 사유, 승인 코멘트, HR 민감정보는 포함하지 않는다.
+- 내부 휴가 캘린더와 같은 공개 범위 정책을 적용한다. `PUBLIC_AS_LEAVE`는 “휴가”로만 표시하고, `PRIVATE_TO_APPROVERS`는 권한 없는 팀 캘린더에 표시하지 않는다.
+- 구독 링크 token 원문은 생성 직후 한 번만 표시하고 DB에는 hash만 저장한다. 유출이 의심되면 재발급 또는 비활성화한다.

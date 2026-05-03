@@ -11,6 +11,7 @@ import {
 } from "@/lib/reports/definitions";
 import { assertCanExportReport } from "@/lib/reports/permissions";
 import { sanitizeAuditMetadata } from "@/lib/security/sanitize";
+import { assertRecentStepUp } from "@/lib/security/step-up";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,31 @@ export async function GET(request: Request) {
     assertCanExportReport(actor, "REPORT");
   } catch {
     return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
+  }
+
+  try {
+    await assertRecentStepUp({
+      actorUserId: actor.id,
+      purpose: "REPORT_EXPORT",
+    });
+  } catch {
+    await getPrisma().auditLog.create({
+      data: {
+        actorId: actor.id,
+        actorUserId: actor.id,
+        targetUserId: actor.id,
+        action: "REPORT_EXPORT_STEP_UP_REQUIRED",
+        targetType: "REPORT",
+        metadata: sanitizeAuditMetadata({
+          reasonCode: "STEP_UP_REQUIRED",
+        }),
+      },
+    });
+
+    return NextResponse.json(
+      { ok: false, error: "step-up-required" },
+      { status: 403 },
+    );
   }
 
   const url = new URL(request.url);

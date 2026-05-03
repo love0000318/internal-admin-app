@@ -224,3 +224,47 @@ HR import row 전체, 주소 전체, 가족 정보 원문, fileKey/private path,
 휴가 반려 사유 원문과 증명자료 파일명/내용은 기본 이메일에 넣지 않고 시스템 링크로 확인하게 합니다. 초대 이메일은 직원 가입을 위해 초대 URL과 1회용 가입 인증 코드를 포함할 수 있으나, 이 원문 값은 AuditLog, Notification metadata, JobRun, CSV export에 저장하지 않습니다.
 
 production에서 EMAIL_PROVIDER=console은 허용하지 않습니다. RESEND_API_KEY와 SLACK_WEBHOOK_URL은 Vercel 환경변수로만 관리합니다.
+## 외부 캘린더 구독 보안
+
+- 캘린더 구독 URL은 로그인 없이 외부 캘린더 앱이 읽는 secret URL이다.
+- calendar subscription token 원문은 DB, AuditLog, CSV export에 저장하지 않고 hash만 저장한다.
+- ICS에는 승인 완료 휴가의 최소 정보만 포함한다.
+- 휴가 사유, 증명자료, 반려 사유, 승인 코멘트, HR 민감정보는 포함하지 않는다.
+- 공개 범위가 `PUBLIC_AS_LEAVE`인 휴가는 실제 유형 대신 “휴가”로 표시한다.
+- `PRIVATE_TO_APPROVERS` 휴가는 권한 없는 팀 캘린더 구독에는 포함하지 않는다.
+- 링크 유출이 의심되면 즉시 비활성화하거나 재발급한다.
+## 3차 보안 강화: step-up 재인증
+
+- 역할 변경, OWNER 권한 부여/해제, 직원 비활성화는 현재 OWNER 비밀번호 재입력을 요구한다.
+- 성공/실패는 AuditLog에 기록한다.
+- 마지막 ACTIVE OWNER 보호 규칙은 유지한다.
+- OWNER 권한 부여 2인 승인은 후속 권장 사항이다.
+
+## 내부자/운영자 위험 통제
+
+앱 코드만으로 GitHub main, Vercel owner, Neon DB admin 권한을 가진 내부자 위험을 완전히 제거할 수 없다. 운영 권한 분리와 감사 절차는 `docs/production-access-control-guide.md` 기준으로 관리한다.
+# 세션·토큰·초대 보안 운영 메모
+
+- 세션, 초대, 단축 초대 URL, 가입 인증 코드는 원문을 DB에 저장하지 않고 hash만 저장한다.
+- 로그인 실패는 해시된 identifier 기준으로 최근 15분 5회 이상이면 일시 차단한다.
+- 자동 로그인 유지 세션은 `REMEMBER_ME_SESSION_EXPIRES_IN_DAYS`를 따르며 로그아웃 시 즉시 폐기된다.
+- production에서는 mock/dev 인증, quick login, hardcoded admin login을 허용하지 않는다.
+- token/hash/secret/passwordHash/codeHash는 화면, API 응답, CSV, AuditLog에 노출하지 않는다.
+- 자세한 변경 내역은 [security-token-session-hardening-report.md](./security-token-session-hardening-report.md)를 참고한다.
+
+## OWNER 권한과 Step-up 재인증
+
+- OWNER 권한 부여/제거, 직원 role 변경, 직원 비활성화, 초대 재발급, CSV export는 고위험 작업으로 분류한다.
+- 고위험 작업은 현재 비밀번호를 다시 확인하는 Step-up 재인증이 필요하다.
+- 마지막 ACTIVE OWNER는 권한 제거 또는 비활성화할 수 없다.
+- OWNER는 자기 자신의 OWNER 권한을 제거하거나 자기 계정을 비활성화할 수 없다.
+- 앱 코드로 막을 수 없는 production DB/Vercel/GitHub 관리자 권한 위험은 [production-access-control-guide.md](./production-access-control-guide.md)를 따른다.
+## AuditLog 및 보안 대시보드
+
+- AuditLog는 생성 후 앱 UI에서 수정하거나 삭제하지 않습니다.
+- AuditLog metadata는 저장 직전에 sanitize되며 password, token, tokenHash, codeHash, secret, fileKey, private path는 `[REDACTED]` 처리됩니다.
+- AuditLog는 `category`와 `severity`로 분류됩니다.
+- OWNER만 `/admin/audit-logs`와 `/admin/security`에 접근할 수 있습니다.
+- AuditLog CSV export는 OWNER 권한과 Step-up 재인증이 필요합니다.
+- `CRITICAL`/`HIGH` 이벤트는 보안 대시보드에서 우선 확인합니다.
+- production DB, Vercel 환경변수, GitHub 배포 권한을 가진 내부자의 모든 행위는 앱 코드만으로 완전히 막을 수 없으므로 `docs/production-access-control-guide.md`의 운영 통제를 함께 적용합니다.

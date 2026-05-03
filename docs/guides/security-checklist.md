@@ -1,71 +1,66 @@
 # 보안 운영 체크리스트
 
-운영 시작 전과 정기 점검 시 확인한다.
+## 매일 확인
 
-## Secret과 환경
+- [ ] `/admin/security`에서 최근 CRITICAL AuditLog를 확인한다.
+- [ ] `/admin/security`에서 최근 HIGH AuditLog를 확인한다.
+- [ ] 반복 `LOGIN_BLOCKED` 또는 `UNAUTHORIZED_ACCESS_BLOCKED` 이벤트가 있는지 확인한다.
+- [ ] 실패한 JobRun이 있는지 확인한다.
 
-- [ ] `SESSION_SECRET`이 충분히 길고 예측 불가능하다.
-- [ ] `ENCRYPTION_SECRET`이 충분히 길고 `SESSION_SECRET`과 다르다.
-- [ ] cron endpoint를 사용할 경우 `CRON_SECRET`이 설정되어 있다.
-- [ ] production에서 mock identity provider와 mock verified flow가 차단된다.
-- [ ] `pnpm preflight`가 통과한다.
+## 매주 확인
 
-## 민감정보
+- [ ] `OWNER_ROLE_GRANTED`, `OWNER_ROLE_REVOKED` 이벤트를 확인한다.
+- [ ] `REPORT_EXPORTED`, `AUDIT_LOG_EXPORTED` 이벤트를 확인한다.
+- [ ] `INVITATION_REISSUED` 계열 이벤트를 확인한다.
+- [ ] `LEAVE_ATTACHMENT_DOWNLOADED` 이벤트를 확인한다.
+- [ ] Vercel environment variable 접근 권한자를 확인한다.
+- [ ] Neon DB admin 접근 권한자를 확인한다.
+- [ ] GitHub admin/main push 권한자를 확인한다.
 
-- [ ] 주민등록번호/외국인등록번호는 평문 저장하지 않는다.
-- [ ] 가족 주민등록번호는 평문 저장하지 않는다.
-- [ ] 계좌번호는 평문 저장하지 않는다.
-- [ ] 화면에는 기본 마스킹된 값만 표시한다.
-- [ ] HR import 원본은 public/git에 넣지 않는다.
+## 직원 입사 시
 
-## AuditLog/Notification/JobRun
+- [ ] 필요한 역할만 부여한다.
+- [ ] OWNER 권한은 2인 승인 절차를 거친다.
+- [ ] OWNER 권한 부여는 Step-up 재인증 후 수행한다.
+- [ ] 초대 링크와 가입 인증 코드를 안전한 채널로 전달한다.
 
-- [ ] AuditLog metadata에 민감정보 원문이 없다.
-- [ ] AuditLog에 token/tokenHash/session/fileKey/private path가 없다.
-- [ ] Notification metadata에 민감정보가 없다.
-- [ ] JobRun resultSummary/errorSummary는 집계 중심이다.
-- [ ] CSV 내용 전체를 AuditLog에 저장하지 않는다.
+## 직원 퇴사 시
 
-## CSV export
+- [ ] 앱 계정을 `DEACTIVATED` 처리한다.
+- [ ] 활성 세션을 폐기한다.
+- [ ] GitHub 접근권한을 제거한다.
+- [ ] Vercel team 접근권한을 제거한다.
+- [ ] Neon DB 접근권한을 제거한다.
+- [ ] 공유된 secret이 있었으면 rotation한다.
 
-- [ ] OWNER만 export 가능하다.
-- [ ] 주민등록번호/계좌번호 원문이 없다.
-- [ ] token/tokenHash/passwordHash/session token이 없다.
-- [ ] fileKey/private path/다운로드 URL이 없다.
-- [ ] CSV injection 방어가 적용된다.
-- [ ] UTF-8 BOM과 CSV escaping이 적용된다.
+## 외주 개발자 투입 시
 
-## 첨부파일
+- [ ] GitHub 권한은 필요한 repository와 기간으로 제한한다.
+- [ ] production Vercel/Neon 권한은 기본적으로 부여하지 않는다.
+- [ ] secret을 개인 메신저로 공유하지 않는다.
+- [ ] 작업 종료 즉시 접근권한을 회수한다.
 
-- [ ] 첨부파일은 public 폴더에 저장하지 않는다.
-- [ ] `PRIVATE_UPLOAD_DIR`가 public 하위가 아니다.
-- [ ] 다운로드 route에서 인증과 권한을 검증한다.
-- [ ] OWNER/담당 LEAD/요청자 외 접근이 차단된다.
-- [ ] MIME type과 파일 크기를 검증한다.
-- [ ] 원본 파일 내용은 log나 AuditLog에 저장하지 않는다.
+## 배포 전
 
-## 권한
+- [ ] `pnpm lint`를 통과한다.
+- [ ] `pnpm typecheck`를 통과한다.
+- [ ] `pnpm test`를 통과한다.
+- [ ] `pnpm build`를 통과한다.
+- [ ] DB 변경이 있으면 운영 DB에는 `prisma migrate deploy`만 사용한다.
+- [ ] 운영 DB에서 `migrate reset`을 사용하지 않는다.
 
-- [ ] MANAGER는 타인 HR 정보에 접근할 수 없다.
-- [ ] MANAGER는 타인 첨부파일에 접근할 수 없다.
-- [ ] MANAGER는 관리자 리포트/export에 접근할 수 없다.
-- [ ] LEAD는 담당 범위 밖 휴가/첨부를 처리할 수 없다.
-- [ ] LEAD는 자기 휴가를 승인/반려할 수 없다.
-- [ ] EXTERNAL_PARTNER는 내부 기능에 접근할 수 없다.
-- [ ] 모든 server action/API가 서버 권한 검증을 수행한다.
+## 배포 후
 
-## Token/session
+- [ ] OWNER 로그인 가능 여부를 확인한다.
+- [ ] 직원 초대/가입 가능 여부를 확인한다.
+- [ ] 휴가 요청/승인 가능 여부를 확인한다.
+- [ ] `/admin/security`에서 신규 보안 이벤트를 확인한다.
+- [ ] `/admin/audit-logs`에서 민감정보가 노출되지 않는지 샘플 확인한다.
 
-- [ ] invitation token 원문은 DB에 없다.
-- [ ] session token 원문은 DB에 없다.
-- [ ] cookie는 httpOnly다.
-- [ ] production cookie는 secure다.
-- [ ] sameSite lax 이상이다.
-- [ ] logout 시 session이 revoke된다.
+## 보안 사고 시
 
-## 정기 점검
-
-- [ ] `pnpm leave:ledger:validate`를 실행한다.
-- [ ] 주요 Job dry-run을 실행한다.
-- [ ] `/admin/audit-logs`에서 민감 원문 노출 여부를 표본 점검한다.
-- [ ] `/admin/jobs`에서 실패 Job을 확인한다.
+- [ ] 영향 계정의 세션을 폐기한다.
+- [ ] 관련 secret을 rotation한다.
+- [ ] GitHub/Vercel/Neon 접근권한을 점검한다.
+- [ ] AuditLog와 Vercel/Neon/GitHub 로그를 함께 확인한다.
+- [ ] 사고 조치 내역을 별도 운영 기록으로 남긴다.

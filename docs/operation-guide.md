@@ -315,3 +315,17 @@ pnpm jobs:expire-annual-leaves -- --dry-run
 Slack은 기본적으로 Job 실패 같은 운영 경고에만 사용합니다. 휴가 요청 Slack 알림은 SLACK_NOTIFY_LEAVE_REQUESTS=true일 때만 보냅니다.
 
 자세한 설정과 검수 절차는 docs/external-notifications-guide.md를 따릅니다.
+## 외부 캘린더 구독 운영
+
+- 외부 캘린더 구독은 `/leaves/calendar/settings`에서 사용자별로 생성한다.
+- 피드 URL은 `/api/calendar/ical?token=...`이며 Google Calendar, Apple Calendar, Samsung Calendar에서 읽기 전용으로 구독한다.
+- 승인 완료 휴가만 표시되며 휴가 사유, 증명자료, 반려 사유, HR 민감정보는 내보내지 않는다.
+- 구독 URL 자체가 secret이므로 외부 공유를 금지한다.
+- 링크 유출 또는 담당 범위 변경이 있으면 기존 구독을 비활성화하고 새 링크를 재발급한다.
+- Samsung Calendar에서 URL 구독 메뉴가 보이지 않으면 Google Calendar 웹에 URL을 추가한 뒤 삼성 캘린더 앱에서 Google 계정 동기화를 사용한다.
+## 고위험 관리자 작업 운영
+
+- 직원 역할 변경, OWNER 권한 부여/해제, 직원 비활성화는 현재 OWNER 비밀번호 재입력이 필요하다.
+- 실패한 재인증은 AuditLog에 남는다.
+- 마지막 OWNER 보호 규칙으로 마지막 ACTIVE OWNER를 제거하거나 비활성화할 수 없다.
+- production DB 직접 수정으로 권한을 바꾸지 않는다. 비상 상황은 별도 사고 대응 절차를 따른다.

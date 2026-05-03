@@ -1,9 +1,12 @@
-import { sanitizeSecurityValue } from "@/lib/security/sanitize";
+import {
+  sanitizeAuditMetadata,
+  stringifySanitizedAuditMetadata,
+} from "@/lib/audit/sanitize-audit-metadata";
 
 export function redactAuditValue(value: unknown): unknown {
-  return sanitizeSecurityValue(value);
+  return sanitizeAuditMetadata(value);
 }
 
 export function stringifyRedactedAuditValue(value: unknown) {
-  return JSON.stringify(redactAuditValue(value), null, 2);
+  return stringifySanitizedAuditMetadata(value);
 }

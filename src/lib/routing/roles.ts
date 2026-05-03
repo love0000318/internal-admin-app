@@ -23,7 +23,7 @@ export const IMPLEMENTED_ROUTE_POLICIES: RoutePolicy[] = [
   },
   {
     href: "/leaves/me",
-    label: "휴가 보유 현황 및 요청",
+    label: "내 휴가",
     roles: ["OWNER", "LEAD", "MANAGER"],
     mvpStatus: "included",
   },
@@ -35,7 +35,7 @@ export const IMPLEMENTED_ROUTE_POLICIES: RoutePolicy[] = [
   },
   {
     href: "/notifications",
-    label: "알림",
+    label: "알림센터",
     roles: ["OWNER", "LEAD", "MANAGER"],
     mvpStatus: "included",
   },
@@ -55,7 +55,7 @@ export const IMPLEMENTED_ROUTE_POLICIES: RoutePolicy[] = [
   },
   {
     href: "/leaves/approvals",
-    label: "휴가 승인 요청 사항",
+    label: "휴가 승인",
     roles: ["OWNER", "LEAD"],
     mvpStatus: "included",
   },
@@ -68,7 +68,7 @@ export const IMPLEMENTED_ROUTE_POLICIES: RoutePolicy[] = [
   },
   {
     href: "/admin/leaves/settings",
-    label: "휴가 관리 설정",
+    label: "휴가 관리",
     roles: ["OWNER"],
     mvpStatus: "included",
   },
@@ -81,7 +81,7 @@ export const IMPLEMENTED_ROUTE_POLICIES: RoutePolicy[] = [
   },
   {
     href: "/admin/leaves/approval-policies",
-    label: "휴가 승인 정책",
+    label: "승인 정책",
     roles: ["OWNER"],
     mvpStatus: "included",
     showInNav: false,
@@ -95,7 +95,7 @@ export const IMPLEMENTED_ROUTE_POLICIES: RoutePolicy[] = [
   },
   {
     href: "/admin/leaves/birthday-policy",
-    label: "생일 반차 자동 지급 설정",
+    label: "생일 반차 설정",
     roles: ["OWNER"],
     mvpStatus: "included",
     showInNav: false,
@@ -123,27 +123,27 @@ export const IMPLEMENTED_ROUTE_POLICIES: RoutePolicy[] = [
   },
   {
     href: "/admin/leaves/balances",
-    label: "직원별 휴가 보유 현황",
+    label: "직원별 휴가 현황",
     roles: ["OWNER"],
     mvpStatus: "included",
     showInNav: false,
   },
   {
     href: "/admin/leaves/history",
-    label: "휴가 장부 이력",
+    label: "휴가 이력",
     roles: ["OWNER"],
     mvpStatus: "included",
     showInNav: false,
   },
   {
     href: "/organization",
-    label: "조직 구성 및 직원 초대",
+    label: "조직 관리",
     roles: ["OWNER"],
     mvpStatus: "included",
   },
   {
     href: "/organization/teams",
-    label: "조직/팀 관리",
+    label: "팀 관리",
     roles: ["OWNER"],
     mvpStatus: "included",
     showInNav: false,
@@ -176,6 +176,12 @@ export const IMPLEMENTED_ROUTE_POLICIES: RoutePolicy[] = [
     mvpStatus: "included",
   },
   {
+    href: "/admin/security",
+    label: "보안 대시보드",
+    roles: ["OWNER"],
+    mvpStatus: "included",
+  },
+  {
     href: "/admin/reports",
     label: "관리자 리포트",
     roles: ["OWNER"],
@@ -183,7 +189,7 @@ export const IMPLEMENTED_ROUTE_POLICIES: RoutePolicy[] = [
   },
   {
     href: "/admin/jobs",
-    label: "자동 작업 관리",
+    label: "자동 작업",
     roles: ["OWNER"],
     mvpStatus: "included",
   },
@@ -196,14 +202,14 @@ export const IMPLEMENTED_ROUTE_POLICIES: RoutePolicy[] = [
   },
   {
     href: "/leaves/my",
-    label: "휴가 보유 현황 및 요청",
+    label: "내 휴가",
     roles: ["OWNER", "LEAD", "MANAGER"],
     mvpStatus: "included",
     showInNav: false,
   },
   {
     href: "/admin/leave-settings",
-    label: "휴가 관리 설정",
+    label: "휴가 설정",
     roles: ["OWNER"],
     mvpStatus: "included",
     showInNav: false,
@@ -213,31 +219,31 @@ export const IMPLEMENTED_ROUTE_POLICIES: RoutePolicy[] = [
 export const FUTURE_ROUTE_POLICIES: RoutePolicy[] = [
   {
     href: "/tasks",
-    label: "업무 Task 관리",
+    label: "업무 Task",
     roles: ["OWNER", "LEAD", "MANAGER"],
     mvpStatus: "future",
   },
   {
     href: "/meeting-notes",
-    label: "회의록/회의 일정 관리",
+    label: "회의록",
     roles: ["OWNER", "LEAD", "MANAGER"],
     mvpStatus: "future",
   },
   {
     href: "/performance",
-    label: "업무 성과 관리",
+    label: "성과 관리",
     roles: ["OWNER", "LEAD"],
     mvpStatus: "future",
   },
   {
     href: "/projects/issues",
-    label: "프로젝트 이슈 관리",
+    label: "프로젝트 이슈",
     roles: ["OWNER", "LEAD", "MANAGER"],
     mvpStatus: "future",
   },
   {
     href: "/external/facilities",
-    label: "외부 스포츠 시설 운영자 전용 페이지",
+    label: "외부 시설 운영자 페이지",
     roles: ["EXTERNAL_PARTNER"],
     mvpStatus: "future",
   },

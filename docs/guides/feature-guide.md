@@ -926,3 +926,31 @@ production console provider 차단, 민감정보 미포함, 외부 발송 실패
 
 ### 남은 TODO
 카카오 알림톡, 재시도 queue, 관리자 알림 설정 UI.
+## 외부 캘린더 ICS 구독
+
+### 목적
+Google Calendar, Apple Calendar, Samsung Calendar에서 사내 휴가 일정을 읽기 전용으로 확인한다.
+
+### 사용자
+OWNER, LEAD, MANAGER. EXTERNAL_PARTNER는 생성할 수 없다.
+
+### 주요 화면
+`/leaves/calendar/settings`
+
+### 주요 데이터 모델
+`CalendarSubscriptionToken`, `CalendarSubscriptionScope`
+
+### 주요 동작
+구독 token을 생성하고 `/api/calendar/ical?token=...`로 ICS를 제공한다. 승인 완료 휴가만 포함한다.
+
+### 권한
+MANAGER는 ME/TEAM, LEAD는 ME/TEAM/MANAGED_TEAMS, OWNER는 ME/TEAM/MANAGED_TEAMS/ALL_COMPANY 범위를 생성할 수 있다.
+
+### AuditLog
+`CALENDAR_SUBSCRIPTION_CREATED`, `CALENDAR_SUBSCRIPTION_REVOKED`, `CALENDAR_SUBSCRIPTION_REGENERATED`
+
+### 테스트 포인트
+raw token 미저장, APPROVED만 출력, 공개 범위 적용, 민감정보 미포함, revoke 후 접근 실패.
+
+### 남은 TODO
+Google Calendar OAuth 양방향 동기화는 후속 단계에서 검토한다.

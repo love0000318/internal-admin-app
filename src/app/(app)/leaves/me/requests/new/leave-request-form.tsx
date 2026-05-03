@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 
 import { createLeaveRequest } from "@/app/(app)/leaves/actions";
+import { Badge, buttonClassName, Card } from "@/components/design-system/primitives";
 import { formatLeaveDays, LEAVE_TYPE_LABELS } from "@/lib/leave/labels";
 import { deserializeAllowedUnits } from "@/lib/leave/leave-types";
 import type { LeavePolicy, LeaveType } from "@/lib/leave/types";
@@ -43,10 +44,10 @@ const unitLabels = {
 };
 
 const attachmentPolicyLabels: Record<AttachmentPolicy, string> = {
-  NOT_REQUIRED: "필요 없음",
+  NOT_REQUIRED: "불필요",
   OPTIONAL: "선택 제출",
   REQUIRED_BEFORE_REQUEST: "요청 전 필수",
-  REQUIRED_AFTER_REQUEST: "요청 후 제출 필요",
+  REQUIRED_AFTER_REQUEST: "요청 후 제출",
 };
 
 function formatGrantAmount(amount: number, unit: "DAY" | "HOUR" | "MINUTE") {
@@ -61,19 +62,34 @@ function AttachmentInput({
   description?: string | null;
 }) {
   return (
-    <label className="grid gap-1 text-sm font-medium">
+    <label className="grid gap-1 text-sm font-medium text-slate-800">
       증명자료 파일
       <input
         name="attachmentFile"
         type="file"
         accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx,application/pdf,image/jpeg,image/png,image/webp,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        className="w-full min-w-0 rounded-md border border-neutral-300 px-3 py-2 text-sm font-normal"
+        className="w-full min-w-0 rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-slate-700"
         required={required}
       />
-      <span className="break-keep text-xs font-normal leading-relaxed text-neutral-500">
+      <span className="break-keep text-xs font-normal leading-relaxed text-slate-500">
         PDF, 이미지, Word 문서를 10MB 이하로 제출할 수 있습니다.
         {description ? ` ${description}` : ""}
       </span>
+    </label>
+  );
+}
+
+function FormField({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="grid gap-1 text-sm font-medium text-slate-800">
+      <span className="whitespace-nowrap break-keep">{label}</span>
+      {children}
     </label>
   );
 }
@@ -110,241 +126,266 @@ export function LeaveRequestForm({
 
   return (
     <div className="mt-6 grid gap-6">
-      <form
-        action={createLeaveRequest}
-        className="grid min-w-0 gap-4 rounded-lg border border-neutral-200 bg-white p-4 shadow-sm sm:p-5"
-      >
-        <div>
-          <h2 className="text-base font-semibold">연차/기본 휴가 요청</h2>
-          <p className="mt-1 text-sm text-neutral-500">
-            연차, 반차, 예비군, 병가, 경조사 휴가를 요청합니다.
-          </p>
-        </div>
-        <div className="grid min-w-0 gap-3 md:grid-cols-2">
-          <label className="grid gap-1 text-sm font-medium">
-            휴가 유형
-            <select
-              name="type"
-              value={type}
-              onChange={(event) => {
-                setType(event.target.value as LeaveType);
-                if (event.target.value === "HALF_DAY") {
-                  setEndDate(startDate);
-                }
-              }}
-              className="h-11 w-full min-w-0 rounded-md border border-neutral-300 px-3 text-base font-normal sm:text-sm"
-              required
-            >
-              {LEAVE_TYPES.map((leaveType) => (
-                <option
-                  key={leaveType}
-                  value={leaveType}
-                  disabled={!policies.find((item) => item.type === leaveType)?.isEnabled}
-                >
-                  {LEAVE_TYPE_LABELS[leaveType]}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="break-keep rounded-md bg-neutral-50 px-3 py-2 text-sm leading-relaxed text-neutral-600">
-            <p>
-              연차 차감:{" "}
+      <Card className="p-0">
+        <form action={createLeaveRequest} className="grid min-w-0 gap-5 p-4 sm:p-5">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-950">
+                기본 휴가 요청
+              </h2>
+              <p className="mt-1 break-keep text-sm leading-relaxed text-slate-500">
+                연차, 반차, 예비군, 병가, 경조사 휴가를 신청합니다.
+              </p>
+            </div>
+            <Badge tone={(policy?.deductsAnnualBalance ?? policy?.deductsAnnual) ? "warning" : "default"}>
               {(policy?.deductsAnnualBalance ?? policy?.deductsAnnual)
-                ? "예"
-                : "아니오"}
-            </p>
-            <p>증명자료: {legacyAttachmentRequired ? "필요" : "필요 없음"}</p>
-            {isHalfDay ? <p>요청 일수: {formatLeaveDays(0.5)}</p> : null}
+                ? "연차 차감"
+                : "연차 미차감"}
+            </Badge>
           </div>
-        </div>
 
-        <div className="grid min-w-0 gap-3 md:grid-cols-2">
-          <label className="grid gap-1 text-sm font-medium">
-            시작일
-            <input
-              name="startDate"
-              type="date"
-              value={startDate}
-              onChange={(event) => {
-                setStartDate(event.target.value);
-                if (isHalfDay) {
-                  setEndDate(event.target.value);
-                }
-              }}
-              className="h-11 w-full min-w-0 rounded-md border border-neutral-300 px-3 text-base font-normal sm:text-sm"
-              required
-            />
-          </label>
-          <label className="grid gap-1 text-sm font-medium">
-            종료일
-            <input
-              name="endDate"
-              type="date"
-              value={isHalfDay ? startDate : endDate}
-              onChange={(event) => setEndDate(event.target.value)}
-              disabled={isHalfDay}
-              className="h-11 w-full min-w-0 rounded-md border border-neutral-300 px-3 text-base font-normal disabled:bg-neutral-100 sm:text-sm"
-              required
-            />
-          </label>
-        </div>
-
-        {isHalfDay ? (
-          <label className="grid gap-1 text-sm font-medium">
-            반차 구분
-            <select
-              name="halfDayPeriod"
-              className="h-11 w-full min-w-0 rounded-md border border-neutral-300 px-3 text-base font-normal sm:text-sm"
-              required
-            >
-              <option value="">선택</option>
-              <option value="AM">오전</option>
-              <option value="PM">오후</option>
-            </select>
-          </label>
-        ) : (
-          <input name="halfDayPeriod" type="hidden" value="" />
-        )}
-
-        <label className="grid gap-1 text-sm font-medium">
-          사유
-          <textarea
-            name="reason"
-            rows={4}
-            className="w-full min-w-0 rounded-md border border-neutral-300 px-3 py-2 text-base font-normal sm:text-sm"
-          />
-        </label>
-
-        <AttachmentInput required={legacyAttachmentRequired} />
-
-        <button className="h-11 w-full rounded-md bg-neutral-950 px-4 text-sm font-medium text-white md:w-40">
-          요청 제출
-        </button>
-      </form>
-
-      <form
-        action={createLeaveRequest}
-        className="grid min-w-0 gap-4 rounded-lg border border-neutral-200 bg-white p-4 shadow-sm sm:p-5"
-      >
-        <input name="requestKind" type="hidden" value="CUSTOM_GRANT" />
-        <div>
-          <h2 className="text-base font-semibold">맞춤휴가 요청</h2>
-          <p className="mt-1 text-sm text-neutral-500">
-            회사가 별도로 지급한 맞춤휴가를 사용합니다. 시간/분 단위 요청은 다음 단계에서 제공합니다.
-          </p>
-        </div>
-
-        {requestableGrants.length === 0 ? (
-          <p className="rounded-md bg-neutral-50 px-3 py-4 text-sm text-neutral-500">
-            요청 가능한 맞춤휴가가 없습니다.
-          </p>
-        ) : (
-          <>
-            <label className="grid gap-1 text-sm font-medium">
-              지급받은 맞춤휴가
+          <div className="grid min-w-0 gap-4 md:grid-cols-2">
+            <FormField label="휴가 유형">
               <select
-                name="leaveGrantId"
-                value={selectedGrantId}
-                onChange={(event) => setSelectedGrantId(event.target.value)}
-                className="h-11 w-full min-w-0 rounded-md border border-neutral-300 px-3 text-base font-normal sm:text-sm"
+                name="type"
+                value={type}
+                onChange={(event) => {
+                  setType(event.target.value as LeaveType);
+                  if (event.target.value === "HALF_DAY") {
+                    setEndDate(startDate);
+                  }
+                }}
+                className="h-11 w-full min-w-0 rounded-lg border border-slate-300 px-3 text-base font-normal sm:text-sm"
                 required
               >
-                {requestableGrants.map((grant) => (
-                  <option key={grant.id} value={grant.id}>
-                    {grant.leaveType.name} - 잔여 {formatGrantAmount(grant.remainingAmount, grant.unit)}
+                {LEAVE_TYPES.map((leaveType) => (
+                  <option
+                    key={leaveType}
+                    value={leaveType}
+                    disabled={
+                      !policies.find((item) => item.type === leaveType)?.isEnabled
+                    }
+                  >
+                    {LEAVE_TYPE_LABELS[leaveType]}
                   </option>
                 ))}
               </select>
-            </label>
+            </FormField>
 
-            {selectedGrant ? (
-              <div className="break-keep rounded-md bg-neutral-50 px-3 py-3 text-sm leading-relaxed text-neutral-600">
-                <p>사용 가능 기간: {selectedGrant.effectiveFrom} ~ {selectedGrant.expiresAt ?? "만료 없음"}</p>
-                <p>사용 가능 단위: {allowedUnits.join(", ")}</p>
-                <p>증명자료 정책: {attachmentPolicyLabels[selectedGrant.leaveType.attachmentPolicy]}</p>
-                {selectedGrant.leaveType.attachmentDescription ? (
-                  <p>{selectedGrant.leaveType.attachmentDescription}</p>
-                ) : null}
-              </div>
-            ) : null}
-
-            <label className="grid gap-1 text-sm font-medium">
-              사용 단위
-              <select
-                key={selectedGrantId}
-                name="usageUnit"
-                defaultValue={defaultUsageUnit}
-                className="h-11 w-full min-w-0 rounded-md border border-neutral-300 px-3 text-base font-normal sm:text-sm"
-                required
-              >
-                <option value="FULL_DAY" disabled={!allowedUnits.includes("FULL_DAY")}>
-                  하루
-                </option>
-                <option value="HALF_DAY" disabled={!allowedUnits.includes("HALF_DAY")}>
-                  반차
-                </option>
-                <option value="HOUR" disabled>
-                  시간 단위는 다음 단계에서 제공
-                </option>
-                <option value="MINUTE" disabled>
-                  분 단위는 다음 단계에서 제공
-                </option>
-              </select>
-            </label>
-
-            <div className="grid min-w-0 gap-3 md:grid-cols-2">
-              <label className="grid gap-1 text-sm font-medium">
-                시작일
-                <input
-                  name="startDate"
-                  type="date"
-                  className="h-11 w-full min-w-0 rounded-md border border-neutral-300 px-3 text-base font-normal sm:text-sm"
-                  required
-                />
-              </label>
-              <label className="grid gap-1 text-sm font-medium">
-                종료일
-                <input
-                  name="endDate"
-                  type="date"
-                  className="h-11 w-full min-w-0 rounded-md border border-neutral-300 px-3 text-base font-normal sm:text-sm"
-                  required
-                />
-              </label>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm leading-relaxed text-slate-600">
+              <p className="break-keep">
+                증명자료: {legacyAttachmentRequired ? "필수" : "불필요"}
+              </p>
+              {isHalfDay ? (
+                <p className="break-keep">예상 차감: {formatLeaveDays(0.5)}</p>
+              ) : (
+                <p className="break-keep">
+                  날짜 범위에 따라 영업일 기준으로 계산됩니다.
+                </p>
+              )}
             </div>
+          </div>
 
-            <label className="grid gap-1 text-sm font-medium">
-              반차 구분
+          <div className="grid min-w-0 gap-4 md:grid-cols-2">
+            <FormField label="시작일">
+              <input
+                name="startDate"
+                type="date"
+                value={startDate}
+                onChange={(event) => {
+                  setStartDate(event.target.value);
+                  if (isHalfDay) {
+                    setEndDate(event.target.value);
+                  }
+                }}
+                className="h-11 w-full min-w-0 rounded-lg border border-slate-300 px-3 text-base font-normal sm:text-sm"
+                required
+              />
+            </FormField>
+            <FormField label="종료일">
+              <input
+                name="endDate"
+                type="date"
+                value={isHalfDay ? startDate : endDate}
+                onChange={(event) => setEndDate(event.target.value)}
+                disabled={isHalfDay}
+                className="h-11 w-full min-w-0 rounded-lg border border-slate-300 px-3 text-base font-normal disabled:bg-slate-100 sm:text-sm"
+                required
+              />
+            </FormField>
+          </div>
+
+          {isHalfDay ? (
+            <FormField label="반차 구분">
               <select
                 name="halfDayPeriod"
-                className="h-11 w-full min-w-0 rounded-md border border-neutral-300 px-3 text-base font-normal sm:text-sm"
+                className="h-11 w-full min-w-0 rounded-lg border border-slate-300 px-3 text-base font-normal sm:text-sm"
+                required
               >
-                <option value="">하루 사용이면 선택하지 않음</option>
+                <option value="">선택</option>
                 <option value="AM">오전</option>
                 <option value="PM">오후</option>
               </select>
-            </label>
+            </FormField>
+          ) : (
+            <input name="halfDayPeriod" type="hidden" value="" />
+          )}
 
-            <label className="grid gap-1 text-sm font-medium">
-              사유
-              <textarea
-                name="reason"
-                rows={4}
-                className="w-full min-w-0 rounded-md border border-neutral-300 px-3 py-2 text-base font-normal sm:text-sm"
-              />
-            </label>
-
-            <AttachmentInput
-              required={customAttachmentRequired}
-              description={selectedGrant?.leaveType.attachmentDescription}
+          <FormField label="사유">
+            <textarea
+              name="reason"
+              rows={4}
+              className="w-full min-w-0 rounded-lg border border-slate-300 px-3 py-2 text-base font-normal sm:text-sm"
             />
+          </FormField>
 
-            <button className="h-11 w-full rounded-md bg-neutral-950 px-4 text-sm font-medium text-white md:w-40">
-              맞춤휴가 요청
-            </button>
-          </>
-        )}
-      </form>
+          <AttachmentInput required={legacyAttachmentRequired} />
+
+          <button className={buttonClassName({ className: "w-full sm:w-auto" })}>
+            휴가 요청 제출
+          </button>
+        </form>
+      </Card>
+
+      <Card className="p-0">
+        <form action={createLeaveRequest} className="grid min-w-0 gap-5 p-4 sm:p-5">
+          <input name="requestKind" type="hidden" value="CUSTOM_GRANT" />
+          <div>
+            <h2 className="text-lg font-semibold text-slate-950">
+              지급된 휴가 요청
+            </h2>
+            <p className="mt-1 break-keep text-sm leading-relaxed text-slate-500">
+              회사가 별도로 지급한 맞춤휴가와 생일 반차를 사용합니다.
+            </p>
+          </div>
+
+          {requestableGrants.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-5 text-sm text-slate-500">
+              요청 가능한 지급 휴가가 없습니다.
+            </p>
+          ) : (
+            <>
+              <FormField label="지급된 휴가">
+                <select
+                  name="leaveGrantId"
+                  value={selectedGrantId}
+                  onChange={(event) => setSelectedGrantId(event.target.value)}
+                  className="h-11 w-full min-w-0 rounded-lg border border-slate-300 px-3 text-base font-normal sm:text-sm"
+                  required
+                >
+                  {requestableGrants.map((grant) => (
+                    <option key={grant.id} value={grant.id}>
+                      {grant.leaveType.name} - 잔여{" "}
+                      {formatGrantAmount(grant.remainingAmount, grant.unit)}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+
+              {selectedGrant ? (
+                <div className="grid gap-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-3 text-sm leading-relaxed text-blue-900">
+                  <p className="break-keep">
+                    사용 가능 기간: {selectedGrant.effectiveFrom} ~{" "}
+                    {selectedGrant.expiresAt ?? "만료 없음"}
+                  </p>
+                  <p className="break-keep">
+                    사용 가능 단위: {allowedUnits.join(", ")}
+                  </p>
+                  <p className="break-keep">
+                    증명자료 정책:{" "}
+                    {
+                      attachmentPolicyLabels[
+                        selectedGrant.leaveType.attachmentPolicy
+                      ]
+                    }
+                  </p>
+                  {selectedGrant.leaveType.attachmentDescription ? (
+                    <p className="break-keep">
+                      {selectedGrant.leaveType.attachmentDescription}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+
+              <FormField label="사용 단위">
+                <select
+                  key={selectedGrantId}
+                  name="usageUnit"
+                  defaultValue={defaultUsageUnit}
+                  className="h-11 w-full min-w-0 rounded-lg border border-slate-300 px-3 text-base font-normal sm:text-sm"
+                  required
+                >
+                  <option
+                    value="FULL_DAY"
+                    disabled={!allowedUnits.includes("FULL_DAY")}
+                  >
+                    하루
+                  </option>
+                  <option
+                    value="HALF_DAY"
+                    disabled={!allowedUnits.includes("HALF_DAY")}
+                  >
+                    반차
+                  </option>
+                  <option value="HOUR" disabled>
+                    시간 단위는 다음 단계에서 제공
+                  </option>
+                  <option value="MINUTE" disabled>
+                    분 단위는 다음 단계에서 제공
+                  </option>
+                </select>
+              </FormField>
+
+              <div className="grid min-w-0 gap-4 md:grid-cols-2">
+                <FormField label="시작일">
+                  <input
+                    name="startDate"
+                    type="date"
+                    className="h-11 w-full min-w-0 rounded-lg border border-slate-300 px-3 text-base font-normal sm:text-sm"
+                    required
+                  />
+                </FormField>
+                <FormField label="종료일">
+                  <input
+                    name="endDate"
+                    type="date"
+                    className="h-11 w-full min-w-0 rounded-lg border border-slate-300 px-3 text-base font-normal sm:text-sm"
+                    required
+                  />
+                </FormField>
+              </div>
+
+              <FormField label="반차 구분">
+                <select
+                  name="halfDayPeriod"
+                  className="h-11 w-full min-w-0 rounded-lg border border-slate-300 px-3 text-base font-normal sm:text-sm"
+                >
+                  <option value="">하루 사용이면 선택하지 않음</option>
+                  <option value="AM">오전</option>
+                  <option value="PM">오후</option>
+                </select>
+              </FormField>
+
+              <FormField label="사유">
+                <textarea
+                  name="reason"
+                  rows={4}
+                  className="w-full min-w-0 rounded-lg border border-slate-300 px-3 py-2 text-base font-normal sm:text-sm"
+                />
+              </FormField>
+
+              <AttachmentInput
+                required={customAttachmentRequired}
+                description={selectedGrant?.leaveType.attachmentDescription}
+              />
+
+              <button className={buttonClassName({ className: "w-full sm:w-auto" })}>
+                지급 휴가 요청
+              </button>
+            </>
+          )}
+        </form>
+      </Card>
     </div>
   );
 }
