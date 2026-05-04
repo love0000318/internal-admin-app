@@ -862,3 +862,22 @@ https://interal-admin-app.vercel.app
 - [ ] dry-run 결과를 확인한 뒤에만 apply를 실행한다.
   - `pnpm jobs:fix-fiscal-year-leave-expirations -- --apply --year=2026`
 - [ ] JobRun/AuditLog에 실행 요약이 남고 직원 개인정보 원문이 출력되지 않는지 확인한다.
+## 휴가 import Step-up UI smoke test
+
+- [ ] OWNER로 `/admin/leaves/import/[batchId]` 미리보기 화면에 접근한다.
+- [ ] `Step-up 후 최종 반영` 버튼 클릭 시 비밀번호 재인증 모달이 표시된다.
+- [ ] 빈 비밀번호 제출 시 오류 메시지가 표시되고 반영되지 않는다.
+- [ ] 잘못된 비밀번호 제출 시 오류 메시지가 표시되고 반영되지 않는다.
+- [ ] 올바른 비밀번호 제출 후 import 최종 반영이 이어서 실행된다.
+- [ ] APPLIED 월별 batch의 `업로드 반영 취소` 버튼도 Step-up 모달을 거친다.
+- [ ] 잔여 차이 `차이값 보정` 버튼도 Step-up 모달을 거친다.
+- [ ] 서버 action 직접 호출 또는 Step-up 만료 상태에서는 반영/보정/취소가 실패한다.
+## 휴가 import 기준연도 smoke test
+
+- [ ] `/admin/leaves/import` 업로드 화면에서 기준연도 기본값이 현재 운영 연도로 표시된다.
+- [ ] 2026년 파일 업로드 시 미리보기의 잔여 연차 정합성 검증에 `기준연도 2026`이 표시된다.
+- [ ] 직원 입사일이 2019년이어도 batch 기준연도가 2019로 바뀌지 않는다.
+- [ ] 엑셀 기준연도와 업로드 화면 기준연도가 다르면 오류 또는 경고 row로 표시된다.
+- [ ] 화면 표시 기준연도와 LeaveLedger/잔여 계산에 사용되는 연도가 일치한다.
+- [ ] 기존 2019 PARSED batch는 dry-run에서 보정 가능 대상으로 표시된다.
+- [ ] 기존 2019 APPLIED batch는 기본 dry-run/apply 대상에서 제외되고 경고가 표시된다.

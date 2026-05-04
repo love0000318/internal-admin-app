@@ -223,3 +223,12 @@ pnpm jobs:fix-fiscal-year-leave-expirations -- --apply --year=2026
 ```
 
 `--dry-run`은 DB를 변경하지 않고 JobRun/AuditLog에 실행 요약만 남깁니다. `--apply`는 대상 `LeaveGrant.expiresAt`과 회계연도성 `LeaveLedger.expiresAt`만 지급 연도 12월 31일로 보정합니다. 운영 DB에서 `prisma migrate reset`은 절대 사용하지 않습니다.
+## 휴가 import 기준연도 운영 주의
+
+- 휴가 현황 엑셀 업로드의 기준연도는 직원 입사연도가 아니라 반영 대상 휴가 연도다.
+- 2026년 휴가 현황을 업로드할 때는 업로드 화면 기준연도를 2026으로 선택한다.
+- 엑셀에 기준연도 컬럼이 없으면 업로드 화면의 기준연도가 batch 기준연도로 저장된다.
+- 엑셀 기준연도와 업로드 화면 기준연도가 다르면 미리보기에서 오류 row를 확인하고 파일 또는 선택값을 수정한다.
+- 이미 잘못 생성된 미반영 batch는 `jobs:fix-leave-import-reference-year -- --dry-run --from=2019 --to=2026`으로 먼저 확인한 뒤 필요한 경우에만 apply한다.
+- 적용 명령은 `jobs:fix-leave-import-reference-year -- --apply --from=2019 --to=2026`이다.
+- APPLIED 또는 REVERSED batch는 기본 보정 대상에서 제외한다. 이미 반영된 batch는 역조정/취소 후 재업로드하는 절차를 따른다.

@@ -171,3 +171,24 @@ OWNER가 구성원별 휴가 보유, 사용, 승인대기, 잔여 현황이 담�
 - 업로드는 즉시 반영되지 않으며 OWNER가 미리보기와 검증 결과를 확인한 뒤 Step-up 재인증 후 반영합니다.
 - 반영 취소는 삭제가 아니라 역조정입니다. 기존 조정/장부/요청 기록을 삭제하지 않고 반대 방향 LeaveAdjustment와 LeaveLedger 이벤트를 추가합니다.
 - 배포 후 smoke test는 `docs/leave-balance-import-post-deploy-smoke-test.md`를 사용합니다.
+## Step-up 재인증 UI
+
+- 휴가 import 최종 반영, 잔여 차이 보정, 반영 취소/역조정 버튼은 누르는 즉시 비밀번호 재인증 모달을 표시한다.
+- 사용자는 현재 로그인한 계정의 비밀번호를 입력해야 하며, 비밀번호 원문은 브라우저 저장소, AuditLog, Notification, JobRun, console에 저장하지 않는다.
+- 재인증이 성공하면 서버에 StepUpVerification이 생성되고 기존 apply/reverse/reconciliation action이 이어서 실행된다.
+- 서버 action 내부의 `assertRecentStepUp` 검증은 유지되므로 URL 또는 action 직접 호출로 Step-up을 우회할 수 없다.
+## 기준연도 결정 정책
+
+- 휴가 현황 엑셀 업로드 시 기준연도는 직원 입사연도와 무관하다.
+- 엑셀에 기준연도 컬럼이 있으면 그 값을 우선 사용한다.
+- 엑셀에 기준연도 컬럼이 없으면 업로드 화면에서 선택한 기준연도를 사용한다.
+- 업로드 화면 기준연도도 없으면 Asia/Seoul 기준 현재 연도를 사용한다.
+- 2026년 휴가 현황 업로드는 기준연도 2026으로 미리보기와 정합성 검증이 표시되어야 한다.
+- 한 batch 안에 여러 기준연도가 섞이면 반영 전 오류로 확인한다.
+
+## 잘못 생성된 기준연도 batch 처리
+
+- 미리보기에서 기준연도가 2019처럼 예상과 다르면 최종 반영하지 않는다.
+- 아직 반영 전인 batch는 `jobs:fix-leave-import-reference-year`를 dry-run으로 먼저 확인한 뒤 apply할 수 있다.
+- 이미 APPLIED 상태인 batch는 기준연도만 바꿔서는 잔여 정합성이 보장되지 않는다. 반영 취소/역조정 후 올바른 기준연도로 재업로드한다.
+- 스크립트는 직원 이름, 이메일, 전화번호, 엑셀 원본 row를 출력하지 않고 batch 요약만 출력한다.

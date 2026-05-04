@@ -119,6 +119,16 @@ export type LeaveImportBatchValidation = {
 };
 
 const MAX_IMPORT_ROWS = 5000;
+
+function currentYearInSeoul() {
+  return Number(todayInSeoul().slice(0, 4));
+}
+
+function normalizeReferenceYear(value?: number | null) {
+  const year = typeof value === "number" ? value : null;
+  if (year === null) return null;
+  return Number.isInteger(year) && year >= 1900 && year <= 2200 ? year : null;
+}
 const MONTHLY_HEADERS = [
   "이름",
   "사번",
@@ -552,9 +562,11 @@ function parseDetailRows(sheetRows: unknown[][]): ParsedRow[] {
 export function parseLeaveImportWorkbook({
   buffer,
   requestedType,
+  selectedYear,
 }: {
   buffer: Buffer;
   requestedType?: ParsedLeaveImportType | "AUTO";
+  selectedYear?: number | null;
 }): ParsedWorkbook {
   const workbook = XLSX.read(buffer, { type: "buffer", cellDates: true });
   const sheets = workbook.SheetNames.map((sheetName) => ({
@@ -596,13 +608,10 @@ export function parseLeaveImportWorkbook({
   const explicitYears = rows
     .map((row) => row.referenceYear)
     .filter((year): year is number => Number.isInteger(year));
-  const dateYears = rows
-    .map((row) => row.startDate ?? row.hireDate)
-    .filter(Boolean)
-    .map((date) => Number(dateOnly(date as Date).slice(0, 4)));
-  const years = explicitYears.length > 0 ? explicitYears : dateYears;
-  const distinctYears = Array.from(new Set(years));
-  if (distinctYears.length > 1 && importType === "MONTHLY_ANNUAL_USAGE") {
+  const selectedReferenceYear = normalizeReferenceYear(selectedYear);
+  const distinctYears = Array.from(new Set(explicitYears));
+  const targetYear = distinctYears[0] ?? selectedReferenceYear ?? currentYearInSeoul();
+  if (distinctYears.length > 1) {
     rows.forEach((row) => {
       if (row.referenceYear && row.referenceYear !== distinctYears[0]) {
         row.errors.push("하나의 파일 안에 여러 기준연도가 섞여 있습니다.");
@@ -610,9 +619,30 @@ export function parseLeaveImportWorkbook({
     });
   }
 
+  if (selectedReferenceYear && distinctYears.length === 1 && distinctYears[0] !== selectedReferenceYear) {
+    rows.forEach((row) => {
+      if (row.referenceYear === distinctYears[0]) {
+        row.errors.push("엑셀 기준연도와 업로드 화면 기준연도가 일치하지 않습니다.");
+      }
+    });
+  }
+
+  rows.forEach((row) => {
+    if (!row.referenceYear) {
+      row.referenceYear = targetYear;
+    }
+
+    row.monthlyUsageJson = { ...(row.monthlyUsageJson ?? {}), referenceYear: row.referenceYear };
+    row.rawJson = { ...(row.rawJson ?? {}), referenceYear: row.referenceYear };
+
+    if (row.referenceYear !== targetYear) {
+      row.errors.push("row 기준연도가 batch 기준연도와 일치하지 않습니다.");
+    }
+  });
+
   return {
     importType,
-    targetYear: distinctYears[0] ?? Number(todayInSeoul().slice(0, 4)),
+    targetYear,
     rows,
   };
 }
@@ -697,6 +727,7 @@ export async function createLeaveImportBatchFromWorkbook({
   fileSize,
   buffer,
   requestedType = "AUTO",
+  selectedYear,
   prisma = getPrisma(),
 }: {
   actorUserId: string;
@@ -704,10 +735,11 @@ export async function createLeaveImportBatchFromWorkbook({
   fileSize?: number;
   buffer: Buffer;
   requestedType?: ParsedLeaveImportType | "AUTO";
+  selectedYear?: number | null;
   prisma?: PrismaClient;
 }) {
   const fileHash = hashLeaveImportFile(buffer);
-  const parsed = parseLeaveImportWorkbook({ buffer, requestedType });
+  const parsed = parseLeaveImportWorkbook({ buffer, requestedType, selectedYear });
   const [users, leaveTypes, duplicateBatch] = await Promise.all([
     prisma.user.findMany({
       where: { status: "ACTIVE", role: { not: "EXTERNAL_PARTNER" } },
@@ -1032,7 +1064,7 @@ export async function validateLeaveImportBatch(batchId: string, prisma: Db = get
   const unknownStatusRows = batch.rows.filter((row) => row.mappedStatus === "UNKNOWN").length;
   const excludedRows = rows.filter((row) => row.applyMode === "SKIP_CANCELLED" || row.applyMode === "SKIP_DUPLICATE").length;
   const matchedUserIds = new Set(batch.rows.map((row) => row.matchedUserId).filter(Boolean));
-  const targetYear = batch.targetYear ?? Number(todayInSeoul().slice(0, 4));
+  const targetYear = batch.targetYear ?? currentYearInSeoul();
   const estimatedAdjustmentCount =
     batch.importType === "MONTHLY_ANNUAL_USAGE"
       ? (
@@ -1346,7 +1378,7 @@ export async function runLeaveImportReconciliation(batchId: string, prisma: Db =
   });
   if (!batch) throw new Error("Import batch를 찾을 수 없습니다.");
 
-  const year = batch.targetYear ?? Number(todayInSeoul().slice(0, 4));
+  const year = batch.targetYear ?? currentYearInSeoul();
   const monthlyRows = batch.rows.filter((row) => row.matchedUserId && row.remainingAnnualDays !== null);
   const uniqueUsers = new Map<string, (typeof batch.rows)[number]>();
   monthlyRows.forEach((row) => {
@@ -1460,7 +1492,7 @@ export async function validateLeaveLedgerConsistencyAfterImport(batchId: string,
   });
   if (!batch) throw new Error("Import batch를 찾을 수 없습니다.");
 
-  const year = batch.targetYear ?? Number(todayInSeoul().slice(0, 4));
+  const year = batch.targetYear ?? currentYearInSeoul();
   const appliedRows = batch.rows.filter((row) => row.applied);
   const generatedLeaveRequestIds = appliedRows
     .map((row) => row.appliedLeaveRequestId)
@@ -1793,7 +1825,7 @@ export async function applyLeaveImportBatch({
     const appliedRowIds: string[] = [];
     const appliedLedgerIds: string[] = [];
     const appliedLeaveRequestIds: string[] = [];
-    const targetYear = batch.targetYear ?? Number(todayInSeoul().slice(0, 4));
+    const targetYear = batch.targetYear ?? currentYearInSeoul();
 
     for (const row of batch.rows) {
       if (row.applied) continue;
@@ -1938,7 +1970,7 @@ export async function reverseLeaveImportBatch({
       },
     });
 
-    const targetYear = batch.targetYear ?? Number(todayInSeoul().slice(0, 4));
+    const targetYear = batch.targetYear ?? currentYearInSeoul();
     const reversedLedgerIds: string[] = [];
     const reversedAdjustmentIds: string[] = [];
 

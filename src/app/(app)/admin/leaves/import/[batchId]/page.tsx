@@ -10,8 +10,10 @@ import {
 import { Card, EmptyState, buttonClassName } from "@/components/design-system/primitives";
 import { MobileCardList, ResponsiveTable } from "@/components/design-system/responsive";
 import { LeaveAdminNav } from "@/components/leave/leave-admin-nav";
+import { StepUpSubmitButton } from "@/components/security/StepUpSubmitButton";
 import { PageHeader } from "@/components/ui/page-header";
 import { getPrisma } from "@/lib/db/prisma";
+import { todayInSeoul } from "@/lib/leave/calculate-business-days";
 import {
   getLeaveImportBatchForPreview,
   runLeaveImportReconciliation,
@@ -137,6 +139,8 @@ export default async function LeaveImportPreviewPage({ params, searchParams }: P
     runLeaveImportReconciliation(batchId),
   ]);
   const message = resultMessage(query.error, query.success);
+  const currentYear = Number(todayInSeoul().slice(0, 4));
+  const hasUnexpectedTargetYear = batch.importType === "MONTHLY_ANNUAL_USAGE" && batch.targetYear !== currentYear;
   const validationByRowId = new Map(validation.rows.map((row) => [row.rowId, row]));
   const reconciliationByRowId = new Map(reconciliation.rows.map((row) => [row.rowId, row]));
   const applyEnabled =
@@ -149,6 +153,8 @@ export default async function LeaveImportPreviewPage({ params, searchParams }: P
     batch.status === "APPLIED" &&
     batch.importType === "MONTHLY_ANNUAL_USAGE" &&
     !batch.reversedAt;
+  const applyFormId = `leave-import-apply-${batch.id}`;
+  const reverseFormId = `leave-import-reverse-${batch.id}`;
   const reviewRows = batch.rows.filter((row) => {
     const rowValidation = validationByRowId.get(row.id);
     return row.matchStatus !== "MATCHED" || !rowValidation?.canApply;
@@ -174,6 +180,19 @@ export default async function LeaveImportPreviewPage({ params, searchParams }: P
         >
           {message.text}
         </p>
+      ) : null}
+
+      {hasUnexpectedTargetYear ? (
+        <Card>
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+            <h2 className="text-sm font-semibold break-keep text-amber-900">기준연도를 확인해 주세요</h2>
+            <p className="mt-2 text-sm leading-relaxed break-keep text-amber-800">
+              현재 import 기준연도는 {batch.targetYear ?? "미설정"}입니다. {currentYear}년 휴가 현황을 반영하려는
+              경우 최종 반영하지 말고 업로드 화면의 기준연도 또는 엑셀 기준연도 컬럼을 확인한 뒤 다시 업로드하세요.
+              기준연도는 직원 입사연도와 무관합니다.
+            </p>
+          </div>
+        </Card>
       ) : null}
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
@@ -254,17 +273,20 @@ export default async function LeaveImportPreviewPage({ params, searchParams }: P
               </div>
             </dl>
           </div>
-          <form action={applyLeaveImportAction} className="shrink-0">
+          <form id={applyFormId} action={applyLeaveImportAction} className="shrink-0">
             <input type="hidden" name="batchId" value={batch.id} />
-            <button
-              type="submit"
+            <StepUpSubmitButton
+              formId={applyFormId}
+              purpose="POLICY_CHANGE"
               disabled={!applyEnabled}
               className={buttonClassName({
                 className: `w-full lg:w-auto ${!applyEnabled ? "cursor-not-allowed opacity-50" : ""}`,
               })}
+              title="보안 확인이 필요합니다."
+              description="이 작업은 직원별 휴가 잔여와 사용 내역에 영향을 줄 수 있습니다. 계속하려면 비밀번호를 다시 입력해 주세요."
             >
               Step-up 후 최종 반영
-            </button>
+            </StepUpSubmitButton>
           </form>
         </div>
       </Card>
@@ -290,7 +312,11 @@ export default async function LeaveImportPreviewPage({ params, searchParams }: P
               </div>
             </div>
             {reverseEnabled ? (
-              <form action={reverseLeaveImportBatchAction} className="w-full max-w-md shrink-0 rounded-xl border border-red-200 bg-red-50 p-4">
+              <form
+                id={reverseFormId}
+                action={reverseLeaveImportBatchAction}
+                className="w-full max-w-md shrink-0 rounded-xl border border-red-200 bg-red-50 p-4"
+              >
                 <input type="hidden" name="batchId" value={batch.id} />
                 <h3 className="text-sm font-semibold break-keep text-red-900">업로드 반영 취소</h3>
                 <p className="mt-2 text-sm leading-relaxed break-keep text-red-800">
@@ -304,9 +330,15 @@ export default async function LeaveImportPreviewPage({ params, searchParams }: P
                     className="min-h-11 w-full rounded-lg border border-red-200 bg-white px-3 text-sm text-slate-900"
                   />
                 </label>
-                <button type="submit" className={buttonClassName({ tone: "danger", className: "mt-3 w-full" })}>
+                <StepUpSubmitButton
+                  formId={reverseFormId}
+                  purpose="POLICY_CHANGE"
+                  className={buttonClassName({ tone: "danger", className: "mt-3 w-full" })}
+                  title="반영 취소 보안 확인"
+                  description="업로드 반영 취소는 기존 기록을 삭제하지 않고 반대 방향의 조정 기록을 추가합니다. 계속하려면 비밀번호를 다시 입력해 주세요."
+                >
                   업로드 반영 취소
-                </button>
+                </StepUpSubmitButton>
               </form>
             ) : null}
           </div>
@@ -354,13 +386,22 @@ export default async function LeaveImportPreviewPage({ params, searchParams }: P
                     <td>{statusLabel(row.status)}</td>
                     <td>
                       {row.canAdjust && batch.status === "APPLIED" ? (
-                        <form action={createLeaveImportReconciliationAdjustmentAction}>
+                        <form
+                          id={`leave-import-reconcile-${batch.id}-${row.rowId}`}
+                          action={createLeaveImportReconciliationAdjustmentAction}
+                        >
                           <input type="hidden" name="batchId" value={batch.id} />
                           <input type="hidden" name="userId" value={row.userId} />
                           <input type="hidden" name="year" value={row.year} />
-                          <button className={buttonClassName({ tone: "danger", className: "min-h-9 px-3" })}>
+                          <StepUpSubmitButton
+                            formId={`leave-import-reconcile-${batch.id}-${row.rowId}`}
+                            purpose="POLICY_CHANGE"
+                            className={buttonClassName({ tone: "danger", className: "min-h-9 px-3" })}
+                            title="보정 작업 보안 확인"
+                            description="이 작업은 직원의 휴가 잔여 차이를 조정합니다. 계속하려면 비밀번호를 다시 입력해 주세요."
+                          >
                             차이값 보정
-                          </button>
+                          </StepUpSubmitButton>
                         </form>
                       ) : (
                         <span className="text-sm break-keep text-slate-500">

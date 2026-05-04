@@ -149,3 +149,24 @@
 - [ ] �ݿ� ��Ҵ� ���� ��� ������ �ƴ϶� ������ LeaveAdjustment/LeaveLedger�� ó��
 - [ ] AuditLog�� import, template, reverse ����� ���� �ΰ������� ����
 - [ ] `/admin/leaves/balances`, `/admin/leaves/import`, `/admin/leaves/import/[batchId]` ����� ȭ�� Ȯ��
+
+## 휴가 Import Step-up UI 체크
+
+- [ ] 휴가 import 최종 반영 버튼 클릭 시 Step-up 비밀번호 재인증 모달 표시
+- [ ] 올바른 비밀번호 입력 후에만 import 최종 반영 진행
+- [ ] 잘못된 비밀번호 입력 시 반영/보정/취소가 진행되지 않음
+- [ ] 반영 취소/역조정 버튼도 Step-up 모달을 거쳐 실행
+## 휴가 Import 기준연도 체크
+
+- [ ] 업로드 화면 기준연도가 반영 대상 연도인지 확인
+- [ ] 2026년 휴가 현황 업로드 시 기준연도 2026 선택
+- [ ] 직원 입사연도가 기준연도로 표시되지 않는지 확인
+- [ ] 엑셀 기준연도와 업로드 화면 기준연도가 불일치하면 오류 row 확인
+- [ ] 잔여 연차 정합성 검증 표시 연도와 실제 계산 연도 일치 확인
+## 기존 잘못된 기준연도 Batch 처리 체크
+
+- [ ] 기준연도 2019 등 예상과 다른 미리보기 batch는 최종 반영하지 않음
+- [ ] `pnpm.cmd jobs:fix-leave-import-reference-year -- --dry-run --from=2019 --to=2026` 먼저 실행
+- [ ] dry-run에서 APPLIED/REVERSED batch 제외 여부 확인
+- [ ] PARSED/VALIDATED/FAILED/CANCELLED batch만 apply 보정
+- [ ] 이미 APPLIED된 batch는 역조정/취소 후 올바른 기준연도로 재업로드

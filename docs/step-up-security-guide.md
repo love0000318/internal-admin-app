@@ -46,3 +46,10 @@ AuditLog에는 비밀번호 원문, passwordHash, session token, tokenHash, secr
 - 공용 PC에서는 작업 후 반드시 로그아웃한다.
 - OWNER 권한 변경은 가능하면 별도 운영 승인 절차를 거친다.
 - Step-up은 앱 내부 보호 장치이며, production DB나 Vercel 환경변수에 직접 접근할 수 있는 내부자 위험까지 완전히 차단하지는 못한다.
+## 휴가 Import Step-up UI
+
+- 휴가 import 최종 반영, 반영 취소/역조정, 반영 후 잔여 차이 보정은 모두 Step-up 재인증 대상이다.
+- 버튼 클릭 시 공통 Step-up 모달이 열리고, 사용자는 현재 계정 비밀번호를 다시 입력한다.
+- 비밀번호 검증은 서버 action에서 수행하며, 성공 시 StepUpVerification만 생성한다. 비밀번호 원문이나 token 원문은 저장하지 않는다.
+- Step-up 모달 성공 후에만 원래 import apply/reverse/reconciliation form submit이 이어진다.
+- 서버의 `assertRecentStepUp` 검증을 제거하지 않는다. UI 인증이 없거나 만료되면 서버 action은 실패해야 한다.

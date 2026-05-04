@@ -27,6 +27,11 @@ function getRequestedType(value: FormDataEntryValue | null): ParsedLeaveImportTy
   return "AUTO";
 }
 
+function getReferenceYear(value: FormDataEntryValue | null) {
+  const year = Number(value);
+  return Number.isInteger(year) && year >= 1900 && year <= 2200 ? year : null;
+}
+
 export async function uploadLeaveImportAction(formData: FormData) {
   const actor = await requireOwner();
   const file = formData.get("file");
@@ -50,6 +55,7 @@ export async function uploadLeaveImportAction(formData: FormData) {
     fileSize: file.size,
     buffer,
     requestedType: getRequestedType(formData.get("importType")),
+    selectedYear: getReferenceYear(formData.get("referenceYear")),
   });
 
   revalidatePath("/admin/leaves/import");

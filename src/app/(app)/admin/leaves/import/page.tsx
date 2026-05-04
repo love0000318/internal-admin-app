@@ -5,6 +5,7 @@ import { MobileCardList, ResponsiveTable } from "@/components/design-system/resp
 import { LeaveAdminNav } from "@/components/leave/leave-admin-nav";
 import { PageHeader } from "@/components/ui/page-header";
 import { getPrisma } from "@/lib/db/prisma";
+import { todayInSeoul } from "@/lib/leave/calculate-business-days";
 import { requireOwner } from "@/lib/rbac/server-guards";
 
 import { uploadLeaveImportAction } from "./actions";
@@ -42,6 +43,7 @@ function typeLabel(type: string) {
 export default async function LeaveImportPage({ searchParams }: ImportPageProps) {
   await requireOwner();
   const params = await searchParams;
+  const currentYear = Number(todayInSeoul().slice(0, 4));
   const prisma = getPrisma();
   const batches = await prisma.leaveImportBatch.findMany({
     include: {
@@ -81,7 +83,7 @@ export default async function LeaveImportPage({ searchParams }: ImportPageProps)
           </ol>
         </div>
 
-        <form action={uploadLeaveImportAction} className="grid gap-4 md:grid-cols-[240px_1fr_auto] md:items-end">
+        <form action={uploadLeaveImportAction} className="grid gap-4 md:grid-cols-[220px_160px_1fr_auto] md:items-end">
           <label className="grid gap-2 text-sm font-medium break-keep text-slate-700">
             업로드 유형
             <select
@@ -93,6 +95,18 @@ export default async function LeaveImportPage({ searchParams }: ImportPageProps)
               <option value="MONTHLY_ANNUAL_USAGE">휴가 현황/월별 연차</option>
               <option value="DETAILED_LEAVE_USAGE">휴가 사용 상세</option>
             </select>
+          </label>
+          <label className="grid gap-2 text-sm font-medium break-keep text-slate-700">
+            기준연도
+            <input
+              type="number"
+              name="referenceYear"
+              defaultValue={currentYear}
+              min={1900}
+              max={2200}
+              className="min-h-11 w-full rounded-lg border border-slate-300 px-3 text-sm"
+              required
+            />
           </label>
           <label className="grid gap-2 text-sm font-medium break-keep text-slate-700">
             엑셀 파일
