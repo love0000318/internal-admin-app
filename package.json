@@ -29,6 +29,7 @@
     "jobs:schedule-annual-promotion-notices": "tsx scripts/schedule-annual-leave-promotion-notices.ts",
     "jobs:send-annual-promotion-notices": "tsx scripts/send-annual-leave-promotion-notices.ts",
     "jobs:expire-annual-leaves": "tsx scripts/expire-annual-leaves.ts",
+    "jobs:fix-fiscal-year-leave-expirations": "tsx scripts/fix-fiscal-year-leave-expirations.ts",
     "jobs:auto-confirm-pending-leaves": "tsx scripts/auto-confirm-pending-leaves.ts",
     "jobs:auto-confirm-past-start-leaves": "tsx scripts/auto-confirm-past-start-leaves.ts"
   },

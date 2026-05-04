@@ -7,6 +7,7 @@ import {
   dateToDateOnly,
   formatDateOnly,
 } from "@/lib/leave/calculate-business-days";
+import { getFiscalYearLeaveExpirationDate } from "@/lib/leave/fiscal-year-expiration";
 import type { DateOnly } from "@/lib/leave/types";
 
 export const DEFAULT_ANNUAL_LEAVE_POLICY = {
@@ -276,7 +277,7 @@ export function calculateAnnualLeaveExpirationDate({
     return null;
   }
 
-  return addMonths(fiscalYearEnd, policy.annualExpirationMonths);
+  return getFiscalYearLeaveExpirationDate(parseDateOnly(fiscalYearEnd).year);
 }
 
 export function calculateMonthlyLeaveExpirationDate({
@@ -290,7 +291,7 @@ export function calculateMonthlyLeaveExpirationDate({
     return null;
   }
 
-  return addMonths(grantedDate, policy.monthlyExpirationMonths);
+  return getFiscalYearLeaveExpirationDate(parseDateOnly(grantedDate).year);
 }
 
 export function calculateAnnualLeavePromotionSchedule({

@@ -46,3 +46,16 @@
 - 2026-05-04 기준 현재 작업 환경에서는 Vercel CLI가 없어 production env 목록을 확인하지 못했다.
 - 운영자는 Vercel dashboard에서 `.env.production.example`의 필수 env 이름과 production 적용 여부를 직접 확인해야 한다.
 - 운영 DB에는 `prisma migrate deploy`만 사용한다.
+
+## Secret 노출 대응 및 운영 접근 통제 보강
+
+- GitHub secret scanning과 push protection을 활성화합니다.
+- `main` branch protection, PR review 필수, force push 금지를 적용합니다.
+- Vercel project owner/admin과 environment variable 접근자는 최소 인원으로 제한합니다.
+- Neon DB admin 접근자는 최소 인원으로 제한하고 production DB 직접 수정은 금지합니다.
+- secret이 노출되면 Git에서 삭제하는 것만으로 해결되지 않습니다. 노출된 secret은 즉시 rotate하고 Vercel env를 새 값으로 갱신한 뒤 redeploy합니다.
+- Neon DB password가 노출되면 Neon에서 password rotation 후 production `DATABASE_URL`을 갱신하고 재배포합니다.
+- GitHub token이 노출되면 해당 token을 revoke하고 새 token을 발급합니다.
+- 퇴사자/외주 종료 시 GitHub, Vercel, Neon 접근권한을 즉시 회수합니다.
+- seed 또는 reissue script가 출력한 초대 URL/인증 코드가 production 로그에 남으면 해당 초대는 폐기/재발급합니다.
+- 정기 점검에는 `docs/security-secret-scan-report.md`의 gitleaks/trufflehog 명령을 포함합니다.

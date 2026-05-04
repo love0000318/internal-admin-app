@@ -3,13 +3,19 @@ import { createHmac, randomBytes } from "crypto";
 const TOKEN_BYTES = 32;
 
 function getCalendarTokenSecret() {
-  return (
+  const secret =
     process.env.CALENDAR_SUBSCRIPTION_TOKEN_SECRET ??
     process.env.TOKEN_SECRET ??
     process.env.SESSION_SECRET ??
-    process.env.APP_SECRET ??
-    "development-calendar-subscription-secret"
-  );
+    process.env.APP_SECRET;
+
+  if (!secret && process.env.NODE_ENV === "production") {
+    throw new Error(
+      "CALENDAR_SUBSCRIPTION_TOKEN_SECRET, TOKEN_SECRET, SESSION_SECRET, or APP_SECRET is required.",
+    );
+  }
+
+  return secret ?? "development-calendar-subscription-secret";
 }
 
 export function generateCalendarSubscriptionToken() {

@@ -841,3 +841,24 @@ https://interal-admin-app.vercel.app
 - [ ] 반영 취소가 역조정으로 기록됨
 - [ ] AuditLog에 민감정보 없이 기록됨
 - [ ] 모바일에서 구성원 휴가 현황과 import 화면 확인
+
+## Secret/Token 노출 Smoke Test
+
+- [ ] Git tracked 파일에 `.env`, `.vercel`, `private/`, 실제 엑셀/CSV, key 파일이 없는지 확인
+- [ ] 문서와 README에 실제 DB URL/API key/webhook URL이 없는지 확인
+- [ ] AuditLog metadata에 token, tokenHash, passwordHash, secret, fileKey가 없는지 확인
+- [ ] Notification/JobRun metadata에 token/secret 원문이 없는지 확인
+- [ ] OWNER 권한 변경, 직원 비활성화/삭제, 초대 재발급, report export, leave import 반영/취소가 Step-up 없이 실패하는지 확인
+- [ ] MANAGER/LEAD/EXTERNAL_PARTNER가 OWNER 전용 API 또는 화면에 직접 접근해도 차단되는지 확인
+- [ ] cron endpoint가 `CRON_SECRET` 없이 실행되지 않는지 확인
+## 회계연도 휴가 소멸일 smoke test
+
+- [ ] 신규 연차/연차성 조정 지급분의 만료일이 지급 연도 12월 31일로 표시되는지 확인한다.
+  - 예: 2026년 지급분은 2026-12-31, 2027년 지급분은 2027-12-31.
+- [ ] 생일 반차의 사용 가능 기간이 생일 기준 정책 기간으로 유지되는지 확인한다.
+- [ ] 2026년 지급분이 2027년 구성원 휴가 현황 잔여에 포함되지 않는지 확인한다.
+- [ ] 운영 DB 보정 전 dry-run을 먼저 실행한다.
+  - `pnpm jobs:fix-fiscal-year-leave-expirations -- --dry-run --year=2026`
+- [ ] dry-run 결과를 확인한 뒤에만 apply를 실행한다.
+  - `pnpm jobs:fix-fiscal-year-leave-expirations -- --apply --year=2026`
+- [ ] JobRun/AuditLog에 실행 요약이 남고 직원 개인정보 원문이 출력되지 않는지 확인한다.

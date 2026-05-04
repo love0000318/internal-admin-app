@@ -28,6 +28,9 @@ describe("v2 rehearsal coverage", () => {
     expect(packageJson.scripts["jobs:expire-annual-leaves"]).toContain(
       "expire-annual-leaves",
     );
+    expect(packageJson.scripts["jobs:fix-fiscal-year-leave-expirations"]).toContain(
+      "fix-fiscal-year-leave-expirations",
+    );
     expect(packageJson.scripts.preflight).toContain("preflight-check");
   });
 

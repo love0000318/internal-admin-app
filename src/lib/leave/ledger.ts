@@ -3,6 +3,7 @@ import { getPrisma } from "@/lib/db/prisma";
 import { toNumber } from "@/lib/leave/balance";
 import { dateOnlyToDate, dateToDateOnly, todayInSeoul } from "@/lib/leave/calculate-business-days";
 import { calculateAnnualEntitlement } from "@/lib/leave/calculate-entitlement";
+import { getFiscalYearLeaveExpirationDateValue } from "@/lib/leave/fiscal-year-expiration";
 import type { DateOnly } from "@/lib/leave/types";
 
 export type LeaveLedgerEventType =
@@ -273,6 +274,7 @@ export async function recordAnnualAutoLedger({
     eventType: "GRANTED",
     amount,
     effectiveDate: dateOnlyToDate(`${year}-01-01` as DateOnly),
+    expiresAt: getFiscalYearLeaveExpirationDateValue(year),
     referenceYear: year,
     source: "ANNUAL_AUTO",
     idempotencyKey: `annual:${userId}:${year}`,
@@ -307,6 +309,7 @@ export async function recordLeaveAdjustmentLedger({
     eventType: "ADJUSTED",
     amount: Math.abs(signedAmount),
     effectiveDate: dateOnlyToDate(`${adjustment.fiscalYear}-01-01` as DateOnly),
+    expiresAt: getFiscalYearLeaveExpirationDateValue(adjustment.fiscalYear),
     referenceYear: adjustment.fiscalYear,
     source: "MANUAL_ADJUSTMENT",
     idempotencyKey: `adjustment:${adjustment.id}`,

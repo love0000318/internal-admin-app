@@ -76,3 +76,13 @@ UNKNOWN 상태 row는 자동 승인 처리하지 않습니다. 취소 상태 row
 - EXTERNAL_PARTNER: 내부 휴가 현황 접근 불가
 
 LEAD에게 전체 직원 데이터를 내려준 뒤 클라이언트에서 필터링하지 않습니다. 서버에서 scope userIds를 계산하고 DB query에 적용합니다. 담당 범위 밖 직원 상세 URL을 직접 호출해도 서버에서 차단되어야 합니다.
+
+## Secret/Token 노출 방지 점검
+
+- 실제 `DATABASE_URL`, API key, webhook URL, session/invitation/calendar token 원문은 코드, 문서, AuditLog, Notification, JobRun, CSV export에 저장하지 않습니다.
+- DB에는 session token, invitation token, short token, verification code, calendar subscription token의 hash만 저장합니다.
+- `.env`, `.env.local`, `.env.production`, `.vercel`, `private/`, 엑셀 원본, key 파일은 Git에 포함하지 않습니다.
+- `.env.example`과 `.env.production.example`에는 placeholder만 둡니다.
+- 초대 URL과 가입 인증 코드를 seed/reissue script에서 1회 출력하는 경우, 출력 로그를 안전하게 관리하고 노출 시 즉시 폐기/재발급합니다.
+- secret 노출이 의심되면 값을 문서에 복사하지 말고 위치와 유형만 기록한 뒤 해당 secret을 rotate합니다.
+- 정기 점검 결과는 `docs/security-secret-scan-report.md`에 원문 없이 기록합니다.

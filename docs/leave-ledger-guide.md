@@ -87,3 +87,22 @@ pnpm leave:ledger:validate
 - metadata: `approvalSource=AUTO_START_DATE`, 요청 종류, 휴가 유형, 시작일, 종료일
 
 PENDING 요청 생성 시 이미 잔여가 차감되어 있으므로 자동 확정 시 remaining을 다시 줄이지 않는다. 장부 계산에서는 `USED`가 pending을 used로 이동시키는 역할을 한다.
+## 회계연도 만료일 기준
+
+`ANNUAL_AUTO`, `MANUAL_ADJUSTMENT`, 휴가 import 조정 ledger처럼 회계연도 기준으로 잔여를 구성하는 `LeaveLedger` 이벤트는 `referenceYear`의 12월 31일을 `expiresAt`으로 기록합니다.
+
+예:
+
+- `referenceYear = 2026`: `expiresAt = 2026-12-31`
+- `referenceYear = 2027`: `expiresAt = 2027-12-31`
+
+생일 반차 `BIRTHDAY_AUTO`와 사용/승인/취소 같은 요청 기반 ledger는 별도 유효기간 또는 요청 날짜를 따릅니다.
+
+기존에 잘못 생성된 만료일은 다음 순서로 보정합니다.
+
+```bash
+pnpm jobs:fix-fiscal-year-leave-expirations -- --dry-run --year=2026
+pnpm jobs:fix-fiscal-year-leave-expirations -- --apply --year=2026
+```
+
+보정 script는 기존 `LeaveRequest`, `LeaveLedger`, `LeaveGrant` row를 삭제하지 않고 만료일 필드만 지급 연도 말일로 정정합니다.

@@ -211,3 +211,15 @@ OWNER는 `/admin/leaves/import`에서 월별 연차 사용 내역 또는 휴가 
 - 최종 반영과 반영 취소는 OWNER만 가능하며 Step-up 재인증이 필요합니다.
 - 잘못 반영한 경우 기존 LeaveRequest, LeaveLedger, LeaveAdjustment를 삭제하지 않고 반대 방향 조정 이벤트로 역조정합니다.
 - 배포 후 검수는 `docs/leave-balance-import-post-deploy-smoke-test.md`를 따릅니다.
+## 회계연도 휴가 소멸일 보정 운영
+
+회계연도 기준으로 지급되는 휴가는 지급 연도 말일인 12월 31일까지 유효합니다. 예를 들어 2026년에 지급된 연차/연차성 조정 휴가는 2026-12-31에 소멸하며 2027년 잔여에 포함하지 않습니다. 생일 반차 등 별도 유효기간을 가진 휴가는 해당 정책을 따릅니다.
+
+기존 데이터에 2026년 지급분이 2027-12-31로 저장된 경우 운영 DB에서는 반드시 dry-run을 먼저 실행해 대상 건수를 확인합니다.
+
+```bash
+pnpm jobs:fix-fiscal-year-leave-expirations -- --dry-run --year=2026
+pnpm jobs:fix-fiscal-year-leave-expirations -- --apply --year=2026
+```
+
+`--dry-run`은 DB를 변경하지 않고 JobRun/AuditLog에 실행 요약만 남깁니다. `--apply`는 대상 `LeaveGrant.expiresAt`과 회계연도성 `LeaveLedger.expiresAt`만 지급 연도 12월 31일로 보정합니다. 운영 DB에서 `prisma migrate reset`은 절대 사용하지 않습니다.

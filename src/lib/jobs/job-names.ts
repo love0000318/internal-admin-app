@@ -3,6 +3,7 @@ export const JOB_NAMES = {
   SCHEDULE_ANNUAL_PROMOTION_NOTICES: "schedule-annual-promotion-notices",
   SEND_ANNUAL_PROMOTION_NOTICES: "send-annual-promotion-notices",
   EXPIRE_ANNUAL_LEAVES: "expire-annual-leaves",
+  FIX_FISCAL_YEAR_LEAVE_EXPIRATIONS: "fix-fiscal-year-leave-expirations",
   AUTO_CONFIRM_PENDING_LEAVES: "auto-confirm-pending-leaves",
   AUTO_CONFIRM_PAST_START_LEAVES: "auto-confirm-past-start-leaves",
   LEAVE_LEDGER_REBUILD: "leave-ledger-rebuild",

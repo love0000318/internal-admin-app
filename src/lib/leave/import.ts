@@ -6,6 +6,7 @@ import * as XLSX from "xlsx";
 import { getPrisma } from "@/lib/db/prisma";
 import { toNumber } from "@/lib/leave/balance";
 import { dateOnlyToDate, dateToDateOnly, todayInSeoul } from "@/lib/leave/calculate-business-days";
+import { getFiscalYearLeaveExpirationDateValue } from "@/lib/leave/fiscal-year-expiration";
 import { createLeaveLedgerEntry, getUserLedgerBalance, roundLeaveAmount } from "@/lib/leave/ledger";
 import type { DateOnly } from "@/lib/leave/types";
 import { assertRecentStepUp } from "@/lib/security/step-up";
@@ -1588,6 +1589,7 @@ async function applyMonthlyRow({
     eventType: "ADJUSTED",
     amount: Math.abs(diff),
     effectiveDate: dateOnlyToDate(`${targetYear}-01-01` as DateOnly),
+    expiresAt: getFiscalYearLeaveExpirationDateValue(targetYear),
     referenceYear: targetYear,
     source: "IMPORT_MONTHLY_ANNUAL_USAGE",
     idempotencyKey: `leave-import-monthly:${row.batchId}:${row.id}`,
@@ -1997,6 +1999,7 @@ export async function reverseLeaveImportBatch({
         eventType: "ADJUSTED",
         amount: Math.abs(reverseAmount),
         effectiveDate: dateOnlyToDate(`${year}-01-01` as DateOnly),
+        expiresAt: getFiscalYearLeaveExpirationDateValue(year),
         referenceYear: year,
         source: "IMPORT_REVERSE_ADJUSTMENT",
         idempotencyKey: reverseIdempotencyKey,
@@ -2186,6 +2189,7 @@ export async function createLeaveImportReconciliationAdjustment({
       eventType: "ADJUSTED",
       amount: Math.abs(diff),
       effectiveDate: dateOnlyToDate(`${year}-01-01` as DateOnly),
+      expiresAt: getFiscalYearLeaveExpirationDateValue(year),
       referenceYear: year,
       source: "IMPORT_RECONCILIATION_ADJUSTMENT",
       idempotencyKey,

@@ -75,3 +75,14 @@
 - [ ] 삭제 후 세션과 pending invitation이 폐기되었는지 확인한다.
 - [ ] 업무 기록에서는 `삭제된 직원`으로 표시되고 이메일/전화번호/민감정보가 노출되지 않는지 확인한다.
 - [ ] AuditLog에 `EMPLOYEE_ANONYMIZED` 또는 `EMPLOYEE_HARD_DELETED`가 남고 개인정보가 포함되지 않는지 확인한다.
+
+## Secret 노출 정기 점검
+
+- [ ] `.env`, `.env.local`, `.env.production`, `.vercel`, `private/`가 Git tracked 상태가 아닌지 확인
+- [ ] 실제 엑셀/CSV 원본, key, credential JSON이 Git tracked 상태가 아닌지 확인
+- [ ] `DATABASE_URL`, `SESSION_SECRET`, `INVITATION_TOKEN_SECRET`, `RESEND_API_KEY`, `SLACK_WEBHOOK_URL` 패턴을 원문 출력 없이 검색
+- [ ] Git history에서 secret 패턴을 patch 원문 없이 commit count 또는 전용 scanner로 점검
+- [ ] GitHub secret scanning과 push protection 활성 여부 확인
+- [ ] Vercel env 접근자와 Neon DB admin 접근자 검토
+- [ ] seed/reissue script 실행 로그에 초대 URL/인증 코드가 남아 있으면 폐기/재발급 여부 판단
+- [ ] secret 노출 의심 시 삭제가 아니라 rotation을 수행

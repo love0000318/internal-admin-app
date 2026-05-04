@@ -78,3 +78,21 @@ pnpm leave:promotion:schedule
 ```
 
 운영 DB에서는 migration 적용 전 백업을 먼저 수행한다. 연차 정책 변경은 AuditLog에 기록된다.
+## 회계연도 기준 휴가 소멸일
+
+회계연도 기준으로 지급되는 연차와 연차성 조정 휴가는 지급 기준 연도의 12월 31일까지 유효합니다.
+
+- 2026년 지급 휴가: 2026-12-31 소멸
+- 2027년 지급 휴가: 2027-12-31 소멸
+- 2028년 지급 휴가: 2028-12-31 소멸
+
+`annualExpirationMonths`와 `monthlyExpirationMonths` 설정값은 기존 정책 데이터와 UI 호환을 위해 유지하지만, 현재 운영 정책에서는 회계연도 지급분의 실제 소멸일을 `referenceYear-12-31`로 계산합니다.
+
+생일 반차처럼 별도 유효기간을 가진 휴가는 이 규칙을 따르지 않습니다. 생일 반차는 생일 당일부터 정책에 설정된 사용 가능 기간까지 기존 방식으로 유지됩니다.
+
+기존 데이터 중 2026년 지급분이 2027-12-31로 저장된 경우에는 먼저 dry-run으로 대상을 확인한 뒤 apply를 실행합니다.
+
+```bash
+pnpm jobs:fix-fiscal-year-leave-expirations -- --dry-run --year=2026
+pnpm jobs:fix-fiscal-year-leave-expirations -- --apply --year=2026
+```

@@ -9,6 +9,10 @@ import {
   calculateLongServiceAdditionalDays,
   calculateMonthlyLeaveEntitlement,
 } from "@/lib/leave/annual-policy";
+import {
+  getFiscalYearLeaveExpirationDate,
+  isFiscalYearExpirationMismatch,
+} from "@/lib/leave/fiscal-year-expiration";
 
 describe("annual leave policy calculations", () => {
   it("calculates the fiscal-year date range from the policy start date", () => {
@@ -68,22 +72,39 @@ describe("annual leave policy calculations", () => {
       policy: DEFAULT_ANNUAL_LEAVE_POLICY,
     });
     const notices = calculateAnnualLeavePromotionSchedule({
-      expirationDate: expirationDate ?? "2027-12-31",
+      expirationDate: expirationDate ?? "2026-12-31",
       policy: DEFAULT_ANNUAL_LEAVE_POLICY,
     });
 
-    expect(expirationDate).toBe("2027-12-31");
+    expect(expirationDate).toBe("2026-12-31");
     expect(notices).toContainEqual({
       noticeType: "ANNUAL_USE_PLAN_REQUEST",
-      scheduledDate: "2027-06-30",
+      scheduledDate: "2026-06-30",
     });
     expect(notices).toContainEqual({
       noticeType: "MONTHLY_FIRST_NOTICE",
-      scheduledDate: "2027-09-30",
+      scheduledDate: "2026-09-30",
     });
     expect(notices).toContainEqual({
       noticeType: "MONTHLY_SECOND_NOTICE",
-      scheduledDate: "2027-11-30",
+      scheduledDate: "2026-11-30",
     });
+  });
+
+  it("keeps fiscal-year granted leave expiration inside the grant year", () => {
+    expect(getFiscalYearLeaveExpirationDate(2026)).toBe("2026-12-31");
+    expect(getFiscalYearLeaveExpirationDate(2027)).toBe("2027-12-31");
+    expect(
+      isFiscalYearExpirationMismatch({
+        referenceYear: 2026,
+        expiresAt: new Date(Date.UTC(2027, 11, 31)),
+      }),
+    ).toBe(true);
+    expect(
+      isFiscalYearExpirationMismatch({
+        referenceYear: 2026,
+        expiresAt: new Date(Date.UTC(2026, 11, 31)),
+      }),
+    ).toBe(false);
   });
 });
