@@ -59,8 +59,12 @@ export default async function SecurityDashboardPage() {
     recentAttachmentDownloads,
     recentJobFailures,
   ] = await Promise.all([
-    prisma.auditLog.count({ where: { action: "LOGIN_FAILED", createdAt: { gte: last24h } } }),
-    prisma.auditLog.count({ where: { action: "LOGIN_BLOCKED", createdAt: { gte: last24h } } }),
+    prisma.auditLog.count({
+      where: { action: "LOGIN_FAILED", createdAt: { gte: last24h } },
+    }),
+    prisma.auditLog.count({
+      where: { action: "LOGIN_BLOCKED", createdAt: { gte: last24h } },
+    }),
     prisma.auditLog.count({
       where: { action: { in: ROLE_CHANGE_ACTIONS }, createdAt: { gte: last7d } },
     }),
@@ -68,22 +72,37 @@ export default async function SecurityDashboardPage() {
       where: { action: { in: OWNER_ACTIONS }, createdAt: { gte: last7d } },
     }),
     prisma.auditLog.count({
-      where: { action: { in: INVITATION_REISSUE_ACTIONS }, createdAt: { gte: last7d } },
+      where: {
+        action: { in: INVITATION_REISSUE_ACTIONS },
+        createdAt: { gte: last7d },
+      },
     }),
     prisma.auditLog.count({
-      where: { action: { in: ["REPORT_EXPORTED", "AUDIT_LOG_EXPORTED"] }, createdAt: { gte: last7d } },
+      where: {
+        action: { in: ["REPORT_EXPORTED", "AUDIT_LOG_EXPORTED"] },
+        createdAt: { gte: last7d },
+      },
     }),
     prisma.auditLog.count({
-      where: { action: "LEAVE_ATTACHMENT_DOWNLOADED", createdAt: { gte: last7d } },
+      where: {
+        action: "LEAVE_ATTACHMENT_DOWNLOADED",
+        createdAt: { gte: last7d },
+      },
     }),
     prisma.auditLog.count({
-      where: { action: "UNAUTHORIZED_ACCESS_BLOCKED", createdAt: { gte: last7d } },
+      where: {
+        action: "UNAUTHORIZED_ACCESS_BLOCKED",
+        createdAt: { gte: last7d },
+      },
     }),
     prisma.jobRun.count({
       where: { status: "FAILED", startedAt: { gte: last7d } },
     }),
     prisma.auditLog.count({
-      where: { action: "STEP_UP_VERIFICATION_FAILED", createdAt: { gte: last7d } },
+      where: {
+        action: "STEP_UP_VERIFICATION_FAILED",
+        createdAt: { gte: last7d },
+      },
     }),
     prisma.auditLog.findMany({
       where: { severity: "CRITICAL" },
@@ -128,7 +147,7 @@ export default async function SecurityDashboardPage() {
   ]);
 
   return (
-    <section>
+    <section className="min-w-0">
       <PageHeader
         eyebrow="OWNER 전용"
         title="보안 대시보드"
@@ -142,7 +161,11 @@ export default async function SecurityDashboardPage() {
         <Metric label="7일 OWNER 이벤트" value={ownerEvents7d} tone="danger" />
         <Metric label="7일 초대 재발급" value={invitationReissues7d} tone="warning" />
         <Metric label="7일 CSV export" value={reportExports7d} tone="warning" />
-        <Metric label="7일 첨부 다운로드" value={attachmentDownloads7d} tone="warning" />
+        <Metric
+          label="7일 첨부 다운로드"
+          value={attachmentDownloads7d}
+          tone="warning"
+        />
         <Metric label="7일 비인가 접근" value={unauthorizedAccess7d} tone="danger" />
         <Metric label="7일 실패 Job" value={failedJobs7d} tone="danger" />
         <Metric label="7일 Step-up 실패" value={stepUpFailures7d} tone="warning" />
@@ -159,13 +182,17 @@ export default async function SecurityDashboardPage() {
         <JobList title="최근 실패 Job" jobs={recentJobFailures} />
       </div>
 
-      <div className="mt-6 rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-600">
-        <p className="break-keep leading-relaxed">
-          보안 대시보드는 앱 내부 이벤트를 빠르게 보는 화면입니다. production DB, Vercel 환경변수,
-          GitHub 배포 권한을 가진 내부자의 모든 행위는 앱 코드만으로 완전히 차단할 수 없으므로,
-          인프라 접근권한 통제와 정기 감사도 함께 운영해야 합니다.
+      <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
+        <p className="leading-relaxed break-keep">
+          보안 대시보드는 앱 내부 이벤트를 빠르게 보는 화면입니다.
+          production DB, Vercel 환경변수, GitHub 배포 권한을 가진 내부자의
+          모든 행위는 앱 코드만으로 완전히 차단할 수 없으므로, 인프라 접근권한
+          통제와 정기 감사도 함께 운영해야 합니다.
         </p>
-        <Link href="/admin/audit-logs?highRiskOnly=1" className="mt-3 inline-flex font-semibold text-blue-700 underline">
+        <Link
+          href="/admin/audit-logs?highRiskOnly=1"
+          className="mt-3 inline-flex min-h-10 items-center whitespace-nowrap break-keep font-semibold text-blue-700 underline"
+        >
           고위험 AuditLog 전체 보기
         </Link>
       </div>
@@ -188,8 +215,8 @@ function Metric({
       : "border-amber-100 bg-amber-50 text-amber-800";
 
   return (
-    <div className={`rounded-xl border p-4 shadow-sm ${className}`}>
-      <div className="text-sm font-medium">{label}</div>
+    <div className={`min-w-0 rounded-2xl border p-4 shadow-sm ${className}`}>
+      <div className="text-sm font-medium break-keep">{label}</div>
       <div className="mt-2 text-3xl font-bold">{value}</div>
     </div>
   );
@@ -209,17 +236,19 @@ function AuditList({
   }>;
 }) {
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <h2 className="font-semibold text-slate-950">{title}</h2>
+    <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <h2 className="font-semibold break-keep text-slate-950">{title}</h2>
       <div className="mt-3 divide-y divide-slate-100">
         {logs.length === 0 ? (
-          <p className="py-3 text-sm text-slate-500">최근 이벤트가 없습니다.</p>
+          <p className="py-3 text-sm break-keep text-slate-500">
+            최근 이벤트가 없습니다.
+          </p>
         ) : (
           logs.map((log) => (
             <Link
               key={log.id}
               href={`/admin/audit-logs?detailId=${log.id}`}
-              className="block py-3 text-sm hover:bg-slate-50"
+              className="block min-w-0 rounded-lg py-3 text-sm hover:bg-slate-50"
             >
               <div className="flex flex-wrap items-center gap-2">
                 <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
@@ -229,8 +258,12 @@ function AuditList({
                   {log.category}
                 </span>
               </div>
-              <div className="mt-2 font-medium text-slate-950">{log.action}</div>
-              <div className="mt-1 text-xs text-slate-500">{formatDateTime(log.createdAt)}</div>
+              <div className="mt-2 min-w-0 break-words font-medium text-slate-950">
+                {log.action}
+              </div>
+              <div className="mt-1 text-xs text-slate-500">
+                {formatDateTime(log.createdAt)}
+              </div>
             </Link>
           ))
         )}
@@ -252,20 +285,24 @@ function JobList({
   }>;
 }) {
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <h2 className="font-semibold text-slate-950">{title}</h2>
+    <section className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <h2 className="font-semibold break-keep text-slate-950">{title}</h2>
       <div className="mt-3 divide-y divide-slate-100">
         {jobs.length === 0 ? (
-          <p className="py-3 text-sm text-slate-500">최근 실패 Job이 없습니다.</p>
+          <p className="py-3 text-sm break-keep text-slate-500">
+            최근 실패 Job이 없습니다.
+          </p>
         ) : (
           jobs.map((job) => (
             <Link
               key={job.id}
               href={`/admin/jobs/${job.id}`}
-              className="block py-3 text-sm hover:bg-slate-50"
+              className="block min-w-0 rounded-lg py-3 text-sm hover:bg-slate-50"
             >
-              <div className="font-medium text-slate-950">{job.jobName}</div>
-              <div className="mt-1 text-xs text-slate-500">
+              <div className="break-words font-medium text-slate-950">
+                {job.jobName}
+              </div>
+              <div className="mt-1 text-xs break-keep text-slate-500">
                 {job.status} · {formatDateTime(job.startedAt)}
               </div>
             </Link>

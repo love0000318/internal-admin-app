@@ -23,9 +23,9 @@ const ERROR_MESSAGES: Record<string, string> = {
   "invalid-file-type": "허용되지 않는 파일 형식입니다.",
   "file-too-large": "첨부파일은 최대 10MB까지 업로드할 수 있습니다.",
   "empty-file": "비어 있는 파일은 제출할 수 없습니다.",
-  overlap: "이미 같은 날짜에 승인 대기 또는 승인 완료 휴가가 있습니다.",
+  overlap: "같은 날짜에 승인 대기 또는 승인 완료 휴가가 있습니다.",
   balance: "잔여 연차를 초과했습니다.",
-  "grant-not-found": "사용할 수 있는 맞춤휴가를 찾을 수 없습니다.",
+  "grant-not-found": "사용 가능한 맞춤휴가를 찾을 수 없습니다.",
   "grant-inactive": "사용할 수 없는 맞춤휴가입니다.",
   "grant-balance": "맞춤휴가 잔여 수량을 초과했습니다.",
   "grant-state": "맞춤휴가 지급 상태가 변경되었습니다. 다시 확인해 주세요.",
@@ -47,11 +47,14 @@ export default async function NewLeaveRequestPage({
 
   return (
     <section className="min-w-0 max-w-4xl">
-      <Link href="/leaves/me" className="inline-flex h-10 w-full items-center justify-center rounded-md border border-neutral-300 px-4 text-sm font-medium text-neutral-700 sm:w-auto">
+      <Link
+        href="/leaves/me"
+        className="inline-flex min-h-10 w-full items-center justify-center rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-700 sm:w-auto"
+      >
         휴가 현황으로 돌아가기
       </Link>
       <h1 className="mt-3 break-keep text-2xl font-semibold tracking-normal">
-        새 휴가 요청
+        내 휴가 요청
       </h1>
       {error ? (
         <p className="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">

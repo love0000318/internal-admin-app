@@ -45,7 +45,7 @@ export function AppShell({
             <form action={logoutAction}>
               <button
                 type="submit"
-                className="h-10 whitespace-nowrap break-keep rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
+                className="min-h-10 whitespace-nowrap break-keep rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
               >
                 로그아웃
               </button>
@@ -59,7 +59,7 @@ export function AppShell({
               <Link
                 key={item.href}
                 href={item.href}
-                className="shrink-0 whitespace-nowrap break-keep rounded-full px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-950 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
+                className="inline-flex min-h-10 shrink-0 items-center whitespace-nowrap break-keep rounded-full px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-950 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
               >
                 {item.label}
               </Link>

@@ -197,7 +197,7 @@ async function assertApprovalStillValid(params: {
     user: {
       id: string;
       role: "OWNER" | "LEAD" | "MANAGER" | "EXTERNAL_PARTNER";
-      status: "INVITED" | "ACTIVE" | "SUSPENDED" | "DEACTIVATED";
+      status: "INVITED" | "ACTIVE" | "SUSPENDED" | "DEACTIVATED" | "DELETED";
       teamId: string | null;
     };
   };

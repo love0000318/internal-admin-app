@@ -17,7 +17,7 @@ export function LoginForm() {
   return (
     <form action={formAction} className="grid gap-4">
       <div className="grid min-w-0 gap-1.5">
-        <label className="text-sm font-semibold text-slate-800" htmlFor="phone">
+        <label className="break-keep text-sm font-semibold text-slate-800" htmlFor="phone">
           전화번호
         </label>
         <input
@@ -30,7 +30,7 @@ export function LoginForm() {
         />
       </div>
       <div className="grid min-w-0 gap-1.5">
-        <label className="text-sm font-semibold text-slate-800" htmlFor="password">
+        <label className="break-keep text-sm font-semibold text-slate-800" htmlFor="password">
           비밀번호
         </label>
         <input
@@ -69,7 +69,7 @@ export function LoginForm() {
       <button
         type="submit"
         disabled={pending}
-        className="h-11 w-full rounded-lg bg-blue-700 px-4 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+        className="min-h-11 w-full rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-slate-400"
       >
         {pending ? "로그인 중" : "로그인"}
       </button>

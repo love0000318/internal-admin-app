@@ -123,7 +123,13 @@ export const IMPLEMENTED_ROUTE_POLICIES: RoutePolicy[] = [
   },
   {
     href: "/admin/leaves/balances",
-    label: "직원별 휴가 현황",
+    label: "구성원 휴가 현황",
+    roles: ["OWNER", "LEAD"],
+    mvpStatus: "included",
+  },
+  {
+    href: "/admin/leaves/import",
+    label: "휴가 사용내역 업로드",
     roles: ["OWNER"],
     mvpStatus: "included",
     showInNav: false,

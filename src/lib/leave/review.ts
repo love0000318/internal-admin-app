@@ -39,7 +39,7 @@ export function toReviewableLeaveRequest(
 
 export async function getReviewableTeamIdsForLead(
   leadUserId: string,
-  prisma: PrismaClient = getPrisma(),
+  prisma: PrismaClient | Prisma.TransactionClient = getPrisma(),
 ) {
   const teams = await prisma.team.findMany({
     select: {

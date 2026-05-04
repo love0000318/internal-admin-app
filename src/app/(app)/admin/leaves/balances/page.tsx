@@ -1,12 +1,19 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
+import { redirect } from "next/navigation";
 
+import type { Prisma } from "@/generated/prisma/client";
 import { createLeaveAdjustment } from "@/app/(app)/admin/leaves/actions";
+import { Card, EmptyState, buttonClassName } from "@/components/design-system/primitives";
+import { MobileCardList, ResponsiveTable } from "@/components/design-system/responsive";
+import { LeaveAdminNav } from "@/components/leave/leave-admin-nav";
+import { PageHeader } from "@/components/ui/page-header";
 import { getPrisma } from "@/lib/db/prisma";
+import { getLeaveBalanceScope } from "@/lib/leave/balance-scope";
 import { dateToDateOnly, todayInSeoul } from "@/lib/leave/calculate-business-days";
 import { formatLeaveDays } from "@/lib/leave/labels";
 import { getUserLeaveBalance } from "@/lib/leave/queries";
-import { calculateTenureDays, formatTenureDays } from "@/lib/organization/tenure";
-import { requireOwner } from "@/lib/rbac/server-guards";
+import { requireUser } from "@/lib/rbac/server-guards";
 
 export const dynamic = "force-dynamic";
 
@@ -20,35 +27,115 @@ type BalancesPageProps = {
   }>;
 };
 
+type GrantSummary = {
+  customRemaining: number;
+  birthdayRemaining: number;
+  customGranted: number;
+  birthdayGranted: number;
+};
+
 function getYear(value: string | undefined) {
   const parsed = Number(value);
 
   return Number.isInteger(parsed) ? parsed : Number(todayInSeoul().slice(0, 4));
 }
 
-export default async function EmployeeLeaveBalancesPage({
-  searchParams,
-}: BalancesPageProps) {
-  await requireOwner();
+function InfoRow({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <dt className="shrink-0 whitespace-nowrap break-keep text-slate-500">{label}</dt>
+      <dd className="min-w-0 text-right font-medium break-keep text-slate-900">{value}</dd>
+    </div>
+  );
+}
+
+function sumGrantSummaries(
+  grants: Array<{
+    userId: string;
+    grantedAmount: number;
+    remainingAmount: number;
+    source: string;
+    leaveType: { code: string };
+  }>,
+) {
+  const summaries = new Map<string, GrantSummary>();
+
+  for (const grant of grants) {
+    const current =
+      summaries.get(grant.userId) ??
+      ({
+        customRemaining: 0,
+        birthdayRemaining: 0,
+        customGranted: 0,
+        birthdayGranted: 0,
+      } satisfies GrantSummary);
+    const isBirthday =
+      grant.source === "BIRTHDAY_AUTO" || grant.leaveType.code === "BIRTHDAY_HALF_DAY";
+
+    if (isBirthday) {
+      current.birthdayRemaining += grant.remainingAmount;
+      current.birthdayGranted += grant.grantedAmount;
+    } else {
+      current.customRemaining += grant.remainingAmount;
+      current.customGranted += grant.grantedAmount;
+    }
+
+    summaries.set(grant.userId, current);
+  }
+
+  return summaries;
+}
+
+export default async function EmployeeLeaveBalancesPage({ searchParams }: BalancesPageProps) {
+  const actor = await requireUser();
   const filters = await searchParams;
   const year = getYear(filters.year);
   const prisma = getPrisma();
-  const where = {
-    status: "ACTIVE" as const,
-    ...(filters.teamId ? { teamId: filters.teamId } : {}),
-    ...(filters.q
+
+  if (actor.role !== "OWNER" && actor.role !== "LEAD") {
+    await prisma.auditLog.create({
+      data: {
+        actorId: actor.id,
+        actorUserId: actor.id,
+        action: "UNAUTHORIZED_ACCESS_BLOCKED",
+        targetType: "LEAVE_BALANCE",
+        targetId: null,
+        category: "SECURITY",
+        severity: "HIGH",
+        metadata: {
+          route: "/admin/leaves/balances",
+          reasonCode: "LEAVE_BALANCE_LIST_SCOPE_DENIED",
+          role: actor.role,
+        },
+      },
+    });
+    redirect("/forbidden");
+  }
+
+  const scope = await getLeaveBalanceScope(actor, prisma);
+  const allowedTeamFilter =
+    filters.teamId && scope.teamIds.includes(filters.teamId) ? filters.teamId : undefined;
+  const search = filters.q?.trim();
+  const userWhere: Prisma.UserWhereInput = {
+    id: { in: scope.userIds },
+    status: "ACTIVE",
+    role: { not: "EXTERNAL_PARTNER" },
+    ...(allowedTeamFilter ? { teamId: allowedTeamFilter } : {}),
+    ...(search
       ? {
           OR: [
-            { name: { contains: filters.q, mode: "insensitive" as const } },
-            { email: { contains: filters.q, mode: "insensitive" as const } },
-            { phone: { contains: filters.q, mode: "insensitive" as const } },
+            { name: { contains: search, mode: "insensitive" } },
+            { email: { contains: search, mode: "insensitive" } },
+            { phone: { contains: search, mode: "insensitive" } },
+            { profile: { employeeNumber: { contains: search, mode: "insensitive" } } },
           ],
         }
       : {}),
   };
+
   const [users, teams] = await Promise.all([
     prisma.user.findMany({
-      where,
+      where: userWhere,
       include: {
         team: true,
         profile: true,
@@ -56,280 +143,234 @@ export default async function EmployeeLeaveBalancesPage({
       orderBy: { name: "asc" },
     }),
     prisma.team.findMany({
-      where: { status: "ACTIVE" },
+      where: { id: { in: scope.teamIds }, status: "ACTIVE" },
       orderBy: { name: "asc" },
     }),
   ]);
-  const balances = await Promise.all(
-    users.map((user) => getUserLeaveBalance({ userId: user.id, year, prisma })),
-  );
-  const customLeaveGrants = await prisma.leaveGrant.findMany({
-    where: {
-      userId: { in: users.map((user) => user.id) },
-      status: "ACTIVE",
-      remainingAmount: { gt: 0 },
-    },
-    include: {
-      user: { include: { team: true } },
-      leaveType: true,
-    },
-    orderBy: [{ user: { name: "asc" } }, { expiresAt: "asc" }],
-  });
+  const [balances, activeGrants] = await Promise.all([
+    Promise.all(users.map((user) => getUserLeaveBalance({ userId: user.id, year, prisma }))),
+    prisma.leaveGrant.findMany({
+      where: {
+        userId: { in: users.map((user) => user.id) },
+        status: "ACTIVE",
+      },
+      include: {
+        leaveType: true,
+      },
+    }),
+  ]);
+  const grantSummaries = sumGrantSummaries(activeGrants);
+  const isOwner = actor.role === "OWNER";
+  const title = isOwner ? "구성원 휴가 현황" : "담당 조직 휴가 현황";
+  const description = isOwner
+    ? "전체 구성원의 휴가 보유, 사용, 승인 대기, 잔여 현황을 확인합니다."
+    : "담당 조직과 하위 조직 구성원의 휴가 보유, 사용, 승인 대기, 잔여 현황을 확인합니다.";
 
   return (
-    <section>
-      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <div>
-          <p className="text-sm font-medium text-neutral-500">휴가 관리</p>
-          <h1 className="mt-2 text-2xl font-semibold tracking-normal">
-            직원별 휴가 보유 현황
-          </h1>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Link
-            href="/admin/leaves/grants"
-            className="inline-flex h-10 items-center rounded-md border border-neutral-300 px-4 text-sm font-medium"
-          >
-            맞춤휴가 지급
-          </Link>
-          <Link
-            href="/admin/leaves/history"
-            className="inline-flex h-10 items-center rounded-md border border-neutral-300 px-4 text-sm font-medium"
-          >
-            휴가 장부 이력
-          </Link>
-          <Link
-            href="/admin/leaves/settings"
-            className="inline-flex h-10 items-center rounded-md border border-neutral-300 px-4 text-sm font-medium"
-          >
-            휴가 정책으로 돌아가기
-          </Link>
-        </div>
-      </div>
+    <section className="min-w-0 space-y-6">
+      <PageHeader eyebrow="휴가 관리" title={title} description={description} />
+      {isOwner ? <LeaveAdminNav activeHref="/admin/leaves/balances" /> : null}
 
       {filters.error ? (
-        <p className="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-          휴가 조정을 저장할 수 없습니다. 직원, 연도, 조정 일수와 사유를 확인해 주세요.
+        <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm leading-relaxed break-keep text-red-700">
+          휴가 조정을 저장할 수 없습니다. 직원, 기준 연도, 조정 일수와 사유를 확인해 주세요.
         </p>
       ) : null}
       {filters.success ? (
-        <p className="mt-4 rounded-md bg-green-50 px-3 py-2 text-sm text-green-700">
+        <p className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm leading-relaxed break-keep text-green-700">
           휴가 조정이 저장되었습니다.
         </p>
       ) : null}
 
-      <form className="mt-6 grid grid-cols-1 gap-3 rounded-lg border border-neutral-200 bg-white p-4 shadow-sm sm:grid-cols-2 xl:grid-cols-4">
-        <input
-          name="q"
-          defaultValue={filters.q ?? ""}
-          placeholder="이름, 이메일, 전화번호"
-          className="h-10 rounded-md border border-neutral-300 px-3 text-sm"
-        />
-        <select
-          name="teamId"
-          defaultValue={filters.teamId ?? ""}
-          className="h-10 rounded-md border border-neutral-300 px-3 text-sm"
-        >
-          <option value="">팀 전체</option>
-          {teams.map((team) => (
-            <option key={team.id} value={team.id}>
-              {team.name}
-            </option>
-          ))}
-        </select>
-        <input
-          name="year"
-          type="number"
-          defaultValue={year}
-          className="h-10 rounded-md border border-neutral-300 px-3 text-sm"
-        />
-        <button className="h-10 rounded-md bg-neutral-950 px-4 text-sm font-medium text-white">
+      <form className="grid grid-cols-1 gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-2 xl:grid-cols-4">
+        <label className="grid gap-2 text-sm font-medium break-keep text-slate-700">
+          직원 검색
+          <input
+            name="q"
+            defaultValue={filters.q ?? ""}
+            placeholder="이름, 이메일, 전화번호, 사번"
+            className="h-11 w-full min-w-0 rounded-lg border border-slate-300 px-3 text-sm"
+          />
+        </label>
+        <label className="grid gap-2 text-sm font-medium break-keep text-slate-700">
+          팀
+          <select
+            name="teamId"
+            defaultValue={allowedTeamFilter ?? ""}
+            className="h-11 w-full min-w-0 rounded-lg border border-slate-300 px-3 text-sm"
+          >
+            <option value="">전체 팀</option>
+            {teams.map((team) => (
+              <option key={team.id} value={team.id}>
+                {team.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="grid gap-2 text-sm font-medium break-keep text-slate-700">
+          기준 연도
+          <input
+            name="year"
+            type="number"
+            defaultValue={year}
+            className="h-11 w-full min-w-0 rounded-lg border border-slate-300 px-3 text-sm"
+          />
+        </label>
+        <button className="min-h-11 w-full self-end whitespace-nowrap break-keep rounded-lg bg-slate-950 px-4 text-sm font-semibold text-white">
           조회
         </button>
       </form>
 
-      <form
-        action={createLeaveAdjustment}
-        className="mt-4 grid grid-cols-1 gap-3 rounded-lg border border-neutral-200 bg-white p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5"
-      >
-        <select
-          name="userId"
-          className="h-10 rounded-md border border-neutral-300 px-3 text-sm"
-          required
+      {isOwner ? (
+        <form
+          action={createLeaveAdjustment}
+          className="grid grid-cols-1 gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-2 xl:grid-cols-5"
         >
-          <option value="">직원 선택</option>
-          {users.map((user) => (
-            <option key={user.id} value={user.id}>
-              {user.name} ({user.email})
-            </option>
-          ))}
-        </select>
-        <input
-          name="year"
-          type="number"
-          defaultValue={year}
-          className="h-10 rounded-md border border-neutral-300 px-3 text-sm"
-          required
-        />
-        <input
-          name="amount"
-          type="number"
-          step="0.5"
-          placeholder="조정 일수"
-          className="h-10 rounded-md border border-neutral-300 px-3 text-sm"
-          required
-        />
-        <input
-          name="reason"
-          placeholder="조정 사유"
-          className="h-10 rounded-md border border-neutral-300 px-3 text-sm"
-          required
-        />
-        <button className="h-10 rounded-md bg-neutral-950 px-4 text-sm font-medium text-white">
-          조정 추가
-        </button>
-      </form>
+          <select
+            name="userId"
+            className="h-11 w-full min-w-0 rounded-lg border border-slate-300 px-3 text-sm"
+            required
+          >
+            <option value="">조정할 직원 선택</option>
+            {users.map((user) => (
+              <option key={user.id} value={user.id}>
+                {user.name} ({user.email})
+              </option>
+            ))}
+          </select>
+          <input
+            name="year"
+            type="number"
+            defaultValue={year}
+            aria-label="조정 기준 연도"
+            className="h-11 w-full min-w-0 rounded-lg border border-slate-300 px-3 text-sm"
+            required
+          />
+          <input
+            name="amount"
+            type="number"
+            step="0.5"
+            placeholder="조정 일수"
+            className="h-11 w-full min-w-0 rounded-lg border border-slate-300 px-3 text-sm"
+            required
+          />
+          <input
+            name="reason"
+            placeholder="조정 사유"
+            className="h-11 w-full min-w-0 rounded-lg border border-slate-300 px-3 text-sm"
+            required
+          />
+          <button className="min-h-11 w-full whitespace-nowrap break-keep rounded-lg bg-slate-950 px-4 text-sm font-semibold text-white">
+            조정 추가
+          </button>
+        </form>
+      ) : null}
 
-      <div className="mt-6 overflow-x-auto rounded-lg border border-neutral-200 bg-white shadow-sm">
-        <table className="w-full min-w-[1150px] table-auto text-left text-sm [&_td]:break-keep [&_th]:break-keep [&_th]:whitespace-nowrap">
-          <thead className="bg-neutral-50 text-neutral-500">
-            <tr>
-              <th className="px-4 py-3">직원 이름</th>
-              <th className="px-4 py-3">이메일</th>
-              <th className="px-4 py-3">팀</th>
-              <th className="px-4 py-3">직급</th>
-              <th className="px-4 py-3">입사일</th>
-              <th className="px-4 py-3">재직일</th>
-              <th className="px-4 py-3">기준 연도</th>
-              <th className="px-4 py-3">기본 부여</th>
-              <th className="px-4 py-3">조정</th>
-              <th className="px-4 py-3">사용 완료</th>
-              <th className="px-4 py-3">승인 대기</th>
-              <th className="px-4 py-3">잔여</th>
-              <th className="px-4 py-3">상세</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-neutral-100">
-            {balances.length === 0 ? (
+      {balances.length === 0 ? (
+        <EmptyState title="조회 가능한 구성원이 없습니다." description="검색 조건이나 담당 조직 범위를 확인해 주세요." />
+      ) : (
+        <>
+          <MobileCardList>
+            {balances.map((balance) => {
+              const hireDate = balance.user.hireDate ?? balance.user.profile?.hireDate;
+              const hireDateOnly = hireDate ? dateToDateOnly(hireDate) : null;
+              const grants = grantSummaries.get(balance.user.id);
+
+              return (
+                <Card key={balance.user.id}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h2 className="font-semibold break-keep text-slate-950">{balance.user.name}</h2>
+                      <p className="mt-1 text-xs break-words text-slate-500">
+                        {balance.user.team?.name ?? "팀 미지정"} ·{" "}
+                        {balance.user.title ?? balance.user.profile?.jobTitle ?? "직책 미입력"}
+                      </p>
+                    </div>
+                    <Link
+                      href={`/admin/leaves/balances/${balance.user.id}?year=${year}`}
+                      className={buttonClassName({ tone: "neutral", className: "shrink-0 px-3 py-2" })}
+                    >
+                      상세
+                    </Link>
+                  </div>
+                  <dl className="mt-4 grid gap-2 text-sm">
+                    <InfoRow label="사번" value={balance.user.profile?.employeeNumber ?? "-"} />
+                    <InfoRow label="입사일" value={hireDateOnly ?? "미입력"} />
+                    <InfoRow label="기본 부여 연차" value={formatLeaveDays(balance.annualEntitled)} />
+                    <InfoRow label="조정" value={formatLeaveDays(balance.manualGranted)} />
+                    <InfoRow label="맞춤휴가 잔여" value={formatLeaveDays(grants?.customRemaining ?? 0)} />
+                    <InfoRow label="생일 반차 잔여" value={formatLeaveDays(grants?.birthdayRemaining ?? 0)} />
+                    <InfoRow label="승인 대기" value={formatLeaveDays(balance.pendingDays)} />
+                    <InfoRow label="사용 완료" value={formatLeaveDays(balance.usedDays)} />
+                    <InfoRow label="잔여" value={formatLeaveDays(balance.remainingDays)} />
+                  </dl>
+                </Card>
+              );
+            })}
+          </MobileCardList>
+
+          <ResponsiveTable minWidth="1180px">
+            <thead className="border-b bg-slate-50 text-slate-600">
               <tr>
-                <td className="px-4 py-6 text-neutral-500" colSpan={13}>
-                  등록된 직원이 없습니다.
-                </td>
+                {[
+                  "구성원",
+                  "사번",
+                  "팀",
+                  "직급/직책",
+                  "입사일",
+                  "기준 연도",
+                  "기본 부여",
+                  "조정",
+                  "맞춤휴가 잔여",
+                  "생일 반차 잔여",
+                  "승인 대기",
+                  "사용 완료",
+                  "잔여",
+                  "상세",
+                ].map((heading) => (
+                  <th key={heading}>{heading}</th>
+                ))}
               </tr>
-            ) : (
-              balances.map((balance) => {
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {balances.map((balance) => {
                 const hireDate = balance.user.hireDate ?? balance.user.profile?.hireDate;
                 const hireDateOnly = hireDate ? dateToDateOnly(hireDate) : null;
+                const grants = grantSummaries.get(balance.user.id);
 
                 return (
                   <tr key={balance.user.id}>
-                    <td className="px-4 py-3 font-medium">{balance.user.name}</td>
-                    <td className="px-4 py-3">{balance.user.email}</td>
-                    <td className="px-4 py-3">{balance.user.team?.name ?? "-"}</td>
-                    <td className="px-4 py-3">
-                      {balance.user.title ?? balance.user.profile?.jobTitle ?? "-"}
+                    <td>
+                      <p className="font-semibold break-keep text-slate-950">{balance.user.name}</p>
+                      <p className="text-xs text-slate-500">{balance.user.email}</p>
                     </td>
-                    <td className="px-4 py-3">{hireDateOnly ?? "미입력"}</td>
-                    <td className="px-4 py-3">
-                      {formatTenureDays(calculateTenureDays(hireDateOnly))}
-                    </td>
-                    <td className="px-4 py-3">{year}</td>
-                    <td className="px-4 py-3">
-                      {formatLeaveDays(balance.annualEntitled)}
-                    </td>
-                    <td className="px-4 py-3">
-                      {formatLeaveDays(balance.manualGranted)}
-                    </td>
-                    <td className="px-4 py-3">{formatLeaveDays(balance.usedDays)}</td>
-                    <td className="px-4 py-3">
-                      {formatLeaveDays(balance.pendingDays)}
-                    </td>
-                    <td className="px-4 py-3">
-                      {formatLeaveDays(balance.remainingDays)}
-                    </td>
-                    <td className="px-4 py-3">
+                    <td>{balance.user.profile?.employeeNumber ?? "-"}</td>
+                    <td>{balance.user.team?.name ?? "-"}</td>
+                    <td>{balance.user.title ?? balance.user.profile?.jobTitle ?? "-"}</td>
+                    <td>{hireDateOnly ?? "미입력"}</td>
+                    <td>{year}</td>
+                    <td>{formatLeaveDays(balance.annualEntitled)}</td>
+                    <td>{formatLeaveDays(balance.manualGranted)}</td>
+                    <td>{formatLeaveDays(grants?.customRemaining ?? 0)}</td>
+                    <td>{formatLeaveDays(grants?.birthdayRemaining ?? 0)}</td>
+                    <td>{formatLeaveDays(balance.pendingDays)}</td>
+                    <td>{formatLeaveDays(balance.usedDays)}</td>
+                    <td className="font-semibold">{formatLeaveDays(balance.remainingDays)}</td>
+                    <td>
                       <Link
-                        href={`/organization/employees/${balance.user.id}`}
-                        className="font-medium underline"
+                        href={`/admin/leaves/balances/${balance.user.id}?year=${year}`}
+                        className="font-semibold text-blue-700 underline"
                       >
-                        직원 상세
+                        상세 보기
                       </Link>
                     </td>
                   </tr>
                 );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="mt-6 overflow-x-auto rounded-lg border border-neutral-200 bg-white shadow-sm">
-        <div className="border-b border-neutral-100 px-4 py-3">
-          <h2 className="text-base font-semibold">맞춤휴가 현황</h2>
-          <p className="mt-1 text-sm text-neutral-500">
-            연차 조정은 위 표의 조정 기능을 사용하고, 회사가 별도로 지급한
-            맞춤휴가는 이 영역에서 확인합니다.
-          </p>
-        </div>
-        <table className="w-full min-w-[950px] table-auto text-left text-sm [&_td]:break-keep [&_th]:break-keep [&_th]:whitespace-nowrap">
-          <thead className="bg-neutral-50 text-neutral-500">
-            <tr>
-              <th className="px-4 py-3">직원</th>
-              <th className="px-4 py-3">팀</th>
-              <th className="px-4 py-3">휴가 유형</th>
-              <th className="px-4 py-3">잔여 수량</th>
-              <th className="px-4 py-3">사용 시작일</th>
-              <th className="px-4 py-3">만료일</th>
-              <th className="px-4 py-3">상세</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-neutral-100">
-            {customLeaveGrants.length === 0 ? (
-              <tr>
-                <td className="px-4 py-6 text-neutral-500" colSpan={7}>
-                  지급된 맞춤휴가가 없습니다.
-                </td>
-              </tr>
-            ) : (
-              customLeaveGrants.map((grant) => (
-                <tr key={grant.id}>
-                  <td className="px-4 py-3">
-                    <p className="font-medium">{grant.user.name}</p>
-                    <p className="text-xs text-neutral-500">{grant.user.email}</p>
-                  </td>
-                  <td className="px-4 py-3">{grant.user.team?.name ?? "-"}</td>
-                  <td className="px-4 py-3">{grant.leaveType.name}</td>
-                  <td className="px-4 py-3">
-                    {formatGrantAmount(grant.remainingAmount, grant.unit)}
-                  </td>
-                  <td className="px-4 py-3">{dateToDateOnly(grant.effectiveFrom)}</td>
-                  <td className="px-4 py-3">
-                    {grant.expiresAt ? dateToDateOnly(grant.expiresAt) : "-"}
-                  </td>
-                  <td className="px-4 py-3">
-                    <Link
-                      href={`/admin/leaves/grants/${grant.id}`}
-                      className="font-medium underline"
-                    >
-                      지급 상세
-                    </Link>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              })}
+            </tbody>
+          </ResponsiveTable>
+        </>
+      )}
     </section>
   );
-}
-
-function formatGrantAmount(amount: number, unit: "DAY" | "HOUR" | "MINUTE") {
-  const labels = {
-    DAY: "일",
-    HOUR: "시간",
-    MINUTE: "분",
-  };
-
-  return `${amount}${labels[unit]}`;
 }

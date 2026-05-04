@@ -64,3 +64,14 @@
 - [ ] GitHub/Vercel/Neon 접근권한을 점검한다.
 - [ ] AuditLog와 Vercel/Neon/GitHub 로그를 함께 확인한다.
 - [ ] 사고 조치 내역을 별도 운영 기록으로 남긴다.
+
+## 비활성 직원 영구 삭제 전 확인
+
+- [ ] 대상 직원이 `DEACTIVATED` 상태인지 확인한다.
+- [ ] 대상이 현재 로그인한 OWNER 본인이 아닌지 확인한다.
+- [ ] 대상이 마지막 ACTIVE OWNER가 아닌지 확인한다.
+- [ ] 직원 상세 Danger Zone에서 삭제 영향 분석 건수를 확인한다.
+- [ ] Step-up 재인증을 완료한 뒤 `DELETE` 확인 문구를 입력한다.
+- [ ] 삭제 후 세션과 pending invitation이 폐기되었는지 확인한다.
+- [ ] 업무 기록에서는 `삭제된 직원`으로 표시되고 이메일/전화번호/민감정보가 노출되지 않는지 확인한다.
+- [ ] AuditLog에 `EMPLOYEE_ANONYMIZED` 또는 `EMPLOYEE_HARD_DELETED`가 남고 개인정보가 포함되지 않는지 확인한다.

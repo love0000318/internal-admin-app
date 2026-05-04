@@ -13,8 +13,8 @@ import {
 import { getUsePlanContext } from "@/lib/leave/annual-promotion";
 import { dateToDateOnly, todayInSeoul } from "@/lib/leave/calculate-business-days";
 import { listEnabledCompanyHolidayDateOnlys } from "@/lib/leave/queries";
-import { requireRouteAccess } from "@/lib/rbac/server-guards";
 import type { DateOnly } from "@/lib/leave/types";
+import { requireRouteAccess } from "@/lib/rbac/server-guards";
 
 export const dynamic = "force-dynamic";
 
@@ -94,79 +94,150 @@ export default async function AnnualLeaveUsePlanPage({
 
   return (
     <section className="min-w-0">
-      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <div>
-          <p className="text-sm font-medium text-neutral-500">내 휴가</p>
-          <h1 className="mt-2 text-2xl font-semibold tracking-normal">
+      <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <div className="min-w-0">
+          <p className="text-sm font-medium break-keep text-neutral-500">
+            내 휴가
+          </p>
+          <h1 className="mt-2 text-2xl font-semibold tracking-normal break-keep text-neutral-950 sm:text-3xl">
             연차 사용계획
           </h1>
-          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-neutral-600">
+          <p className="mt-2 max-w-3xl text-sm leading-relaxed break-keep text-neutral-600">
             소멸 예정 연차가 있는 경우 시작일과 종료일 기준으로 사용계획을
-            제출합니다. 사용계획 제출은 실제 휴가 신청이 아니며, 휴가를
+            제출합니다. 사용계획 제출은 실제 휴가 요청이 아니며, 휴가를
             사용하려면 별도로 휴가 요청을 등록해야 합니다.
           </p>
         </div>
         <Link
           href="/leaves/me"
-          className="inline-flex h-10 w-full items-center justify-center whitespace-nowrap break-keep rounded-md border border-neutral-300 px-4 text-sm font-medium sm:w-auto"
+          className="inline-flex min-h-10 w-full items-center justify-center whitespace-nowrap break-keep rounded-md border border-neutral-300 px-4 text-sm font-medium sm:w-auto"
         >
           내 휴가 현황
         </Link>
       </div>
 
       {error ? (
-        <p className="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p className="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm leading-relaxed break-keep text-red-700">
           {error}
         </p>
       ) : null}
       {params.success ? (
-        <p className="mt-4 rounded-md bg-green-50 px-3 py-2 text-sm text-green-700">
-          연차 사용계획이 처리되었습니다.
+        <p className="mt-4 rounded-md bg-green-50 px-3 py-2 text-sm leading-relaxed break-keep text-green-700">
+          연차 사용계획을 처리했습니다.
         </p>
       ) : null}
 
-      <div className="mt-6 grid gap-4 md:grid-cols-4">
-        <div className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm">
-          <p className="text-sm text-neutral-500">기준 연도</p>
+      <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm">
+          <p className="text-sm break-keep text-neutral-500">기준 연도</p>
           <p className="mt-2 text-2xl font-semibold">{context.year}</p>
         </div>
-        <div className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm">
-          <p className="text-sm text-neutral-500">소멸 예정 연차</p>
+        <div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm">
+          <p className="text-sm break-keep text-neutral-500">소멸 예정 연차</p>
           <p className="mt-2 text-2xl font-semibold">
             {formatAmount(context.expiringAmount)}
           </p>
         </div>
-        <div className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm">
-          <p className="text-sm text-neutral-500">소멸 예정일</p>
-          <p className="mt-2 text-lg font-semibold">
-            {context.expirationDate ?? "소멸 없음"}
+        <div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm">
+          <p className="text-sm break-keep text-neutral-500">소멸 예정일</p>
+          <p className="mt-2 text-lg font-semibold break-keep">
+            {context.expirationDate ?? "소멸 예정 없음"}
           </p>
         </div>
-        <div className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm">
-          <p className="text-sm text-neutral-500">제출 상태</p>
-          <p className="mt-2 text-lg font-semibold">{statusLabel(plan?.status)}</p>
+        <div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm">
+          <p className="text-sm break-keep text-neutral-500">제출 상태</p>
+          <p className="mt-2 text-lg font-semibold break-keep">
+            {statusLabel(plan?.status)}
+          </p>
         </div>
       </div>
 
       {plan?.items.length ? (
-        <div className="mt-6 overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-sm">
+        <div className="mt-6 overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm">
           <div className="border-b border-neutral-100 px-4 py-3">
-            <h2 className="text-base font-semibold">제출한 사용계획</h2>
+            <h2 className="text-base font-semibold break-keep">
+              제출한 사용계획
+            </h2>
           </div>
-          <div className="overflow-x-auto">
+
+          <div className="grid gap-3 p-4 md:hidden">
+            {plan.items.map((item) => {
+              const startDate = itemStartDate(item);
+              const endDate = itemEndDate(item);
+
+              return (
+                <article
+                  key={item.id}
+                  className="rounded-2xl border border-neutral-200 p-4"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-semibold break-keep text-neutral-950">
+                        {startDate}
+                        {startDate !== endDate ? ` ~ ${endDate}` : ""}
+                      </p>
+                      <p className="mt-1 text-sm break-keep text-neutral-500">
+                        {annualUsePlanUsageTypeLabel(itemUsageType(item))}
+                      </p>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium whitespace-nowrap break-keep text-blue-700">
+                      {formatAmount(itemAmount(item))}
+                    </span>
+                  </div>
+                  <dl className="mt-4 grid gap-2 text-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <dt className="shrink-0 whitespace-nowrap break-keep text-neutral-500">
+                        사용 기간
+                      </dt>
+                      <dd className="min-w-0 text-right font-medium break-keep">
+                        {startDate}
+                        {startDate !== endDate ? ` ~ ${endDate}` : ""}
+                      </dd>
+                    </div>
+                    <div className="flex items-start justify-between gap-3">
+                      <dt className="shrink-0 whitespace-nowrap break-keep text-neutral-500">
+                        사용 형태
+                      </dt>
+                      <dd className="min-w-0 text-right font-medium break-keep">
+                        {annualUsePlanUsageTypeLabel(itemUsageType(item))}
+                      </dd>
+                    </div>
+                    <div className="flex items-start justify-between gap-3">
+                      <dt className="shrink-0 whitespace-nowrap break-keep text-neutral-500">
+                        자동 계산
+                      </dt>
+                      <dd className="min-w-0 text-right font-medium">
+                        {formatAmount(itemAmount(item))}
+                      </dd>
+                    </div>
+                    <div className="flex items-start justify-between gap-3">
+                      <dt className="shrink-0 whitespace-nowrap break-keep text-neutral-500">
+                        메모
+                      </dt>
+                      <dd className="min-w-0 text-right break-words">
+                        {item.memo ?? "-"}
+                      </dd>
+                    </div>
+                  </dl>
+                </article>
+              );
+            })}
+          </div>
+
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[760px] text-left text-sm">
               <thead className="bg-neutral-50 text-neutral-500">
                 <tr>
-                  <th className="whitespace-nowrap break-keep px-4 py-3">
-                    사용 기간
-                  </th>
-                  <th className="whitespace-nowrap break-keep px-4 py-3">
-                    사용 형태
-                  </th>
-                  <th className="whitespace-nowrap break-keep px-4 py-3">
-                    자동 계산 수량
-                  </th>
-                  <th className="whitespace-nowrap break-keep px-4 py-3">메모</th>
+                  {["사용 기간", "사용 형태", "자동 계산 수량", "메모"].map(
+                    (heading) => (
+                      <th
+                        key={heading}
+                        className="whitespace-nowrap break-keep px-4 py-3"
+                      >
+                        {heading}
+                      </th>
+                    ),
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-100">
@@ -180,13 +251,15 @@ export default async function AnnualLeaveUsePlanPage({
                         {startDate}
                         {startDate !== endDate ? ` ~ ${endDate}` : ""}
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3">
+                      <td className="whitespace-nowrap break-keep px-4 py-3">
                         {annualUsePlanUsageTypeLabel(itemUsageType(item))}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3">
                         {formatAmount(itemAmount(item))}
                       </td>
-                      <td className="px-4 py-3">{item.memo ?? "-"}</td>
+                      <td className="px-4 py-3 break-words">
+                        {item.memo ?? "-"}
+                      </td>
                     </tr>
                   );
                 })}
@@ -196,10 +269,10 @@ export default async function AnnualLeaveUsePlanPage({
         </div>
       ) : null}
 
-      {isSubmitted ? (
+      {isSubmitted && plan ? (
         <form action={cancelAnnualLeaveUsePlan} className="mt-4">
           <input name="planId" type="hidden" value={plan.id} />
-          <button className="h-10 w-full rounded-md border border-red-300 px-4 text-sm font-medium text-red-700 sm:w-auto">
+          <button className="min-h-10 w-full whitespace-nowrap break-keep rounded-md border border-red-300 px-4 text-sm font-medium text-red-700 sm:w-auto">
             제출 취소
           </button>
         </form>

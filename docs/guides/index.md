@@ -24,6 +24,17 @@
 - [리드 승인 가이드](../lead-approval-guide.md)
 - [권한 매트릭스](permission-matrix.md)
 
+## 직원 오픈 운영 패키지
+
+- [직원 오픈 최종 안내문](../employee-open-message-final.md)
+- [직원 초대 rollout 체크리스트](../employee-invitation-rollout-checklist.md)
+- [직원별 rollout tracker template](../employee-rollout-tracker-template.md)
+- [첫 주 운영 모니터링](../first-week-operations-monitoring.md)
+- [직원 오픈 이슈 대응 가이드](../employee-open-issue-response.md)
+- [일일 운영 점검표](../daily-admin-checklist.md)
+- [직원 FAQ](../employee-faq.md)
+- [직원 오픈 readiness report](../employee-open-readiness-report.md)
+
 ## HR 운영 문서
 
 - [인사정보 엑셀 import 가이드](../employee-master-import-guide.md)
@@ -37,6 +48,7 @@
 - [증명자료 가이드](../leave-attachment-guide.md)
 - [휴가 승인 정책 가이드](../leave-approval-policy-guide.md)
 - [휴가 캘린더 가이드](../leave-calendar-guide.md)
+- [구성원 휴가 현황 엑셀 업로드 가이드](../leave-balance-import-guide.md)
 
 ## 알림/Job 문서
 
@@ -49,6 +61,9 @@
 - [2차 통합 리허설 보고서](../v2-rehearsal-report.md)
 - [2차 최종 인수 보고서](../v2-final-acceptance-report.md)
 - [3차 후보 정리](../v3-roadmap-candidates.md)
+- [Production 접근권한 통제 가이드](../production-access-control-guide.md)
+- [Production readiness report](../production-readiness-report.md)
+- [Production 장애 대응 runbook](../production-incident-runbook.md)
 
 ## Smoke test
 

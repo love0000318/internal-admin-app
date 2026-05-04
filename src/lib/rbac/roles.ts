@@ -14,7 +14,7 @@ export type MvpEnabledRole = (typeof MVP_ENABLED_ROLES)[number];
 export type RbacUser = {
   id: string;
   role: Role;
-  status?: "INVITED" | "ACTIVE" | "SUSPENDED" | "DEACTIVATED";
+  status?: "INVITED" | "ACTIVE" | "SUSPENDED" | "DEACTIVATED" | "DELETED";
   teamId?: string | null;
   managedTeamIds?: string[];
 };

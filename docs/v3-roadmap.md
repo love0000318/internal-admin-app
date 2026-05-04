@@ -75,3 +75,11 @@
 - OWNER 권한 부여 2인 승인
 - 세션 강제 revoke 관리 화면
 - Vercel/Neon/GitHub 접근권한 정기 리뷰 절차 자동 알림
+
+## 3차 최종 QA 반영 사항
+
+- 2026-05-03 기준 코드 품질 게이트는 `lint`, `typecheck`, `test`, `build` 통과.
+- 운영 DB 연결이 필요한 `preflight`, `db:status`, `leave:ledger:validate`, Job dry-run은 현재 로컬 DB 연결 실패로 운영 Neon DB에서 재검증 필요.
+- 비활성 직원 영구 삭제/익명화 기능은 3차 보안 안정화 범위에 포함 완료.
+- 근태/출퇴근 route와 lib는 현재 코드에서 확인되지 않아 3차 7단계 별도 구현 항목으로 유지.
+- 최종 상태는 `docs/v3-final-qa-report.md`를 기준으로 관리한다.

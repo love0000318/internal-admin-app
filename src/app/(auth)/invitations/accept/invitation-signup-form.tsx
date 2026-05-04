@@ -33,7 +33,7 @@ export function InvitationSignupForm({
         <input name="shortToken" type="hidden" value={shortToken} />
       ) : null}
       <div className="grid min-w-0 gap-1.5">
-        <label className="text-sm font-semibold text-slate-800" htmlFor="name">
+        <label className="break-keep text-sm font-semibold text-slate-800" htmlFor="name">
           이름
         </label>
         <input
@@ -45,7 +45,7 @@ export function InvitationSignupForm({
         />
       </div>
       <div className="grid min-w-0 gap-1.5">
-        <label className="text-sm font-semibold text-slate-800" htmlFor="phone">
+        <label className="break-keep text-sm font-semibold text-slate-800" htmlFor="phone">
           전화번호
         </label>
         <input
@@ -59,7 +59,7 @@ export function InvitationSignupForm({
       </div>
       <div className="grid min-w-0 gap-1.5">
         <label
-          className="text-sm font-semibold text-slate-800"
+          className="break-keep text-sm font-semibold text-slate-800"
           htmlFor="verificationCode"
         >
           가입 인증 코드
@@ -78,7 +78,7 @@ export function InvitationSignupForm({
       </div>
       <div className="grid min-w-0 gap-1.5">
         <label
-          className="text-sm font-semibold text-slate-800"
+          className="break-keep text-sm font-semibold text-slate-800"
           htmlFor="password"
         >
           비밀번호
@@ -94,7 +94,7 @@ export function InvitationSignupForm({
       </div>
       <div className="grid min-w-0 gap-1.5">
         <label
-          className="text-sm font-semibold text-slate-800"
+          className="break-keep text-sm font-semibold text-slate-800"
           htmlFor="passwordConfirm"
         >
           비밀번호 확인

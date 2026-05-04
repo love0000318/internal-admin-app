@@ -3,7 +3,7 @@ import type { Role } from "@/lib/rbac/roles";
 type UserMutationTarget = {
   id: string;
   role: Role;
-  status: "INVITED" | "ACTIVE" | "SUSPENDED" | "DEACTIVATED";
+  status: "INVITED" | "ACTIVE" | "SUSPENDED" | "DEACTIVATED" | "DELETED";
 };
 
 type AssertEmployeeMutationParams = {

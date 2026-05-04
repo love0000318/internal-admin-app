@@ -954,3 +954,51 @@ raw token 미저장, APPROVED만 출력, 공개 범위 적용, 민감정보 미�
 
 ### 남은 TODO
 Google Calendar OAuth 양방향 동기화는 후속 단계에서 검토한다.
+## 비활성 직원 영구 삭제
+
+### 목적
+퇴사자 또는 운영상 제거가 필요한 비활성 직원의 개인정보를 삭제/익명화한다.
+
+### 사용자
+ACTIVE OWNER만 사용할 수 있다.
+
+### 주요 화면
+- `/organization/employees/[userId]`
+- `/organization/employees?status=DELETED`
+
+### 주요 데이터 모델
+- `User.deletedAt`, `deletedByUserId`, `deletionReason`
+- `UserStatus.DELETED`
+- `StepUpPurpose.EMPLOYEE_PERMANENT_DELETE`
+- `AuditAction.EMPLOYEE_*`
+
+### 주요 동작
+비활성 직원에 대해 삭제 영향 분석을 수행하고, 기록이 없으면 hard delete, 기록이 있으면 개인정보 익명화 삭제를 수행한다.
+
+### 권한
+OWNER + Step-up 필요. ACTIVE 직원, 자기 자신, 마지막 OWNER는 삭제 불가.
+
+### AuditLog
+삭제 영향 분석, 삭제 요청, 익명화, hard delete, 차단 이벤트를 기록한다. 개인정보와 token/hash는 저장하지 않는다.
+
+### 남은 TODO
+증명자료 파일의 물리 삭제/보존 정책은 별도 운영 정책으로 확정한다.
+# 휴가 사용내역 엑셀 import
+
+- 월별 연차 사용 내역: 직원별 잔여 연차와 월별 사용량을 파싱하고, 검수 후 잔여 연차 차이를 `LeaveAdjustment`/`LeaveLedger`로 보정합니다.
+- 휴가 사용 상세 내역: 직원별 휴가 기간, 유형, 수량, 상태를 파싱하고, 검수 후 imported `LeaveRequest`와 `LeaveLedger`로 반영합니다.
+- OWNER만 사용할 수 있으며 최종 반영에는 Step-up 재인증이 필요합니다.
+- 반영 전 검증은 미매칭, UNKNOWN 상태, 미매핑 휴가 유형, 중복 의심 row, idempotencyKey 중복을 확인합니다.
+- 반영 후 batch 상세 화면에서 생성/연결된 LeaveRequest, LeaveLedger, LeaveAdjustment 수와 월별 잔여 reconciliation 결과를 확인할 수 있습니다.
+- OWNER는 `/admin/leaves/import`에서 휴가 현황 업로드 템플릿을 다운로드할 수 있습니다. 템플릿은 ACTIVE 내부 직원과 현재 LeaveLedger 기준 참고값만 포함하며 민감 HR 정보는 제외합니다.
+- APPLIED 월별 휴가 현황 batch는 Step-up 후 `업로드 반영 취소`가 가능합니다. 취소는 기존 기록 삭제가 아니라 반대 방향 LeaveAdjustment와 LeaveLedger `IMPORT_REVERSE_ADJUSTMENT` 이벤트를 추가하는 방식입니다.
+## 구성원 휴가 현황 조회
+
+구성원 휴가 현황은 LeaveLedger 기반 잔여 계산을 재사용해 직원별 연차, 맞춤휴가, 생일 반차, 승인 대기, 사용 완료, 잔여 수량을 보여줍니다.
+
+- OWNER scope: 전체 ACTIVE 내부 직원
+- LEAD scope: `Team.leadUserId`로 담당하는 팀과 하위 팀의 ACTIVE 직원
+- MANAGER scope: 본인만, 목록 화면 접근 불가
+- EXTERNAL_PARTNER scope: 없음
+
+목록과 상세 화면 모두 서버에서 scope를 계산하고, query 단계에서 허용된 userId로 제한합니다. UI 메뉴 숨김은 보조 수단이며 보안 경계가 아닙니다.

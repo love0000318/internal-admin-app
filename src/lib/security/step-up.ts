@@ -247,6 +247,7 @@ export function resolveEmployeeChangeStepUpPurpose(params: {
 export function getStepUpPurposeForAction(action: string): StepUpPurpose {
   if (action === "REPORT_EXPORT") return "REPORT_EXPORT";
   if (action === "INVITATION_REISSUE") return "INVITATION_REISSUE";
+  if (action === "EMPLOYEE_PERMANENT_DELETE") return "EMPLOYEE_PERMANENT_DELETE";
   if (action === "SESSION_ADMIN") return "SESSION_ADMIN";
   if (action === "POLICY_CHANGE") return "POLICY_CHANGE";
   if (action === "SECURITY_ADMIN") return "SECURITY_ADMIN";

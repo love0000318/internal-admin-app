@@ -65,14 +65,13 @@ export default async function NotificationsPage({
   return (
     <section className="min-w-0 space-y-5">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <div>
-          <p className="text-sm font-semibold text-blue-700">내 알림</p>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-blue-700">알림</p>
           <h1 className="mt-2 break-keep text-2xl font-bold tracking-normal text-slate-950 sm:text-3xl">
             알림센터
           </h1>
           <p className="mt-2 max-w-3xl break-keep text-sm leading-relaxed text-slate-600">
-            휴가, 증명자료, 연차 촉진, 인사정보, 자동 작업 관련 알림을
-            한곳에서 확인합니다.
+            휴가, 증명자료, 연차 촉진, 인사정보, 자동 작업 관련 알림을 한곳에서 확인합니다.
           </p>
         </div>
         <form action={markAllNotificationsRead}>
@@ -83,8 +82,8 @@ export default async function NotificationsPage({
       </div>
 
       <Card className="flex items-center justify-between gap-4">
-        <div>
-          <p className="text-sm font-medium text-slate-500">읽지 않은 알림</p>
+        <div className="min-w-0">
+          <p className="break-keep text-sm font-medium text-slate-500">읽지 않은 알림</p>
           <p className="mt-1 text-3xl font-bold text-slate-950">{unreadCount}</p>
         </div>
         <Badge tone={unreadCount > 0 ? "danger" : "success"}>
@@ -124,16 +123,16 @@ export default async function NotificationsPage({
           notifications.map((notification) => (
             <article
               key={notification.id}
-              className={`rounded-2xl border bg-white p-4 shadow-sm ${
+              className={`min-w-0 rounded-2xl border bg-white p-4 shadow-sm ${
                 notification.readAt ? "border-slate-200" : "border-blue-700"
               }`}
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-xs font-medium text-slate-500">
+                  <p className="break-keep text-xs font-medium text-slate-500">
                     {groupLabels[getNotificationGroup(notification.type)]}
                   </p>
-                  <h2 className="mt-1 break-keep text-base font-semibold text-slate-950">
+                  <h2 className="mt-1 break-keep text-base font-semibold leading-snug text-slate-950">
                     {notification.title}
                   </h2>
                 </div>
@@ -141,7 +140,7 @@ export default async function NotificationsPage({
                   {priorityLabels[notification.priority]}
                 </Badge>
               </div>
-              <p className="mt-2 break-keep text-sm leading-relaxed text-slate-600">
+              <p className="mt-2 text-safe text-sm leading-relaxed text-slate-600">
                 {notification.message}
               </p>
               <p className="mt-3 text-xs text-slate-500">
@@ -218,7 +217,7 @@ export default async function NotificationsPage({
                 <td className="font-semibold text-slate-950">
                   {notification.title}
                 </td>
-                <td>{notification.message}</td>
+                <td className="max-w-md text-safe">{notification.message}</td>
                 <td>
                   {notification.createdAt.toISOString().slice(0, 16).replace("T", " ")}
                 </td>
@@ -227,7 +226,7 @@ export default async function NotificationsPage({
                     <form action={markNotificationReadAndRedirect}>
                       <input name="notificationId" type="hidden" value={notification.id} />
                       <input name="linkUrl" type="hidden" value={notification.linkUrl} />
-                      <button className="font-semibold text-blue-700 underline">
+                      <button className="whitespace-nowrap break-keep font-semibold text-blue-700 underline">
                         이동
                       </button>
                     </form>

@@ -14,6 +14,7 @@ import {
   isHighRiskEmployeeChange,
   resolveEmployeeChangeStepUpPurpose,
 } from "@/lib/security/step-up";
+import { deleteDeactivatedEmployeePermanently } from "@/lib/organization/employee-deletion";
 import {
   buildInvitationUrl,
   buildShortInvitationUrl,
@@ -692,6 +693,10 @@ export async function updateEmployeeProfile(formData: FormData) {
     redirect("/organization/employees?error=not-found");
   }
 
+  if (before.status === "DELETED") {
+    redirect(`/organization/employees/${userId}?error=already-deleted`);
+  }
+
   const activeOwnerCount = await prisma.user.count({
     where: {
       role: "OWNER",
@@ -916,4 +921,41 @@ export async function updateEmployeeTeam(formData: FormData) {
 export async function reactivateEmployee(formData: FormData) {
   formData.set("status", "ACTIVE");
   await updateEmployeeProfile(formData);
+}
+
+export async function permanentlyDeleteEmployee(formData: FormData) {
+  const actor = await requireOwner();
+  const userId = getRequiredFormValue(formData, "userId");
+  const stepUpPassword = getRequiredFormValue(formData, "stepUpPassword");
+  const confirmation = getRequiredFormValue(formData, "confirmation");
+  const reason = getRequiredFormValue(formData, "deletionReason");
+
+  if (!userId || confirmation !== "DELETE") {
+    redirect(`/organization/employees/${userId || ""}?error=delete-confirmation-required`);
+  }
+
+  let mode = "";
+
+  try {
+    await assertStepUpPassword({
+      userId: actor.id,
+      purpose: "EMPLOYEE_PERMANENT_DELETE",
+      password: stepUpPassword,
+    });
+    const result = await deleteDeactivatedEmployeePermanently({
+      actor,
+      targetUserId: userId,
+      reason: reason || null,
+    });
+    mode = result.mode.toLowerCase();
+  } catch (error) {
+    const code =
+      error instanceof Error && error.message
+        ? error.message.toLowerCase().replace(/_/g, "-")
+        : "delete-failed";
+
+    redirect(`/organization/employees/${userId}?error=${encodeURIComponent(code)}`);
+  }
+
+  redirect(`/organization/employees?status=DELETED&success=employee-${mode}`);
 }

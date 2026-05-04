@@ -75,8 +75,7 @@ export default async function InvitationsAcceptPage({
           회원가입
         </h1>
         <p className="mt-2 break-keep text-sm leading-relaxed text-slate-500">
-          총괄 관리자가 전달한 초대 링크와 가입 인증 코드로 가입을
-          완료합니다. 인증 코드는 한 번만 사용할 수 있습니다.
+          총괄 관리자가 전달한 초대 링크와 가입 인증 코드로 가입을 완료합니다. 인증 코드는 한 번만 사용할 수 있습니다.
         </p>
         {unavailable ? (
           <p className="mt-5 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -88,25 +87,25 @@ export default async function InvitationsAcceptPage({
           <>
             <dl className="mt-5 grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm">
               <div className="grid gap-1 sm:grid-cols-[7rem_1fr] sm:items-center">
-                <dt className="text-slate-500">이름</dt>
+                <dt className="break-keep text-slate-500">이름</dt>
                 <dd className="min-w-0 break-words font-semibold text-slate-900 sm:text-right">
                   {invitation.expectedName}
                 </dd>
               </div>
               <div className="grid gap-1 sm:grid-cols-[7rem_1fr] sm:items-center">
-                <dt className="text-slate-500">이메일</dt>
+                <dt className="break-keep text-slate-500">이메일</dt>
                 <dd className="min-w-0 break-all font-semibold text-slate-900 sm:text-right">
                   {invitation.email}
                 </dd>
               </div>
               <div className="grid gap-1 sm:grid-cols-[7rem_1fr] sm:items-center">
-                <dt className="text-slate-500">역할</dt>
+                <dt className="break-keep text-slate-500">역할</dt>
                 <dd className="min-w-0 break-words font-semibold text-slate-900 sm:text-right">
                   {roleLabel(invitation.role)}
                 </dd>
               </div>
               <div className="grid gap-1 sm:grid-cols-[7rem_1fr] sm:items-center">
-                <dt className="text-slate-500">사전 인사정보</dt>
+                <dt className="break-keep text-slate-500">사전 인사정보</dt>
                 <dd className="min-w-0 break-words font-semibold text-slate-900 sm:text-right">
                   {invitation.employeePrejoinProfile ? "연결됨" : "없음"}
                 </dd>

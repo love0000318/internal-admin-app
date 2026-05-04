@@ -1,226 +1,148 @@
 # Production Readiness Report
 
-작성일: 2026-05-01
+작성일: 2026-05-04  
+운영 URL: `https://interal-admin-app.vercel.app`
 
-## 1. 배포 가능 여부 요약
+## 배포 일시
 
-현재 상태는 **제한적으로 운영 배포 가능**입니다.
+현재 문서 작성 세션에서는 Vercel deployment metadata를 조회하지 못했다. Vercel dashboard에서 실제 production 배포 시각과 commit을 확인해야 한다.
 
-앱 코드, 테스트, production build, Prisma schema validate/generate는 통과했습니다. 다만 실제 운영 배포 전에는 운영 PostgreSQL을 준비하고 `pnpm db:deploy`, `pnpm db:seed`, `pnpm preflight`를 실제 DB 연결 상태에서 통과시켜야 합니다.
+## production URL 확인
 
-## 2. 추천 배포 방식
+- URL: `https://interal-admin-app.vercel.app`
+- 확인 결과: HTTP 200 응답 확인
+- 페이지 title: `Internal Ops MVP`
+- 비인증 상태에서 `/attendance`, `/attendance/history`, `/admin/attendance`는 모두 404 응답
 
-1순위는 **Vercel + Managed PostgreSQL**입니다.
+## 검수한 기능
 
-- Next.js App Router와 가장 잘 맞습니다.
-- 서버 운영 부담이 작습니다.
-- DB는 Supabase, Neon, Railway, Render PostgreSQL 등을 사용할 수 있습니다.
+현재 세션에서 인증 계정과 테스트 초대 코드가 제공되지 않아 로그인 이후 기능은 직접 완료 처리하지 않았다. 대신 운영자가 수행할 smoke test 문서를 작성했다.
 
-회사 내부 서버를 선호하거나 네트워크 통제가 중요하면 Docker/VPS 방식을 선택할 수 있습니다. 이 경우 `Dockerfile`과 `docker-compose.example.yml`을 참고하세요.
+직접 확인:
 
-## 3. 현재 구현된 기능
+- production URL 기본 접근성
+- 문서와 운영 체크리스트 정리
 
-- OWNER 초대 링크 가입
-- 전화번호/비밀번호 로그인
-- 로그아웃과 세션 관리
-- 대시보드
-- 조직/팀/직원/초대 관리
-- 휴가 정책/회사 휴일/직원별 휴가 조정
-- 내 휴가 현황과 휴가 요청/철회
-- OWNER/LEAD 휴가 승인/반려/승인 취소
-- 감사 로그 조회와 민감정보 마스킹
-- 역할별 권한 guard
+문서 기반 확인 필요:
 
-## 4. 운영 전 필수 환경변수
-
-- `DATABASE_URL`
-- `APP_BASE_URL`
-- `NODE_ENV=production`
-- `APP_SECRET`
-- `SESSION_SECRET`
-- `TOKEN_SECRET`
-- `INVITATION_TOKEN_SECRET`
-- `INVITATION_EXPIRES_IN_DAYS`
-- `SESSION_EXPIRES_IN_DAYS`
-- `SEED_OWNER_EMAIL`
-- `SEED_OWNER_NAME`
-- `SEED_OWNER_TITLE`
-
-선택:
-
-- `COOKIE_DOMAIN`
-- `EMAIL_PROVIDER`
-- `EMAIL_FROM`
-- `IDENTITY_VERIFICATION_PROVIDER`
-- `LOG_LEVEL`
-
-## 5. Migration/seed 절차
-
-```bash
-pnpm db:generate
-pnpm db:validate
-pnpm db:deploy
-pnpm db:seed
-pnpm preflight
-```
-
-`pnpm db:seed`는 OWNER 초대 URL을 콘솔에 한 번 출력합니다. DB에는 token hash만 저장됩니다.
-
-## 6. OWNER 최초 가입 절차
-
-1. seed 출력의 OWNER 초대 URL에 접속합니다.
-2. 대표 이름, 전화번호, 비밀번호를 입력합니다.
-3. 가입 완료 후 `/dashboard`로 이동합니다.
-4. 같은 초대 링크는 재사용할 수 없습니다.
-
-## 7. Smoke test 절차
-
-[smoke-test.md](smoke-test.md)를 따릅니다.
-
-핵심:
-
-- OWNER 가입
-- 팀 생성
+- OWNER 로그인
 - 직원 초대/가입
-- 휴가 요청
-- 휴가 승인
-- 권한 차단
-- AuditLog 확인
+- 휴가 요청/승인
+- 알림센터
+- 보안 대시보드
+- AuditLog
+- 직원 삭제/익명화
+- 외부 캘린더 ICS
+- 모바일 주요 화면
+- 근태 출근/퇴근, 릴리즈 포함 시
 
-## 8. 보안 점검 결과
+## 통과한 smoke test
 
-- production cookie secure 적용 구조 확인
-- httpOnly/sameSite lax 이상 적용 구조 확인
-- production mock provider 차단 구조 확인
-- invitation/session token 원문 DB 저장 금지
-- password 원문 DB 저장 금지
-- AuditLog 민감정보 마스킹
-- 관리자 route와 server action 권한 guard 적용
+- production URL HTTP 200
+- production page title 확인
 
-## 9. 테스트/빌드 결과
+## 실패 또는 미수행 smoke test
 
-최근 검증 결과:
+- OWNER 로그인: 인증 정보 없음으로 미수행
+- 직원 초대/가입: 운영 테스트 계정 없음으로 미수행
+- 휴가 요청/승인: 운영 테스트 계정 없음으로 미수행
+- 근태 출근/퇴근: 현재 코드 기준 route 부재가 릴리즈 후보 보고서에 blocker로 기록됨
+- 모바일 실기기 검수: 미수행
+- role별 권한 우회 검수: 운영 계정 없음으로 미수행
 
-- `pnpm install`: 통과
-- `pnpm db:validate`: 통과
-- `pnpm db:generate`: 통과
-- `pnpm lint`: 통과
-- `pnpm typecheck`: 통과
-- `pnpm test`: 통과
-- `pnpm test:unit`: 통과
-- `pnpm test:integration`: 통과
-- `pnpm e2e`: 통과
-- `pnpm build`: 통과
+## 남은 P0 blocker
 
-환경 한계:
+- 근태/출퇴근 및 근태 수정 요청을 이번 릴리즈 범위에 포함한다면 route/lib 부재가 P0다.
+- production에서도 `/attendance`, `/attendance/history`, `/admin/attendance`가 404로 확인되었다.
+- Neon 운영 DB migration/preflight 결과가 아직 문서화되지 않았다.
 
-- 현재 로컬 환경에는 Docker CLI가 없고 PostgreSQL이 실행 중이지 않아 `pnpm db:status`, `pnpm db:seed`, `pnpm preflight`의 DB 연결 항목은 실패했습니다.
+## 남은 P1 개선 항목
 
-## 10. 아직 남은 위험 요소
+- 실제 모바일 기기 또는 브라우저 viewport 기반 smoke test 필요
+- Vercel production env dashboard 확인 필요
+- 외부 알림 provider 활성/비활성 정책 확인 필요
+- local attachment storage 사용 시 운영 storage 전환 필요
 
-- 실제 운영 DB migration/seed를 아직 수행하지 않았습니다.
-- 실제 이메일 발송이 없어 초대 링크 전달은 수동입니다.
-- 실제 본인인증 provider가 없어 production 운영 절차가 필요합니다.
-- Playwright 브라우저 E2E는 향후 보강이 필요합니다.
+## 남은 P2 후속 항목
 
-## 10-1. 운영 시작 전 남은 위험 요소
+- 카카오 알림톡
+- GPS 근태 인증
+- 급여 정산
+- 전자계약
+- SSO/MFA
+- Google Calendar 양방향 OAuth
+- 파일 바이러스 검사
+- 고급 리포트
 
-### 실제 이메일 발송 미연동
+## 모바일 검수 결과
 
-- 위험 요소: 초대 링크를 운영자가 직접 복사해 전달해야 합니다.
-- 영향도: 중간
-- 현재 대응: 관리자 화면에 초대 링크를 표시하고 수동 전달합니다.
-- 운영 전 반드시 해결해야 하는지: 아니오
-- 2차 개발로 넘겨도 되는지: 예
+문서화 상태: 검수 체크리스트 작성 완료  
+실제 모바일 수행 상태: 미수행
 
-### 실제 본인인증 미연동
+운영자는 최소 360px, 390px, 430px viewport에서 다음 화면을 확인한다.
 
-- 위험 요소: production에서 mock provider는 차단되며, 실제 업체 연동 전에는 운영 절차로 신원 확인이 필요합니다.
-- 영향도: 높음
-- 현재 대응: 초대된 이름/전화번호 확인과 운영자 검수 절차를 사용합니다.
-- 운영 전 반드시 해결해야 하는지: 회사 보안 정책에 따라 결정
-- 2차 개발로 넘겨도 되는지: 제한적으로 가능
+- `/login`
+- `/invitations/accept`
+- `/dashboard`
+- `/leaves/me`
+- `/leaves/me/requests/new`
+- `/leaves/calendar`
+- `/notifications`
+- `/admin/leaves/settings`
+- `/admin/leaves/types`
+- `/admin/security`
 
-### 파일 업로드 스토리지 미연동
+## 보안 검수 결과
 
-- 위험 요소: 병가/예비군/경조사 증빙은 파일 업로드가 아니라 URL 입력 중심입니다.
-- 영향도: 중간
-- 현재 대응: 첨부 URL 필드와 정책상 증빙 필요 여부를 사용합니다.
-- 운영 전 반드시 해결해야 하는지: 아니오
-- 2차 개발로 넘겨도 되는지: 예
+문서화 상태: 보안 체크리스트 작성 완료  
+실제 운영 계정 기반 검수: 미수행
 
-### 휴가 정책의 법무/노무 검토 필요
+운영자는 다음을 확인한다.
 
-- 위험 요소: 연차 계산은 내부 관리 참고값이며 회사 취업규칙과 최신 법령 검토가 필요합니다.
-- 영향도: 높음
-- 현재 대응: LeaveAdjustment로 수동 조정 가능하게 설계했습니다.
-- 운영 전 반드시 해결해야 하는지: 예, 최소 정책 검토 필요
-- 2차 개발로 넘겨도 되는지: 계산 자동화 고도화는 가능
+- MANAGER admin 접근 실패
+- LEAD 담당 범위 밖 승인 실패
+- Step-up 없이 고위험 작업 실패
+- Step-up 후 고위험 작업 가능
+- 마지막 OWNER 보호
+- AuditLog metadata에 token/passwordHash/secret/fileKey 없음
 
-### 운영 DB 백업 정책 필요
+## 직원 오픈 가능 여부
 
-- 위험 요소: 사용자, 휴가, 감사 로그 데이터 손실 가능성
-- 영향도: 높음
-- 현재 대응: 백업/복구 가이드 작성
-- 운영 전 반드시 해결해야 하는지: 예
-- 2차 개발로 넘겨도 되는지: 아니오
+**직원 오픈 보류**
 
-### 관리자 비밀번호 분실 대응 절차 필요
+사유:
 
-- 위험 요소: OWNER가 로그인하지 못하면 운영이 중단될 수 있습니다.
-- 영향도: 높음
-- 현재 대응: 마지막 OWNER 보호, 운영자 복구 절차 문서화
-- 운영 전 반드시 해결해야 하는지: 절차 문서 확인 필요
-- 2차 개발로 넘겨도 되는지: 비밀번호 재설정 기능은 2차 가능
+- 인증 기반 production smoke test가 아직 완료되지 않았다.
+- 근태를 이번 릴리즈 범위에 포함한다면 기능 부재가 blocker다.
+- Neon migration/preflight 결과가 운영 기준으로 확인되지 않았다.
 
-### 초대 링크 유출 위험
+근태를 제외하고, OWNER/직원 초대/휴가/보안/모바일 smoke test가 production에서 통과하면 **제한적으로 직원 오픈 가능**으로 변경할 수 있다.
 
-- 위험 요소: PENDING 초대 링크가 외부에 노출될 수 있습니다.
-- 영향도: 높음
-- 현재 대응: token hash 저장, 만료 시간, 1회 사용, 취소/재발급 기능
-- 운영 전 반드시 해결해야 하는지: 운영자 교육 필요
-- 2차 개발로 넘겨도 되는지: 이메일/알림 고도화는 가능
+## 권장 오픈 방식
 
-### 모바일 화면 최적화 부족 가능성
+전 직원에게 한 번에 오픈하지 말고 단계적으로 진행한다.
 
-- 위험 요소: 모바일에서 일부 표 화면 사용성이 떨어질 수 있습니다.
-- 영향도: 중간
-- 현재 대응: MVP는 데스크톱 운영 중심으로 검수합니다.
-- 운영 전 반드시 해결해야 하는지: 아니오
-- 2차 개발로 넘겨도 되는지: 예
+1. 1차: 대표 + 테스트 직원 1~2명
+2. 2차: 핵심 운영 직원 3~5명
+3. 3차: 전체 직원
 
-### 대량 직원 데이터 성능 검증 부족 가능성
+각 단계에서 확인할 것:
 
-- 위험 요소: 직원 수가 많아질 때 목록/필터 성능 저하 가능성
-- 영향도: 중간
-- 현재 대응: query parameter 기반 필터 구조를 사용합니다.
-- 운영 전 반드시 해결해야 하는지: 초기 소규모 운영이면 아니오
-- 2차 개발로 넘겨도 되는지: 예
+- 가입 성공 여부
+- 모바일 사용성
+- 휴가 요청/승인
+- 출근/퇴근, 릴리즈 포함 시
+- 알림 수신
+- 오류 문의 여부
 
-## 11. 실제 운영 시 주의사항
+## 오픈 전 필수 체크
 
-- OWNER 초대 URL은 유출되지 않게 전달합니다.
-- raw token은 다시 조회할 수 없습니다.
-- DB migration 전 백업합니다.
-- AuditLog를 임의 삭제하지 않습니다.
-- 직원 삭제는 비활성화로 처리합니다.
-
-## 12. 2차 개발 추천 기능
-
-- 실제 이메일 발송 연동
-- 실제 본인인증 연동
-- 비밀번호 재설정
-- 파일 업로드 스토리지
-- 알림 기능
-- 휴가 캘린더
-- 관리자 통계 대시보드
-- 업무 Task 관리
-- 회의 일정/회의록
-- 성과 관리
-- 프로젝트 이슈 관리
-
-## 최종 판단
-
-**제한적으로 운영 배포 가능**
-
-코드와 배포 준비는 운영 가능한 수준입니다. 실제 서비스 오픈 전 운영 PostgreSQL에서 migration, seed, preflight, smoke test를 완료해야 합니다.
+- [ ] Neon `prisma migrate deploy` 완료
+- [ ] `preflight` 통과 또는 FAIL 사유 해소
+- [ ] Vercel production env 확인
+- [ ] OWNER 로그인 확인
+- [ ] 테스트 직원 초대/가입 확인
+- [ ] 휴가 요청/승인 확인
+- [ ] 모바일 주요 화면 확인
+- [ ] 보안 대시보드와 AuditLog 확인
+- [ ] 근태 포함 여부 결정

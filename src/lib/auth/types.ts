@@ -6,7 +6,7 @@ export type AuthenticatedUser = {
   name: string;
   title: string | null;
   role: Role;
-  status: "INVITED" | "ACTIVE" | "SUSPENDED" | "DEACTIVATED";
+  status: "INVITED" | "ACTIVE" | "SUSPENDED" | "DEACTIVATED" | "DELETED";
   teamId?: string | null;
   managedTeamIds?: string[];
 };

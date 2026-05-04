@@ -19,6 +19,7 @@ enum UserStatus {
   ACTIVE
   SUSPENDED
   DEACTIVATED
+  DELETED
 }
 
 enum InvitationStatus {
@@ -127,6 +128,7 @@ enum StepUpPurpose {
   OWNER_ROLE_CHANGE
   ROLE_CHANGE
   EMPLOYEE_DEACTIVATION
+  EMPLOYEE_PERMANENT_DELETE
   INVITATION_REISSUE
   SESSION_ADMIN
   REPORT_EXPORT
@@ -175,6 +177,10 @@ enum LeaveLedgerSource {
   LEAVE_WITHDRAWAL
   LEAVE_CANCELLATION
   SYSTEM_MIGRATION
+  IMPORT_MONTHLY_ANNUAL_USAGE
+  IMPORT_DETAILED_LEAVE_USAGE
+  IMPORT_RECONCILIATION_ADJUSTMENT
+  IMPORT_REVERSE_ADJUSTMENT
 }
 
 enum NotificationType {
@@ -231,6 +237,34 @@ enum LeaveRequestKind {
 enum LeaveApprovalSource {
   MANUAL
   AUTO_START_DATE
+}
+
+enum LeaveImportType {
+  MONTHLY_ANNUAL_USAGE
+  DETAILED_LEAVE_USAGE
+}
+
+enum LeaveImportStatus {
+  PARSED
+  VALIDATED
+  APPLIED
+  REVERSED
+  CANCELLED
+  FAILED
+}
+
+enum LeaveImportMatchStatus {
+  MATCHED
+  MULTIPLE_MATCHES
+  UNMATCHED
+  ERROR
+}
+
+enum LeaveImportMappedStatus {
+  PENDING
+  APPROVED
+  CANCELLED
+  UNKNOWN
 }
 
 enum AnnualGrantBasis {
@@ -484,6 +518,26 @@ enum AuditAction {
   AUTO_CONFIRM_PENDING_LEAVES_DRY_RUN
   AUTO_CONFIRM_PAST_START_LEAVES_RUN
   AUTO_CONFIRM_PAST_START_LEAVES_DRY_RUN
+  LEAVE_IMPORT_FILE_UPLOADED
+  LEAVE_IMPORT_PARSED
+  LEAVE_IMPORT_VALIDATED
+  LEAVE_IMPORT_VALIDATION_RUN
+  LEAVE_IMPORT_APPLY_STARTED
+  LEAVE_IMPORT_APPLY_COMPLETED
+  LEAVE_IMPORT_APPLY_FAILED
+  LEAVE_IMPORT_RECONCILIATION_RUN
+  LEAVE_IMPORT_RECONCILIATION_DIFF_FOUND
+  LEAVE_IMPORT_RECONCILIATION_ADJUSTMENT_CREATED
+  LEAVE_IMPORT_RECONCILIATION_ADJUSTMENT_BLOCKED
+  LEAVE_IMPORT_APPLIED
+  LEAVE_IMPORT_CANCELLED
+  LEAVE_IMPORT_ROW_MANUALLY_MATCHED
+  LEAVE_IMPORT_BLOCKED
+  LEAVE_IMPORT_REVERSE_REQUESTED
+  LEAVE_IMPORT_REVERSED
+  LEAVE_BALANCE_IMPORT_TEMPLATE_DOWNLOADED
+  LEAVE_BALANCE_IMPORT_VIEWED
+  LEAVE_BALANCE_IMPORT_REVERSE_BLOCKED
   REPORT_VIEWED
   REPORT_EXPORTED
   AUDIT_LOG_EXPORTED
@@ -507,6 +561,11 @@ enum AuditAction {
   SELF_ROLE_CHANGE_BLOCKED
   EMPLOYEE_DEACTIVATION_BLOCKED
   EMPLOYEE_DEACTIVATED_WITH_STEP_UP
+  EMPLOYEE_PERMANENT_DELETE_REQUESTED
+  EMPLOYEE_ANONYMIZED
+  EMPLOYEE_HARD_DELETED
+  EMPLOYEE_DELETE_BLOCKED
+  EMPLOYEE_DELETE_IMPACT_ANALYZED
   INVITATION_REISSUED_WITH_STEP_UP
   SESSION_REVOKED_BY_ADMIN
   REPORT_EXPORT_STEP_UP_REQUIRED
@@ -562,6 +621,8 @@ enum AuditTargetType {
   NOTIFICATION
   COMPANY_HOLIDAY
   LEAVE_REQUEST
+  LEAVE_IMPORT_BATCH
+  LEAVE_IMPORT_ROW
   EMPLOYEE_IMPORT_BATCH
   EMPLOYEE_PREJOIN_PROFILE
   PROFILE_CHANGE_REQUEST
@@ -582,10 +643,15 @@ model User {
   passwordHash String?
   lastLoginAt  DateTime?
   deactivatedAt DateTime?
+  deletedAt    DateTime?
+  deletedByUserId String?
+  deletionReason String?
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
   profile               EmployeeProfile?
+  deletedBy             User?                 @relation("UserDeletedBy", fields: [deletedByUserId], references: [id], onDelete: SetNull)
+  deletedUsers          User[]                @relation("UserDeletedBy")
   team                  Team?                  @relation("UserTeam", fields: [teamId], references: [id], onDelete: SetNull)
   leadTeams             Team[]                 @relation("TeamLead")
   sentInvitations       Invitation[]           @relation("InvitationsSent")
@@ -606,6 +672,10 @@ model User {
   leaveGrantsRevoked    LeaveGrant[]           @relation("LeaveGrantRevokedBy")
   leaveLedgers          LeaveLedger[]          @relation("LeaveLedgerUser")
   createdLeaveLedgers   LeaveLedger[]          @relation("LeaveLedgerCreatedBy")
+  uploadedLeaveImportBatches LeaveImportBatch[] @relation("LeaveImportUploadedBy")
+  appliedLeaveImportBatches  LeaveImportBatch[] @relation("LeaveImportAppliedBy")
+  reversedLeaveImportBatches LeaveImportBatch[] @relation("LeaveImportReversedBy")
+  matchedLeaveImportRows     LeaveImportRow[]   @relation("LeaveImportRowMatchedUser")
   annualLeavePoliciesApproved AnnualLeavePolicy[] @relation("AnnualLeavePolicyPromotionApprover")
   annualLeavePromotionNotices AnnualLeavePromotionNotice[]
   annualLeaveUsePlans AnnualLeaveUsePlan[]
@@ -633,6 +703,8 @@ model User {
   @@index([status])
   @@index([role])
   @@index([teamId])
+  @@index([deletedAt])
+  @@index([deletedByUserId])
 }
 
 model Team {
@@ -1617,6 +1689,10 @@ model LeaveRequest {
   autoConfirmedAt DateTime?
   autoConfirmReason String?
   approvalSource LeaveApprovalSource? @default(MANUAL)
+  importBatchId String?
+  importRowId String? @unique
+  importedAt DateTime?
+  isImported Boolean @default(false)
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
 
@@ -1634,6 +1710,85 @@ model LeaveRequest {
   @@index([requestKind])
   @@index([leaveTypeId])
   @@index([attachmentStatus])
+  @@index([importBatchId])
+  @@index([isImported])
+}
+
+model LeaveImportBatch {
+  id               String            @id @default(cuid())
+  importType       LeaveImportType
+  status           LeaveImportStatus @default(PARSED)
+  originalFileName String
+  fileSize         Int?
+  fileHash         String?
+  uploadedByUserId String
+  targetYear       Int?
+  rowCount         Int               @default(0)
+  matchedCount     Int               @default(0)
+  unmatchedCount   Int               @default(0)
+  warningCount     Int               @default(0)
+  errorCount       Int               @default(0)
+  appliedAt        DateTime?
+  appliedByUserId  String?
+  reversedAt       DateTime?
+  reversedByUserId String?
+  reverseReason    String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  uploadedBy       User              @relation("LeaveImportUploadedBy", fields: [uploadedByUserId], references: [id])
+  appliedBy        User?             @relation("LeaveImportAppliedBy", fields: [appliedByUserId], references: [id])
+  reversedBy       User?             @relation("LeaveImportReversedBy", fields: [reversedByUserId], references: [id])
+  rows             LeaveImportRow[]
+
+  @@index([importType])
+  @@index([status])
+  @@index([createdAt])
+  @@index([fileHash])
+  @@index([reversedAt])
+  @@index([reversedByUserId])
+}
+
+model LeaveImportRow {
+  id                    String                 @id @default(cuid())
+  batchId               String
+  rowNumber             Int
+  matchedUserId         String?
+  matchStatus           LeaveImportMatchStatus @default(UNMATCHED)
+  employeeNumber        String?
+  name                  String?
+  companyName           String?
+  teamName              String?
+  hireDate              DateTime?              @db.Date
+  leaveTypeRaw          String?
+  mappedLeaveTypeId     String?
+  mappedLeaveTypeCode   String?
+  startDate             DateTime?              @db.Date
+  endDate               DateTime?              @db.Date
+  amountDays            Float?
+  amountHoursText       String?
+  statusRaw             String?
+  mappedStatus          LeaveImportMappedStatus?
+  evidenceStatusRaw     String?
+  remainingAnnualDays   Float?
+  monthlyUsageJson      Json?
+  rawJson               Json?
+  warnings              Json?
+  errors                Json?
+  applied               Boolean                @default(false)
+  appliedLeaveRequestId String?
+  appliedLedgerIds      Json?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+
+  batch                 LeaveImportBatch       @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  matchedUser           User?                  @relation("LeaveImportRowMatchedUser", fields: [matchedUserId], references: [id])
+
+  @@index([batchId])
+  @@index([matchedUserId])
+  @@index([matchStatus])
+  @@index([mappedStatus])
+  @@index([applied])
 }
 
 model LeaveAttachment {

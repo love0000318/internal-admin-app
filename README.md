@@ -319,6 +319,14 @@ pnpm hr:import private/imports/employee-master.xlsx
 - [2차 최종 인수 보고서](docs/v2-final-acceptance-report.md)
 - [운영 가이드](docs/operation-guide.md)
 - [보안/개인정보 가이드](docs/security-and-privacy-guide.md)
+- [직원 오픈 최종 안내문](docs/employee-open-message-final.md)
+- [직원 초대 rollout 체크리스트](docs/employee-invitation-rollout-checklist.md)
+- [직원별 rollout tracker template](docs/employee-rollout-tracker-template.md)
+- [첫 주 운영 모니터링](docs/first-week-operations-monitoring.md)
+- [직원 오픈 이슈 대응 가이드](docs/employee-open-issue-response.md)
+- [일일 운영 점검표](docs/daily-admin-checklist.md)
+- [직원 FAQ](docs/employee-faq.md)
+- [직원 오픈 readiness report](docs/employee-open-readiness-report.md)
 
 운영 DB에는 `pnpm db:deploy`를 사용합니다. 운영 DB에서 `prisma migrate reset` 또는 `prisma migrate dev`를 실행하지 마세요. 실제 secret 값은 코드, 문서, git에 저장하지 말고 Vercel 환경변수로 등록합니다.
 

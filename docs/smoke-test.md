@@ -584,3 +584,260 @@
 - [ ] AuditLog CSV export 후 `AUDIT_LOG_EXPORTED` 로그가 남는다.
   - 기대 결과: CSV 내용 전체, token, tokenHash, secret은 AuditLog에 저장되지 않는다.
   - 실패 시 확인할 것: export route와 metadata sanitizer.
+
+## 비활성 직원 영구 삭제 smoke test
+
+- [ ] OWNER가 ACTIVE 직원 상세 화면을 연다.
+  - 기대 결과: 직원 영구 삭제 Danger Zone이 표시되지 않거나 실행할 수 없다.
+- [ ] OWNER가 직원을 비활성화한 뒤 상세 화면을 연다.
+  - 기대 결과: Danger Zone과 삭제 영향 분석 건수가 표시된다.
+- [ ] Step-up 비밀번호 없이 영구 삭제를 시도한다.
+  - 기대 결과: 서버에서 거부되고 직원은 삭제되지 않는다.
+- [ ] 확인 문구를 `DELETE`가 아닌 값으로 입력한다.
+  - 기대 결과: 서버에서 거부되고 직원은 삭제되지 않는다.
+- [ ] 올바른 Step-up 비밀번호와 `DELETE` 확인 문구로 삭제한다.
+  - 기대 결과: 기록이 있으면 `DELETED` 상태로 익명화되고, 기록이 없으면 hard delete된다.
+- [ ] 직원 목록 기본 조회를 확인한다.
+  - 기대 결과: 삭제된 직원은 기본 목록에서 숨겨진다.
+- [ ] 직원 목록 상태 필터에서 삭제됨 또는 전체를 선택한다.
+  - 기대 결과: OWNER만 `삭제된 직원`을 확인할 수 있고 이메일/전화번호는 노출되지 않는다.
+- [ ] 휴가/근태/AuditLog 이력을 확인한다.
+  - 기대 결과: 업무 기록은 유지되고 직원명은 `삭제된 직원`으로 표시된다.
+- [ ] AuditLog를 확인한다.
+  - 기대 결과: `EMPLOYEE_DELETE_IMPACT_ANALYZED`, `EMPLOYEE_PERMANENT_DELETE_REQUESTED`, `EMPLOYEE_ANONYMIZED` 또는 `EMPLOYEE_HARD_DELETED`가 남고 개인정보/token/hash/fileKey가 없다.
+
+## 모바일 반응형 UI 2차 보정 smoke test
+
+- [ ] 360px/390px/430px에서 `/login`을 확인한다.
+  - 기대 결과: 제목, 설명, 전화번호/비밀번호 입력, 자동 로그인 유지 체크박스, 로그인 버튼이 화면 밖으로 나가지 않는다.
+  - 실패 시 확인할 것: 로그인 card max-width, input `w-full min-w-0`, 버튼 min-height.
+- [ ] 360px/390px/430px에서 `/invitations/accept`를 확인한다.
+  - 기대 결과: 초대 요약과 가입 인증 코드 입력 form이 1열로 표시되고 긴 이메일이 카드 밖으로 넘치지 않는다.
+  - 실패 시 확인할 것: signup form label, summary card `break-words`, input width.
+- [ ] 390px에서 `/notifications`를 확인한다.
+  - 기대 결과: 알림 카드의 액션 버튼이 `상세 보기`, `읽음 처리` 같은 명확한 한국어로 표시되고 깨진 문자가 없다.
+  - 실패 시 확인할 것: 알림 action label mapping, card button width.
+- [ ] 390px에서 `/leaves/approvals`를 확인한다.
+  - 기대 결과: 승인 요청 목록은 모바일 카드로 읽을 수 있고 승인/반려/상세 버튼이 화면 밖으로 나가지 않는다.
+  - 실패 시 확인할 것: mobile card renderer, action button `w-full`, filter grid.
+- [ ] 390px에서 `/admin/leaves/settings`와 `/admin/leaves/types`를 확인한다.
+  - 기대 결과: 탭은 가로 스크롤되고 `휴가 유형 관리`, `승인 정책`, `생일 반차 설정`, `연차 정책 설정` 문구가 세로로 깨지지 않는다.
+  - 실패 시 확인할 것: `ResponsiveTabs`, `whitespace-nowrap`, `break-keep`, `shrink-0`.
+- [ ] 390px에서 `/admin/leaves/balances`를 확인한다.
+  - 기대 결과: 직원별 휴가 보유 현황과 맞춤휴가 현황이 모바일 카드로 표시되고 이메일/팀/수량이 카드 밖으로 넘치지 않는다.
+  - 실패 시 확인할 것: balance mobile card, `min-w-0`, `break-words`.
+- [ ] 390px에서 `/leaves/me/use-plan`을 확인한다.
+  - 기대 결과: 사용계획 항목은 시작일, 종료일, 사용 형태, 자동 계산 수량, 메모 순서로 1열 표시된다.
+  - 실패 시 확인할 것: `AnnualUsePlanForm`, date input width, calculated amount badge.
+- [ ] 390px에서 `/admin/reports`와 `/admin/security`를 확인한다.
+  - 기대 결과: 카드 제목/설명이 자연스럽게 줄바꿈되고 `바로가기`, `고위험 AuditLog 전체 보기` 버튼이 잘리지 않는다.
+  - 실패 시 확인할 것: card `min-w-0`, button `whitespace-nowrap`, description `break-keep`.
+- [ ] 768px/1024px/1440px에서 같은 화면들을 확인한다.
+  - 기대 결과: PC/태블릿에서는 기존 table과 카드 그리드 사용성이 유지된다.
+  - 실패 시 확인할 것: breakpoint `md:block`, `md:hidden`, table `min-w-*`.
+
+## 3차 릴리즈 후보 배포 후 smoke test
+
+1. OWNER 로그인
+   - 기대 결과: `/dashboard` 접근 가능.
+2. 직원 초대 생성
+   - 기대 결과: 단축 초대 URL과 1회용 가입 인증 코드가 생성 직후 표시됨.
+3. 직원 가입
+   - 기대 결과: 가입 인증 코드 검증 후 ACTIVE 직원 계정 생성.
+4. 직원 휴가 요청
+   - 기대 결과: 요청 상태가 PENDING 또는 정책에 따른 APPROVED로 표시됨.
+5. OWNER 휴가 승인
+   - 기대 결과: 휴가 상태와 잔여 수량, AuditLog가 갱신됨.
+6. 직원 출근
+   - 기대 결과: 근태 기능을 릴리즈에 포함한 경우 `/attendance`에서 출근 기록 생성.
+   - 현재 주의: 2026-05-04 코드 기준 `/attendance` route가 확인되지 않아 근태는 릴리즈 blocker다.
+7. 직원 퇴근
+   - 기대 결과: 근태 기능을 릴리즈에 포함한 경우 퇴근 기록과 근무 시간이 표시됨.
+8. 알림센터 확인
+   - 기대 결과: 자기 알림만 표시되고 읽음 처리가 가능함.
+9. 보안 대시보드 확인
+   - 기대 결과: OWNER만 `/admin/security` 접근 가능.
+10. AuditLog 확인
+    - 기대 결과: 고위험 작업과 smoke test 관련 이벤트가 민감정보 없이 기록됨.
+11. 모바일 주요 화면 확인
+    - 기대 결과: `/login`, `/invitations/accept`, `/leaves/me`, `/leaves/me/requests/new`, `/notifications`, `/admin/leaves/settings`가 390px에서 사용 가능.
+12. 비활성 직원 삭제/익명화 테스트
+    - 기대 결과: ACTIVE 직원은 삭제 불가, 비활성 직원은 Step-up 후 hard delete 또는 익명화.
+13. 캘린더 구독 링크 생성
+    - 기대 결과: `/leaves/calendar/settings`에서 링크 생성 후 ICS 응답에 승인 완료 휴가만 포함.
+
+## 직원 오픈 전 production smoke test
+
+운영 URL:
+
+```txt
+https://interal-admin-app.vercel.app
+```
+
+2026-05-04 기준 기본 접근성은 HTTP 200과 title `Internal Ops MVP`로 확인했다. 아래 항목은 OWNER/직원 테스트 계정으로 운영자가 직접 수행한다.
+
+1. OWNER 기본 흐름
+   - OWNER 로그인
+   - 대시보드 접근
+   - 알림 아이콘 표시 확인
+   - 직원 목록 접근
+   - 조직/팀 관리 접근
+   - 휴가 승인 요청 접근
+   - AuditLog 접근
+   - 보안 대시보드 접근
+
+2. 직원 초대/가입 흐름
+   - OWNER가 테스트 직원 초대 생성
+   - 단축 초대 URL 생성 확인
+   - 1회용 가입 인증 코드 생성 확인
+   - 시크릿 브라우저에서 초대 URL 접속
+   - 인증 코드 입력
+   - 직원 가입 완료
+   - 동일 인증 코드 재사용 실패 확인
+   - 직원 로그인 확인
+
+3. 휴가 요청/승인 흐름
+   - 직원 계정으로 로그인
+   - 내 휴가 현황 확인
+   - 연차 요청
+   - 승인 대기 상태 확인
+   - OWNER 계정으로 승인 처리
+   - 직원 화면에서 승인 완료 확인
+   - 잔여 일수 정합성 확인
+   - AuditLog 확인
+
+4. 근태 흐름
+   - 근태 기능을 이번 릴리즈에 포함한 경우 `/attendance`, `/attendance/history`, `/admin/attendance`를 확인한다.
+   - 현재 릴리즈 후보 코드 기준 route가 확인되지 않았으므로, 근태 포함 시 P0 blocker로 다룬다.
+
+5. 모바일 흐름
+   - 모바일 실기기 또는 360px/390px/430px viewport에서 로그인, 초대 가입, 휴가 요청, 알림센터, 휴가 관리 설정을 확인한다.
+
+6. 보안 흐름
+   - MANAGER admin 접근 실패
+   - LEAD 담당 범위 밖 승인 실패
+   - Step-up 없이 고위험 작업 실패
+   - 마지막 OWNER 보호 확인
+   - AuditLog metadata에 민감정보가 없는지 확인
+# 휴가 사용내역 엑셀 import
+
+- [ ] OWNER가 `/admin/leaves/import`에 접근할 수 있다.
+- [ ] MANAGER/LEAD는 import 화면에 접근할 수 없다.
+- [ ] OWNER가 `엑셀 템플릿 다운로드`를 실행한다.
+  - 기대 결과: ACTIVE 내부 직원과 현재 휴가 현황 참고값이 포함된 `.xlsx`가 다운로드되고 민감 HR 정보는 포함되지 않는다.
+- [ ] MANAGER/LEAD가 템플릿 다운로드 URL에 직접 접근한다.
+  - 기대 결과: 접근이 차단된다.
+- [ ] 월별 연차 사용 내역 `.xlsx` 업로드 후 미리보기가 생성된다.
+- [ ] `직원명/회사이메일/휴대폰/기준연도/총 부여/사용연차/잔여연차`처럼 alias 컬럼을 쓰는 구성원 휴가 현황 파일도 감지된다.
+- [ ] 잔여 연차가 0.5일 단위가 아니거나 같은 직원+기준연도 행이 중복되면 오류로 표시된다.
+- [ ] 휴가 사용 상세 내역 `.xlsx` 업로드 후 미리보기가 생성된다.
+- [ ] 미매칭/UNKNOWN/오류 행이 있으면 최종 반영이 차단된다.
+- [ ] Step-up 없이 최종 반영이 실패한다.
+- [ ] Step-up 후 검수 완료 batch가 반영된다.
+- [ ] 반영 후 LeaveLedger와 AuditLog에 import 이력이 남는다.
+- [ ] 엑셀 원본 파일, token, secret, 민감 row 전체가 AuditLog에 저장되지 않는다.
+- [ ] 반영 완료 후 batch 상세 화면에서 LeaveRequest/LeaveLedger/LeaveAdjustment 생성 수가 표시된다.
+- [ ] 월별 파일 반영 후 엑셀 잔여와 시스템 잔여 차이가 표시된다.
+- [ ] 취소 상태 row는 사용량으로 차감되지 않는다.
+- [ ] APPLIED 월별 batch에서 직원별 엑셀 잔여와 시스템 잔여 reconciliation이 표시된다.
+- [ ] 차이가 있는 직원은 OWNER Step-up 후 `차이값으로 보정`을 실행할 수 있다.
+- [ ] 보정은 LeaveAdjustment와 LeaveLedger `ADJUSTED` 이벤트로 남고 기존 ledger를 삭제하지 않는다.
+- [ ] 같은 batch/year/userId에 중복 보정이 차단된다.
+- [ ] APPLIED 월별 batch 상세에서 `업로드 반영 취소`를 Step-up 없이 실행한다.
+  - 기대 결과: Step-up 필요 오류가 표시되고 batch는 변경되지 않는다.
+- [ ] Step-up 후 `업로드 반영 취소`를 실행한다.
+  - 기대 결과: batch 상태가 `REVERSED`가 되고, 기존 기록 삭제 없이 반대 방향 LeaveAdjustment와 LeaveLedger `IMPORT_REVERSE_ADJUSTMENT`가 생성된다.
+- [ ] REVERSED batch를 다시 취소하려고 시도한다.
+  - 기대 결과: 재취소가 차단되고 AuditLog에 차단 요약만 남는다.
+
+## 휴가 Import 운영 리허설
+
+- [ ] 실제 개인정보가 없는 가명 fixture 또는 제한된 운영 샘플로 preview-only 업로드를 수행한다.
+- [ ] 월별 연차 사용 내역 파일에서 header row, 잔여 연차, 월별 사용량이 정상 파싱된다.
+- [ ] 휴가 사용 상세 내역 파일에서 header row 자동 탐색과 Excel serial date 변환이 정상 동작한다.
+- [ ] 미매칭 row, UNKNOWN row, 중복 의심 row가 미리보기에서 구분된다.
+- [ ] Step-up 없이 최종 반영이 실패한다.
+- [ ] Step-up 후 소수 row 반영을 수행하고 batch 재반영이 차단되는지 확인한다.
+- [ ] 반영 후 직원별 휴가 현황과 batch reconciliation을 비교한다.
+- [ ] AuditLog에 import 요약만 남고 엑셀 원문, token, secret, 민감 row 전체가 저장되지 않는다.
+- [ ] 운영자는 [휴가 Import 운영 리허설 Runbook](./leave-import-operation-runbook.md)을 따라 검수한다.
+- [ ] 최종 반영 전 [휴가 Import 최종 반영 전 체크리스트](./leave-import-pre-apply-checklist.md)를 완료한다.
+
+## 휴가 Import 최종 운영 QA
+
+### 월별 연차 사용 내역
+
+- [ ] OWNER로 로그인한다.
+- [ ] `/admin/leaves/import`에 접근한다.
+- [ ] 월별 연차 사용 내역 파일을 업로드한다.
+- [ ] header 감지 결과를 확인한다.
+- [ ] 직원 매칭 결과를 확인한다.
+- [ ] 엑셀 잔여와 시스템 잔여를 비교한다.
+- [ ] 차이값을 확인한다.
+- [ ] Step-up 없이 반영이 실패하는지 확인한다.
+- [ ] Step-up 후 반영이 성공하는지 확인한다.
+- [ ] 구성원 휴가 현황에서 잔여 연차를 확인한다.
+
+### 휴가 사용 상세 내역
+
+- [ ] 상세 휴가 사용 내역 파일을 업로드한다.
+- [ ] header row 자동 감지를 확인한다.
+- [ ] Excel serial date와 문자열 날짜 변환을 확인한다.
+- [ ] 휴가 유형 매핑을 확인한다.
+- [ ] 상태 매핑을 확인한다.
+- [ ] UNKNOWN row가 자동 반영되지 않는지 확인한다.
+- [ ] 휴가취소 row가 used로 차감되지 않는지 확인한다.
+- [ ] 승인대기 row가 pending으로 반영되는지 확인한다.
+- [ ] Step-up 후 반영한다.
+- [ ] LeaveRequest와 LeaveLedger 생성 결과를 확인한다.
+
+### 반영 후 검증
+
+- [ ] APPLIED batch reconciliation을 확인한다.
+- [ ] 직원별 엑셀 잔여와 시스템 잔여를 비교한다.
+- [ ] 차이 발생 직원을 확인한다.
+- [ ] 필요한 경우 Step-up 후 차이값으로 보정한다.
+- [ ] 보정 후 차이가 0인지 확인한다.
+- [ ] AuditLog에 import, reconciliation, adjustment 기록이 남는지 확인한다.
+- [ ] AuditLog에 엑셀 row 원문 전체, token, secret, 주민등록번호, 계좌번호, fileKey가 없는지 확인한다.
+
+## 구성원 휴가 현황 권한 smoke test
+
+- [ ] OWNER가 `/admin/leaves/balances`에 접근한다.
+  - 기대 결과: 전체 ACTIVE 내부 직원의 휴가 보유, 승인 대기, 사용 완료, 잔여 현황이 표시된다.
+- [ ] OWNER가 직원 상세 `/admin/leaves/balances/[userId]`에 접근한다.
+  - 기대 결과: 연차, 맞춤휴가, 생일 반차, 최근 휴가 요청, LeaveLedger 요약이 표시되고 민감 HR 정보는 없다.
+- [ ] LEAD가 `/admin/leaves/balances`에 접근한다.
+  - 기대 결과: 자신이 담당하는 팀과 하위 팀 구성원만 표시된다.
+- [ ] LEAD가 담당 범위 밖 직원 상세 URL에 직접 접근한다.
+  - 기대 결과: 접근 권한 없음으로 차단된다.
+- [ ] MANAGER가 `/admin/leaves/balances`에 접근한다.
+  - 기대 결과: 접근 권한 없음으로 차단되고, 본인 현황은 `/leaves/me`에서 확인한다.
+- [ ] EXTERNAL_PARTNER가 `/admin/leaves/balances` 또는 `/leaves/me`에 접근한다.
+  - 기대 결과: 내부 휴가 현황 접근이 차단된다.
+- [ ] OWNER 화면과 LEAD 화면에서 같은 담당 직원의 잔여 수량을 비교한다.
+  - 기대 결과: LeaveLedger 기반 잔여 계산이 동일하다.
+
+## 휴가 현황 조회/엑셀 업로드 배포 후 Smoke Test
+
+상세 체크리스트는 `docs/leave-balance-import-post-deploy-smoke-test.md`를 따른다.
+
+- [ ] OWNER 로그인
+- [ ] OWNER가 전체 구성원 휴가 현황 조회
+- [ ] LEAD가 담당 조직/하위 조직 휴가 현황 조회
+- [ ] LEAD가 담당 범위 밖 직원 URL 직접 접근 시 차단
+- [ ] MANAGER가 구성원 휴가 현황 접근 시 차단
+- [ ] MANAGER가 `/leaves/me`에서 본인 휴가 확인
+- [ ] EXTERNAL_PARTNER 내부 휴가 현황 접근 차단
+- [ ] OWNER 엑셀 템플릿 다운로드
+- [ ] 템플릿에 민감정보 없음
+- [ ] OWNER 테스트 엑셀 업로드
+- [ ] 미리보기에서 직원 매칭과 오류 행 확인
+- [ ] Step-up 없이 반영 실패
+- [ ] Step-up 후 반영 성공
+- [ ] LeaveAdjustment/LeaveLedger 조정 확인
+- [ ] batch 재반영 차단
+- [ ] Step-up 후 반영 취소 성공
+- [ ] 반영 취소가 역조정으로 기록됨
+- [ ] AuditLog에 민감정보 없이 기록됨
+- [ ] 모바일에서 구성원 휴가 현황과 import 화면 확인

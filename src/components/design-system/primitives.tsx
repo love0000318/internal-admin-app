@@ -20,7 +20,7 @@ export function Card({
 }) {
   return (
     <section
-      className={`rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 ${className}`}
+      className={`min-w-0 max-w-full rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 ${className}`}
     >
       {children}
     </section>
@@ -34,7 +34,7 @@ export function PageSection({
   children: ReactNode;
   className?: string;
 }) {
-  return <div className={`space-y-4 ${className}`}>{children}</div>;
+  return <div className={`min-w-0 max-w-full space-y-4 ${className}`}>{children}</div>;
 }
 
 export function buttonClassName({
@@ -51,7 +51,7 @@ export function buttonClassName({
         ? "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
         : "border-blue-700 bg-blue-700 text-white hover:bg-blue-800";
 
-  return `inline-flex h-10 items-center justify-center rounded-lg border px-4 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${toneClass} ${className}`;
+  return `inline-flex min-h-10 max-w-full min-w-0 items-center justify-center rounded-lg border px-4 py-2 text-center text-sm font-semibold leading-tight break-keep whitespace-normal transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 sm:whitespace-nowrap ${toneClass} ${className}`;
 }
 
 export function Badge({
@@ -63,7 +63,7 @@ export function Badge({
 }) {
   return (
     <span
-      className={`inline-flex min-h-6 items-center whitespace-nowrap break-keep rounded-full border px-2 text-xs font-medium ${badgeTone[tone]}`}
+      className={`inline-flex min-h-6 max-w-full min-w-0 items-center whitespace-nowrap break-keep rounded-full border px-2 text-xs font-medium leading-tight ${badgeTone[tone]}`}
     >
       {children}
     </span>
@@ -78,10 +78,10 @@ export function EmptyState({
   description?: string;
 }) {
   return (
-    <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-10 text-center">
-      <p className="font-semibold text-slate-900">{title}</p>
+    <div className="min-w-0 rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-10 text-center">
+      <p className="break-keep font-semibold text-slate-900">{title}</p>
       {description ? (
-        <p className="mt-2 text-sm leading-relaxed text-slate-500">{description}</p>
+        <p className="mt-2 break-keep text-sm leading-relaxed text-slate-500">{description}</p>
       ) : null}
     </div>
   );

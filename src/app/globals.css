@@ -19,13 +19,31 @@
   }
 }
 
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+*,
+::before,
+::after {
+  box-sizing: border-box;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
-  overflow-x: hidden;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+}
+
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
 }
 
 button,
@@ -33,6 +51,16 @@ input,
 select,
 textarea {
   font: inherit;
+  max-width: 100%;
+}
+
+button,
+a,
+label,
+summary,
+th,
+td {
+  word-break: keep-all;
 }
 
 table th,
@@ -43,6 +71,11 @@ table td {
 .break-keep {
   word-break: keep-all;
   overflow-wrap: normal;
+}
+
+.text-safe {
+  word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 
 @keyframes bell-shake {

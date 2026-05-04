@@ -17,7 +17,7 @@ export function NotificationBell({ unreadCount }: NotificationBellProps) {
           ? `알림센터, 읽지 않은 알림 ${unreadCount}개`
           : "알림센터"
       }
-      className="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
+      className="relative inline-flex min-h-11 min-w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
     >
       <Bell
         aria-hidden="true"

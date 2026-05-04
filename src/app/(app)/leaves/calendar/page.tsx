@@ -4,8 +4,6 @@ import { Badge, buttonClassName, Card, EmptyState } from "@/components/design-sy
 import { ResponsiveTable } from "@/components/design-system/responsive";
 import type { LeaveRequestStatus } from "@/generated/prisma/client";
 import {
-  CALENDAR_HALF_DAY_LABELS,
-  CALENDAR_STATUS_LABELS,
   getLeaveCalendarEventColorClass,
   listCalendarFilterOptions,
   listCalendarLeaveEvents,
@@ -29,12 +27,25 @@ type CalendarPageProps = {
   }>;
 };
 
+const statusLabels: Record<LeaveRequestStatus, string> = {
+  APPROVED: "승인 완료",
+  PENDING: "승인 대기",
+  REJECTED: "반려",
+  CANCELLED: "취소",
+  WITHDRAWN: "철회",
+};
+
+const halfDayLabels = {
+  AM: "오전",
+  PM: "오후",
+} as const;
+
 const statusOptions: Array<{ value: LeaveRequestStatus; label: string }> = [
-  { value: "APPROVED", label: "승인 완료" },
-  { value: "PENDING", label: "승인 대기" },
-  { value: "REJECTED", label: "반려" },
-  { value: "CANCELLED", label: "취소" },
-  { value: "WITHDRAWN", label: "철회" },
+  { value: "APPROVED", label: statusLabels.APPROVED },
+  { value: "PENDING", label: statusLabels.PENDING },
+  { value: "REJECTED", label: statusLabels.REJECTED },
+  { value: "CANCELLED", label: statusLabels.CANCELLED },
+  { value: "WITHDRAWN", label: statusLabels.WITHDRAWN },
 ];
 
 const weekdayLabels = ["일", "월", "화", "수", "목", "금", "토"];
@@ -102,11 +113,17 @@ function statusBadgeTone(status: LeaveRequestStatus) {
   return "default" as const;
 }
 
+function displayEventTitle(event: LeaveCalendarEvent) {
+  const typeLabel = event.isPrivate ? "휴가" : (event.leaveTypeLabel ?? "휴가");
+  const halfDay = event.halfDayPeriod ? ` ${halfDayLabels[event.halfDayPeriod]}` : "";
+  return `${event.employeeName} - ${typeLabel}${halfDay}`;
+}
+
 function EventLine({ event }: { event: LeaveCalendarEvent }) {
   const colorClassName = getLeaveCalendarEventColorClass(event);
   const content = (
-    <span className="block truncate">
-      {event.title}
+    <span className="block truncate" title={displayEventTitle(event)}>
+      {displayEventTitle(event)}
       {event.status === "PENDING" ? " · 승인 대기" : ""}
     </span>
   );
@@ -154,14 +171,13 @@ export default async function LeaveCalendarPage({
   return (
     <section className="min-w-0 space-y-5">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <div>
+        <div className="min-w-0">
           <p className="text-sm font-semibold text-blue-700">휴가</p>
           <h1 className="mt-2 break-keep text-2xl font-bold tracking-normal text-slate-950 sm:text-3xl">
             휴가 캘린더
           </h1>
           <p className="mt-2 max-w-3xl break-keep text-sm leading-relaxed text-slate-600">
-            승인된 휴가 일정을 확인합니다. 공개 범위에 따라 일부 휴가 유형은
-            중립색과 “휴가”로만 표시됩니다.
+            승인된 휴가 일정을 확인합니다. 공개 범위에 따라 일부 휴가 유형은 중립색과 “휴가”로만 표시됩니다.
           </p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row">
@@ -184,34 +200,34 @@ export default async function LeaveCalendarPage({
       </div>
 
       <Card>
-        <form action="/leaves/calendar" className="grid gap-3 md:grid-cols-6">
-          <label className="text-sm font-medium text-slate-800">
+        <form action="/leaves/calendar" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+          <label className="break-keep text-sm font-medium text-slate-800">
             기준 월
             <input
               name="month"
               type="month"
               defaultValue={month}
-              className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3"
+              className="mt-1 h-10 w-full min-w-0 rounded-lg border border-slate-300 px-3"
             />
           </label>
-          <label className="text-sm font-medium text-slate-800">
+          <label className="break-keep text-sm font-medium text-slate-800">
             보기 범위
             <select
               name="scope"
               defaultValue={scope}
-              className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3"
+              className="mt-1 h-10 w-full min-w-0 rounded-lg border border-slate-300 px-3"
             >
               <option value="ME">내 휴가만</option>
               <option value="TEAM">팀 휴가</option>
               {actor.role === "OWNER" ? <option value="ALL">전체 보기</option> : null}
             </select>
           </label>
-          <label className="text-sm font-medium text-slate-800">
+          <label className="break-keep text-sm font-medium text-slate-800">
             팀
             <select
               name="teamId"
               defaultValue={params.teamId ?? ""}
-              className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3"
+              className="mt-1 h-10 w-full min-w-0 rounded-lg border border-slate-300 px-3"
             >
               <option value="">전체</option>
               {options.teams.map((team) => (
@@ -221,12 +237,12 @@ export default async function LeaveCalendarPage({
               ))}
             </select>
           </label>
-          <label className="text-sm font-medium text-slate-800">
+          <label className="break-keep text-sm font-medium text-slate-800">
             직원
             <select
               name="userId"
               defaultValue={params.userId ?? ""}
-              className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3"
+              className="mt-1 h-10 w-full min-w-0 rounded-lg border border-slate-300 px-3"
             >
               <option value="">전체</option>
               {options.users.map((user) => (
@@ -236,12 +252,12 @@ export default async function LeaveCalendarPage({
               ))}
             </select>
           </label>
-          <label className="text-sm font-medium text-slate-800">
+          <label className="break-keep text-sm font-medium text-slate-800">
             휴가 유형
             <select
               name="leaveTypeId"
               defaultValue={params.leaveTypeId ?? ""}
-              className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3"
+              className="mt-1 h-10 w-full min-w-0 rounded-lg border border-slate-300 px-3"
             >
               <option value="">전체</option>
               {options.leaveTypes.map((leaveType) => (
@@ -251,12 +267,12 @@ export default async function LeaveCalendarPage({
               ))}
             </select>
           </label>
-          <label className="text-sm font-medium text-slate-800">
+          <label className="break-keep text-sm font-medium text-slate-800">
             상태
             <select
               name="status"
               defaultValue={statuses[0]}
-              className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3"
+              className="mt-1 h-10 w-full min-w-0 rounded-lg border border-slate-300 px-3"
             >
               {statusOptions.map((status) => (
                 <option key={status.value} value={status.value}>
@@ -265,7 +281,7 @@ export default async function LeaveCalendarPage({
               ))}
             </select>
           </label>
-          <div className="md:col-span-6">
+          <div className="sm:col-span-2 lg:col-span-6">
             <button className={buttonClassName({ className: "w-full sm:w-auto" })}>
               필터 적용
             </button>
@@ -333,7 +349,7 @@ export default async function LeaveCalendarPage({
       </div>
 
       <Card className="lg:hidden">
-        <h2 className="text-base font-semibold text-slate-950">월간 목록</h2>
+        <h2 className="break-keep text-base font-semibold text-slate-950">월간 목록</h2>
         <p className="mt-1 break-keep text-sm text-slate-500">
           모바일에서는 일정 목록을 먼저 보여줍니다.
         </p>
@@ -348,19 +364,19 @@ export default async function LeaveCalendarPage({
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold">{event.title}</p>
+                    <p className="break-keep text-sm font-semibold">{displayEventTitle(event)}</p>
                     <p className="mt-1 text-xs">
                       {event.date} · {event.teamName ?? "팀 없음"}
                     </p>
                   </div>
                   <Badge tone={statusBadgeTone(event.status)}>
-                    {CALENDAR_STATUS_LABELS[event.status]}
+                    {statusLabels[event.status]}
                   </Badge>
                 </div>
                 {event.detailUrl ? (
                   <Link
                     href={event.detailUrl}
-                    className="mt-3 inline-flex text-sm font-semibold underline"
+                    className="mt-3 inline-flex whitespace-nowrap break-keep text-sm font-semibold underline"
                   >
                     상세 보기
                   </Link>
@@ -400,7 +416,7 @@ export default async function LeaveCalendarPage({
                   <span
                     className={`inline-flex rounded-full border px-2 py-1 text-xs font-semibold ${getLeaveCalendarEventColorClass(event)}`}
                   >
-                    {event.title}
+                    {displayEventTitle(event)}
                   </span>
                   {event.isPrivate ? (
                     <span className="ml-2 text-xs text-slate-400">제한 표시</span>
@@ -408,21 +424,21 @@ export default async function LeaveCalendarPage({
                 </td>
                 <td>
                   {event.halfDayPeriod
-                    ? CALENDAR_HALF_DAY_LABELS[event.halfDayPeriod]
+                    ? halfDayLabels[event.halfDayPeriod]
                     : "-"}
                 </td>
                 <td>
                   <Badge tone={statusBadgeTone(event.status)}>
-                    {CALENDAR_STATUS_LABELS[event.status]}
+                    {statusLabels[event.status]}
                   </Badge>
                 </td>
                 <td>
                   {event.detailUrl ? (
-                    <Link className="text-sm font-semibold underline" href={event.detailUrl}>
+                    <Link className="whitespace-nowrap break-keep text-sm font-semibold underline" href={event.detailUrl}>
                       상세 보기
                     </Link>
                   ) : (
-                    <span className="text-slate-400">상세 제한</span>
+                    <span className="break-keep text-slate-400">상세 제한</span>
                   )}
                 </td>
               </tr>

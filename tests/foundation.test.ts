@@ -36,6 +36,7 @@ describe("foundation contracts", () => {
       "/admin/leaves/promotions",
       "/admin/leaves/holidays",
       "/admin/leaves/balances",
+      "/admin/leaves/import",
       "/admin/leaves/history",
       "/organization",
       "/organization/teams",
@@ -69,6 +70,7 @@ describe("foundation contracts", () => {
       "/notifications",
       "/leaves/approvals",
       "/admin/leaves/settings",
+      "/admin/leaves/balances",
       "/organization",
       "/admin/audit-logs",
       "/admin/security",
@@ -82,6 +84,7 @@ describe("foundation contracts", () => {
       "/leaves/calendar",
       "/notifications",
       "/leaves/approvals",
+      "/admin/leaves/balances",
     ]);
     expect(getVisibleNavItems("MANAGER").map((route) => route.href)).toEqual([
       "/dashboard",

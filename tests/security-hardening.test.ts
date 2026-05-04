@@ -5,8 +5,10 @@ import {
   resolveEmployeeChangeStepUpPurpose,
   getStepUpTtlMinutes,
   getStepUpMaxAttempts,
+  getStepUpPurposeForAction,
   STEP_UP_TTL_MINUTES,
 } from "@/lib/security/step-up";
+import { getDeletedEmployeeDisplayName } from "@/lib/organization/employee-deletion";
 import { isSameOriginRequest } from "@/lib/security/request-origin";
 import {
   sanitizeInvitationForResponse,
@@ -81,6 +83,24 @@ describe("step-up security policy", () => {
   it("allows step-up TTL and max attempts to be configured", () => {
     expect(getStepUpTtlMinutes()).toBe(5);
     expect(getStepUpMaxAttempts()).toBe(5);
+  });
+
+  it("maps employee permanent deletion to a dedicated step-up purpose", () => {
+    expect(getStepUpPurposeForAction("EMPLOYEE_PERMANENT_DELETE")).toBe(
+      "EMPLOYEE_PERMANENT_DELETE",
+    );
+  });
+});
+
+describe("employee deletion display", () => {
+  it("uses a privacy-safe display name for deleted employees", () => {
+    expect(
+      getDeletedEmployeeDisplayName({
+        id: "user_abcdef123456",
+        name: "Original Name",
+        status: "DELETED",
+      } as Parameters<typeof getDeletedEmployeeDisplayName>[0]),
+    ).toBe("삭제된 직원 #123456");
   });
 });
 

@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 
 import {
   deactivateEmployee,
+  permanentlyDeleteEmployee,
   updateEmployeeProfile,
 } from "@/app/(app)/organization/actions";
 import { RoleLabel, UserStatusBadge } from "@/components/ui/status-badge";
@@ -15,6 +16,7 @@ import { calculateTenureDays, formatTenureDays } from "@/lib/organization/tenure
 import { getPrisma } from "@/lib/db/prisma";
 import { decryptForMasking } from "@/lib/hr/profile-provisioning";
 import { maskBankAccount, maskResidentId } from "@/lib/hr/sensitive";
+import { analyzeEmployeeDeletionImpact } from "@/lib/organization/employee-deletion";
 import { requireOwner } from "@/lib/rbac/server-guards";
 
 export const dynamic = "force-dynamic";
@@ -28,7 +30,7 @@ export default async function EmployeeDetailPage({
   params,
   searchParams,
 }: EmployeeDetailPageProps) {
-  await requireOwner();
+  const actor = await requireOwner();
   const { userId } = await params;
   const { error, success } = await searchParams;
   const prisma = getPrisma();
@@ -66,6 +68,10 @@ export default async function EmployeeDetailPage({
   const bankAccount = decryptForMasking(
     user.sensitiveProfile?.bankAccountEncrypted,
   );
+  const deletionImpact =
+    user.status === "DEACTIVATED" && user.id !== actor.id
+      ? await analyzeEmployeeDeletionImpact(user.id)
+      : null;
 
   return (
     <section>
@@ -234,6 +240,9 @@ export default async function EmployeeDetailPage({
             <option value="ACTIVE">{userStatusLabel("ACTIVE")}</option>
             <option value="SUSPENDED">{userStatusLabel("SUSPENDED")}</option>
             <option value="DEACTIVATED">{userStatusLabel("DEACTIVATED")}</option>
+            <option value="DELETED" disabled>
+              {userStatusLabel("DELETED")}
+            </option>
           </select>
         </label>
         <label className="grid gap-1 text-sm font-medium">
@@ -299,6 +308,92 @@ export default async function EmployeeDetailPage({
           ) : null}
         </div>
       </form>
+      {deletionImpact ? (
+        <section className="mt-6 rounded-lg border border-red-200 bg-red-50 p-4 shadow-sm">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-red-900">위험 작업</p>
+              <h2 className="mt-1 text-lg font-semibold text-red-950">
+                비활성 직원 영구 삭제
+              </h2>
+              <p className="mt-2 text-sm leading-relaxed text-red-800">
+                영구 삭제를 진행하면 개인정보가 삭제됩니다. 휴가, 근태, 감사
+                기록이 있는 경우 업무 기록 보존을 위해 직원 정보는 “삭제된
+                직원”으로 익명화됩니다.
+              </p>
+            </div>
+            <span className="inline-flex shrink-0 rounded-full border border-red-200 bg-white px-3 py-1 text-xs font-semibold text-red-700">
+              Step-up 필요
+            </span>
+          </div>
+
+          <div className="mt-4 grid gap-3 rounded-md border border-red-100 bg-white p-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+            <ImpactItem label="휴가 요청" value={deletionImpact.counts.leaveRequests} />
+            <ImpactItem label="휴가 장부" value={deletionImpact.counts.leaveLedgers} />
+            <ImpactItem label="휴가 지급" value={deletionImpact.counts.leaveGrants} />
+            <ImpactItem label="업무 기록" value={deletionImpact.counts.businessRecords} />
+            <ImpactItem label="감사 로그(수행)" value={deletionImpact.counts.auditLogsAsActor} />
+            <ImpactItem label="감사 로그(대상)" value={deletionImpact.counts.auditLogsAsTarget} />
+            <ImpactItem label="HR 개인정보" value={deletionImpact.counts.hrProfiles} />
+            <ImpactItem label="세션/초대" value={deletionImpact.counts.sessions + deletionImpact.counts.invitations} />
+          </div>
+
+          <ul className="mt-3 list-disc space-y-1 pl-5 text-xs leading-relaxed text-red-800">
+            {deletionImpact.warnings.map((warning) => (
+              <li key={warning}>{warning}</li>
+            ))}
+          </ul>
+
+          <form action={permanentlyDeleteEmployee} className="mt-4 grid gap-3">
+            <input name="userId" type="hidden" value={user.id} />
+            <label className="grid gap-1 text-sm font-medium text-red-950">
+              삭제 사유
+              <textarea
+                name="deletionReason"
+                className="min-h-20 rounded-md border border-red-200 bg-white px-3 py-2 text-sm text-neutral-900"
+                placeholder="운영 기록용 사유를 입력하세요."
+              />
+            </label>
+            <label className="grid gap-1 text-sm font-medium text-red-950">
+              현재 비밀번호
+              <input
+                name="stepUpPassword"
+                type="password"
+                autoComplete="current-password"
+                className="h-10 rounded-md border border-red-200 bg-white px-3 text-sm text-neutral-900"
+                required
+              />
+            </label>
+            <label className="grid gap-1 text-sm font-medium text-red-950">
+              확인 문구
+              <input
+                name="confirmation"
+                className="h-10 rounded-md border border-red-200 bg-white px-3 text-sm text-neutral-900"
+                placeholder="DELETE"
+                pattern="DELETE"
+                required
+              />
+              <span className="text-xs font-normal text-red-700">
+                계속하려면 DELETE를 정확히 입력하세요.
+              </span>
+            </label>
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <button className="h-10 rounded-md bg-red-700 px-4 text-sm font-semibold text-white hover:bg-red-800">
+                직원 영구 삭제
+              </button>
+            </div>
+          </form>
+        </section>
+      ) : null}
     </section>
+  );
+}
+
+function ImpactItem({ label, value }: { label: string; value: number }) {
+  return (
+    <div>
+      <p className="text-xs font-medium text-neutral-500">{label}</p>
+      <p className="mt-1 text-base font-semibold text-neutral-950">{value}</p>
+    </div>
   );
 }

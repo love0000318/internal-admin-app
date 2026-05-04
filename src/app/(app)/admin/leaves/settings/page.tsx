@@ -25,7 +25,7 @@ function PolicyForm({ policy }: { policy: Awaited<ReturnType<typeof listLeavePol
     <form action={updateLeavePolicy} className="grid min-w-0 gap-3">
       <input name="id" type="hidden" value={policy.id} />
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <label className="text-sm font-medium text-slate-800">
+        <label className="break-keep text-sm font-medium text-slate-800">
           정책명
           <input
             name="name"
@@ -34,7 +34,7 @@ function PolicyForm({ policy }: { policy: Awaited<ReturnType<typeof listLeavePol
             required
           />
         </label>
-        <label className="text-sm font-medium text-slate-800">
+        <label className="break-keep text-sm font-medium text-slate-800">
           설명
           <input
             name="description"
@@ -45,7 +45,7 @@ function PolicyForm({ policy }: { policy: Awaited<ReturnType<typeof listLeavePol
         </label>
       </div>
       <div className="grid gap-2 sm:grid-cols-3">
-        <label className="flex items-center gap-2 text-sm text-slate-700">
+        <label className="flex items-center gap-2 break-keep text-sm text-slate-700">
           <input
             name="deductsAnnualBalance"
             type="checkbox"
@@ -53,7 +53,7 @@ function PolicyForm({ policy }: { policy: Awaited<ReturnType<typeof listLeavePol
           />
           연차 차감
         </label>
-        <label className="flex items-center gap-2 text-sm text-slate-700">
+        <label className="flex items-center gap-2 break-keep text-sm text-slate-700">
           <input
             name="requiresAttachment"
             type="checkbox"
@@ -61,13 +61,13 @@ function PolicyForm({ policy }: { policy: Awaited<ReturnType<typeof listLeavePol
           />
           증명자료 필요
         </label>
-        <label className="flex items-center gap-2 text-sm text-slate-700">
+        <label className="flex items-center gap-2 break-keep text-sm text-slate-700">
           <input name="isEnabled" type="checkbox" defaultChecked={policy.isEnabled} />
           사용
         </label>
       </div>
       <div className="grid gap-3 md:grid-cols-3">
-        <label className="text-sm font-medium text-slate-800">
+        <label className="break-keep text-sm font-medium text-slate-800">
           최소 요청 일수
           <input
             name="minRequestDays"
@@ -79,7 +79,7 @@ function PolicyForm({ policy }: { policy: Awaited<ReturnType<typeof listLeavePol
             placeholder="0.5"
           />
         </label>
-        <label className="text-sm font-medium text-slate-800">
+        <label className="break-keep text-sm font-medium text-slate-800">
           최대 요청 일수
           <input
             name="maxRequestDays"
@@ -93,7 +93,7 @@ function PolicyForm({ policy }: { policy: Awaited<ReturnType<typeof listLeavePol
             placeholder="선택"
           />
         </label>
-        <label className="text-sm font-medium text-slate-800">
+        <label className="break-keep text-sm font-medium text-slate-800">
           연간 최대 일수
           <input
             name="maxDaysPerYear"
@@ -123,14 +123,13 @@ export default async function LeaveSettingsPage({
   return (
     <section className="min-w-0 space-y-5">
       <div className="space-y-4">
-        <div>
+        <div className="min-w-0">
           <p className="text-sm font-semibold text-blue-700">휴가 관리</p>
           <h1 className="mt-2 break-keep text-2xl font-bold tracking-normal text-slate-950 sm:text-3xl">
             휴가 관리 설정
           </h1>
           <p className="mt-2 max-w-3xl break-keep text-sm leading-relaxed text-slate-600">
-            기본 휴가 정책의 차감 여부, 증명자료 필요 여부, 요청 가능 범위를
-            운영 정책에 맞게 조정합니다.
+            기본 휴가 정책의 연차 차감 여부, 증명자료 필요 여부, 요청 가능 범위를 운영 정책에 맞게 조정합니다.
           </p>
         </div>
         <LeaveAdminNav activeHref="/admin/leaves/settings" />
@@ -169,7 +168,7 @@ export default async function LeaveSettingsPage({
                 </div>
                 <dl className="grid gap-2 text-sm">
                   <div className="flex justify-between gap-3">
-                    <dt className="shrink-0 whitespace-nowrap text-slate-500">
+                    <dt className="shrink-0 whitespace-nowrap break-keep text-slate-500">
                       연차 차감
                     </dt>
                     <dd className="text-right">
@@ -177,13 +176,13 @@ export default async function LeaveSettingsPage({
                     </dd>
                   </div>
                   <div className="flex justify-between gap-3">
-                    <dt className="shrink-0 whitespace-nowrap text-slate-500">
+                    <dt className="shrink-0 whitespace-nowrap break-keep text-slate-500">
                       증명자료
                     </dt>
                     <dd className="text-right">{yesNo(policy.requiresAttachment)}</dd>
                   </div>
                   <div className="flex justify-between gap-3">
-                    <dt className="shrink-0 whitespace-nowrap text-slate-500">
+                    <dt className="shrink-0 whitespace-nowrap break-keep text-slate-500">
                       연간 최대
                     </dt>
                     <dd className="text-right">
