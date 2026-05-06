@@ -1,25 +1,25 @@
-import {
-  Bell,
-  BriefcaseBusiness,
-  CalendarDays,
-  ClipboardCheck,
-  FileClock,
-  LayoutDashboard,
-  ListChecks,
-  LucideIcon,
-  ScrollText,
-  ShieldCheck,
-  UserRound,
-  UsersRound,
-} from "lucide-react";
-
 import type { Role } from "@/lib/rbac/roles";
+
+export type NavigationIconKey =
+  | "dashboard"
+  | "profile"
+  | "notifications"
+  | "leave"
+  | "calendar"
+  | "approval"
+  | "attendance"
+  | "organization"
+  | "reports"
+  | "audit"
+  | "security"
+  | "jobs"
+  | "settings";
 
 export type NavigationItem = {
   id: string;
   label: string;
   href: string;
-  icon: LucideIcon;
+  iconKey?: NavigationIconKey;
   allowedRoles: Role[];
   matchPatterns?: string[];
 };
@@ -27,7 +27,7 @@ export type NavigationItem = {
 export type NavigationSection = {
   id: string;
   label: string;
-  icon: LucideIcon;
+  iconKey?: NavigationIconKey;
   items: NavigationItem[];
 };
 
@@ -39,13 +39,13 @@ export const navigationSections: NavigationSection[] = [
   {
     id: "home",
     label: "홈",
-    icon: LayoutDashboard,
+    iconKey: "dashboard",
     items: [
       {
         id: "dashboard",
         label: "대시보드",
         href: "/dashboard",
-        icon: LayoutDashboard,
+        iconKey: "dashboard",
         allowedRoles: INTERNAL_ROLES,
       },
     ],
@@ -53,13 +53,13 @@ export const navigationSections: NavigationSection[] = [
   {
     id: "personal",
     label: "개인",
-    icon: UserRound,
+    iconKey: "profile",
     items: [
       {
         id: "profile",
         label: "내 프로필",
         href: "/profile",
-        icon: UserRound,
+        iconKey: "profile",
         allowedRoles: INTERNAL_ROLES,
         matchPatterns: ["/profile"],
       },
@@ -67,7 +67,7 @@ export const navigationSections: NavigationSection[] = [
         id: "notifications",
         label: "알림센터",
         href: "/notifications",
-        icon: Bell,
+        iconKey: "notifications",
         allowedRoles: INTERNAL_ROLES,
       },
     ],
@@ -75,13 +75,13 @@ export const navigationSections: NavigationSection[] = [
   {
     id: "leave",
     label: "휴가",
-    icon: CalendarDays,
+    iconKey: "leave",
     items: [
       {
         id: "my-leaves",
         label: "휴가 현황",
         href: "/leaves/me",
-        icon: CalendarDays,
+        iconKey: "leave",
         allowedRoles: INTERNAL_ROLES,
         matchPatterns: ["/leaves/me", "/leaves/my"],
       },
@@ -89,29 +89,39 @@ export const navigationSections: NavigationSection[] = [
         id: "leave-calendar",
         label: "휴가 캘린더",
         href: "/leaves/calendar",
-        icon: CalendarDays,
+        iconKey: "calendar",
         allowedRoles: INTERNAL_ROLES,
       },
       {
         id: "leave-approvals",
         label: "휴가 승인 요청",
         href: "/leaves/approvals",
-        icon: ClipboardCheck,
+        iconKey: "approval",
         allowedRoles: OWNER_LEAD,
       },
       {
         id: "leave-operations",
         label: "휴가 운영",
         href: "/admin/leaves/settings",
-        icon: ListChecks,
+        iconKey: "settings",
         allowedRoles: OWNER_ONLY,
-        matchPatterns: ["/admin/leaves/settings", "/admin/leaves/types", "/admin/leaves/grants", "/admin/leaves/annual-policy", "/admin/leaves/birthday-policy", "/admin/leaves/holidays", "/admin/leaves/promotions", "/admin/leaves/import", "/admin/leaves/history"],
+        matchPatterns: [
+          "/admin/leaves/settings",
+          "/admin/leaves/types",
+          "/admin/leaves/grants",
+          "/admin/leaves/annual-policy",
+          "/admin/leaves/birthday-policy",
+          "/admin/leaves/holidays",
+          "/admin/leaves/promotions",
+          "/admin/leaves/import",
+          "/admin/leaves/history",
+        ],
       },
       {
         id: "leave-balances",
         label: "구성원 휴가 현황",
         href: "/admin/leaves/balances",
-        icon: UsersRound,
+        iconKey: "organization",
         allowedRoles: OWNER_LEAD,
       },
     ],
@@ -119,20 +129,20 @@ export const navigationSections: NavigationSection[] = [
   {
     id: "attendance",
     label: "근태",
-    icon: FileClock,
+    iconKey: "attendance",
     items: [
       {
         id: "attendance-history",
         label: "출퇴근/근태",
         href: "/attendance/history",
-        icon: FileClock,
+        iconKey: "attendance",
         allowedRoles: INTERNAL_ROLES,
       },
       {
         id: "attendance-monthly",
         label: "근태 마감",
         href: "/admin/attendance/monthly",
-        icon: ClipboardCheck,
+        iconKey: "approval",
         allowedRoles: OWNER_LEAD,
       },
     ],
@@ -140,13 +150,13 @@ export const navigationSections: NavigationSection[] = [
   {
     id: "organization",
     label: "조직",
-    icon: UsersRound,
+    iconKey: "organization",
     items: [
       {
         id: "organization",
         label: "조직 관리",
         href: "/organization",
-        icon: UsersRound,
+        iconKey: "organization",
         allowedRoles: OWNER_ONLY,
         matchPatterns: ["/organization"],
       },
@@ -154,7 +164,7 @@ export const navigationSections: NavigationSection[] = [
         id: "permissions-preview",
         label: "권한 미리보기",
         href: "/admin/organization/permissions-preview",
-        icon: ShieldCheck,
+        iconKey: "security",
         allowedRoles: OWNER_ONLY,
       },
     ],
@@ -162,20 +172,20 @@ export const navigationSections: NavigationSection[] = [
   {
     id: "reports",
     label: "리포트/감사",
-    icon: ScrollText,
+    iconKey: "reports",
     items: [
       {
         id: "reports",
         label: "운영 리포트",
         href: "/admin/reports",
-        icon: ScrollText,
+        iconKey: "reports",
         allowedRoles: OWNER_LEAD,
       },
       {
         id: "audit-logs",
         label: "감사 로그",
         href: "/admin/audit-logs",
-        icon: FileClock,
+        iconKey: "audit",
         allowedRoles: OWNER_ONLY,
       },
     ],
@@ -183,20 +193,20 @@ export const navigationSections: NavigationSection[] = [
   {
     id: "security",
     label: "보안/시스템",
-    icon: ShieldCheck,
+    iconKey: "security",
     items: [
       {
         id: "security",
         label: "보안 현황",
         href: "/admin/security",
-        icon: ShieldCheck,
+        iconKey: "security",
         allowedRoles: OWNER_ONLY,
       },
       {
         id: "jobs",
         label: "자동화 작업",
         href: "/admin/jobs",
-        icon: BriefcaseBusiness,
+        iconKey: "jobs",
         allowedRoles: OWNER_ONLY,
       },
     ],
@@ -242,5 +252,9 @@ export function getDefaultOpenSections(
 ) {
   const activeSectionId = getActiveSectionId(pathname, sections);
 
-  return new Set(activeSectionId ? [activeSectionId] : sections.slice(0, 2).map((section) => section.id));
+  return new Set(
+    activeSectionId
+      ? [activeSectionId]
+      : sections.slice(0, 2).map((section) => section.id),
+  );
 }
