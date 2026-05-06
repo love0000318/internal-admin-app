@@ -56,6 +56,7 @@ const grant = {
   source: "BIRTHDAY_AUTO",
   referenceYear: 2026,
   referenceDate: dateOnlyToDate("2026-05-10"),
+  idempotencyKey: "birthday-auto:user-1:2026",
   metadata: null,
   createdAt: new Date(),
   updatedAt: new Date(),

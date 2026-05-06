@@ -146,6 +146,20 @@ export default async function MyLeavesPage({ searchParams }: MyLeavesPageProps) 
               value={formatLeaveDays(balance.remainingDays)}
             />
           </div>
+          {balance.underOneYearProratedAnnualDays > 0 ? (
+            <dl className="mt-4 grid gap-2 rounded-md bg-neutral-50 px-3 py-3 text-sm">
+              <div className="flex justify-between gap-4">
+                <dt className="text-neutral-500">1년 미만 월차</dt>
+                <dd className="font-medium">{formatLeaveDays(balance.monthlyAccruedDays)}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-neutral-500">회계연도 비례 연차</dt>
+                <dd className="font-medium">
+                  {formatLeaveDays(balance.underOneYearProratedAnnualDays)}
+                </dd>
+              </div>
+            </dl>
+          ) : null}
         </div>
       </div>
 

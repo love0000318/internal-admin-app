@@ -174,6 +174,15 @@ export default async function LeaveBalanceDetailPage({
             <Metric label="잔여" value={formatLeaveDays(balance.remainingDays)} />
           </div>
           <dl className="mt-4 grid gap-2 text-sm">
+            {balance.underOneYearProratedAnnualDays > 0 ? (
+              <>
+                <InfoRow label="1년 미만 월차" value={formatLeaveDays(balance.monthlyAccruedDays)} />
+                <InfoRow
+                  label="회계연도 비례 연차"
+                  value={formatLeaveDays(balance.underOneYearProratedAnnualDays)}
+                />
+              </>
+            ) : null}
             <InfoRow label="사용 완료" value={formatLeaveDays(balance.usedDays)} />
             <InfoRow label="맞춤휴가 잔여" value={formatLeaveDays(customRemaining)} />
             <InfoRow label="생일 반차 잔여" value={formatLeaveDays(birthdayRemaining)} />

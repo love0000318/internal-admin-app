@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import { assertLeaveRequestAllowed } from "@/lib/leave/assert-leave-request-allowed";
+import {
+  calculateUnderOneYearFiscalProratedLeave,
+  roundUpToHalfDay,
+} from "@/lib/leave/annual-policy";
 import { calculateAnnualEntitlement } from "@/lib/leave/calculate-entitlement";
 import {
   assertValidLeaveDateRange,
@@ -69,6 +73,47 @@ describe("leave calculations", () => {
         asOfDate: "2026-05-01",
       }),
     ).toBe(17);
+  });
+
+  it("rounds fiscal prorated leave up to half-day units", () => {
+    expect(roundUpToHalfDay(5.01)).toBe(5.5);
+    expect(roundUpToHalfDay(5.5)).toBe(5.5);
+    expect(roundUpToHalfDay(5.51)).toBe(6);
+    expect(roundUpToHalfDay(0.01)).toBe(0.5);
+    expect(roundUpToHalfDay(0)).toBe(0);
+  });
+
+  it("calculates fiscal-year prorated leave only for under-one-year previous-year new hires", () => {
+    const prorated = calculateUnderOneYearFiscalProratedLeave({
+      hireDate: "2025-09-01",
+      fiscalYear: 2026,
+      asOfDate: "2026-05-01",
+    });
+
+    expect(prorated).toMatchObject({
+      isEligible: true,
+      previousYear: 2025,
+      workedDaysInPreviousYear: 122,
+      roundedDays: 5.5,
+      roundingPolicy: "CEIL_TO_HALF_DAY",
+      reason: "ELIGIBLE",
+    });
+    expect(prorated.rawDays).toBeCloseTo(5.01, 2);
+
+    expect(
+      calculateUnderOneYearFiscalProratedLeave({
+        hireDate: "2019-08-19",
+        fiscalYear: 2026,
+        asOfDate: "2026-05-01",
+      }).roundedDays,
+    ).toBe(0);
+    expect(
+      calculateUnderOneYearFiscalProratedLeave({
+        hireDate: "2023-06-30",
+        fiscalYear: 2026,
+        asOfDate: "2026-05-01",
+      }).roundedDays,
+    ).toBe(0);
   });
 
   it("excludes weekends and company holidays from business leave days", () => {
@@ -205,6 +250,59 @@ describe("leave calculations", () => {
     expect(balance.usedDays).toBe(2);
     expect(balance.pendingDays).toBe(0.5);
     expect(balance.remainingDays).toBe(13.5);
+  });
+
+  it("adds under-one-year fiscal prorated leave only to eligible employees", () => {
+    const policies = {
+      ANNUAL: annualPolicy,
+      HALF_DAY: { ...annualPolicy, type: "HALF_DAY" as const },
+      RESERVE_FORCES: { ...nonDeductingSickPolicy, type: "RESERVE_FORCES" as const },
+      SICK: nonDeductingSickPolicy,
+      BEREAVEMENT: { ...nonDeductingSickPolicy, type: "BEREAVEMENT" as const },
+    };
+    const yangBalance = calculateLeaveBalanceForUser({
+      hireDate: "2025-09-01",
+      asOfDate: "2026-05-01",
+      fiscalYear: 2026,
+      includeUnderOneYearFiscalProratedLeave: true,
+      adjustments: [],
+      leaveRequests: [{ type: "ANNUAL", status: "APPROVED", dayCount: 3 }],
+      policies,
+    });
+
+    expect(yangBalance.monthlyAccruedDays).toBe(8);
+    expect(yangBalance.underOneYearProratedAnnualDays).toBe(5.5);
+    expect(yangBalance.grantedDays).toBe(13.5);
+    expect(yangBalance.usedDays).toBe(3);
+    expect(yangBalance.manualGranted).toBe(0);
+    expect(yangBalance.remainingDays).toBe(10.5);
+
+    for (const hireDate of ["2019-08-19", "2023-06-30", "2024-10-04"] as const) {
+      const before = calculateLeaveBalanceForUser({
+        hireDate,
+        asOfDate: "2026-05-01",
+        fiscalYear: 2026,
+        includeUnderOneYearFiscalProratedLeave: false,
+        adjustments: [{ days: 2 }],
+        leaveRequests: [{ type: "ANNUAL", status: "APPROVED", dayCount: 1 }],
+        policies,
+      });
+      const after = calculateLeaveBalanceForUser({
+        hireDate,
+        asOfDate: "2026-05-01",
+        fiscalYear: 2026,
+        includeUnderOneYearFiscalProratedLeave: true,
+        adjustments: [{ days: 2 }],
+        leaveRequests: [{ type: "ANNUAL", status: "APPROVED", dayCount: 1 }],
+        policies,
+      });
+
+      expect(after.underOneYearProratedAnnualDays).toBe(0);
+      expect(after.monthlyAccruedDays).toBe(0);
+      expect(after.grantedDays).toBe(before.grantedDays);
+      expect(after.manualGranted).toBe(before.manualGranted);
+      expect(after.remainingDays).toBe(before.remainingDays);
+    }
   });
 
   it("keeps balance consistent after approve, reject, and cancel statuses", () => {

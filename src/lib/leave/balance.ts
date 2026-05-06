@@ -1,4 +1,8 @@
-import { calculateAnnualEntitlement } from "@/lib/leave/calculate-entitlement";
+import {
+  calculateAnnualEntitlement,
+  calculateMonthlyEntitlement,
+  calculateUnderOneYearFiscalProratedEntitlement,
+} from "@/lib/leave/calculate-entitlement";
 import type {
   DateOnly,
   LeaveAdjustmentForBalance,
@@ -11,6 +15,8 @@ import type {
 export type CalculatedLeaveBalance = LeaveBalanceSnapshot & {
   grantedDays: number;
   remainingDays: number;
+  monthlyAccruedDays: number;
+  underOneYearProratedAnnualDays: number;
 };
 
 export function toNumber(value: unknown): number {
@@ -57,14 +63,32 @@ export function calculateLeaveBalanceForUser({
   adjustments,
   leaveRequests,
   policies,
+  fiscalYear,
+  includeUnderOneYearFiscalProratedLeave = false,
 }: {
   hireDate: DateOnly | null | undefined;
   asOfDate: DateOnly;
   adjustments: LeaveAdjustmentForBalance[];
   leaveRequests: LeaveRequestForBalance[];
   policies: Record<LeaveType, LeavePolicy>;
+  fiscalYear?: number;
+  includeUnderOneYearFiscalProratedLeave?: boolean;
 }): CalculatedLeaveBalance {
-  const annualEntitled = calculateAnnualEntitlement({ hireDate, asOfDate });
+  const monthlyAccruedDays = calculateMonthlyEntitlement({ hireDate, asOfDate });
+  const underOneYearProratedAnnualDays =
+    includeUnderOneYearFiscalProratedLeave && fiscalYear
+      ? calculateUnderOneYearFiscalProratedEntitlement({
+          hireDate,
+          fiscalYear,
+          asOfDate,
+        }).roundedDays
+      : 0;
+  const annualEntitled = calculateAnnualEntitlement({
+    hireDate,
+    asOfDate,
+    fiscalYear,
+    includeUnderOneYearFiscalProratedLeave,
+  });
   const manualGranted = adjustments.reduce((sum, adjustment) => {
     return sum + adjustment.days;
   }, 0);
@@ -87,6 +111,8 @@ export function calculateLeaveBalanceForUser({
 
   return {
     annualEntitled,
+    monthlyAccruedDays,
+    underOneYearProratedAnnualDays,
     manualGranted,
     grantedDays,
     usedDays,

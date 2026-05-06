@@ -297,6 +297,15 @@ export default async function EmployeeLeaveBalancesPage({ searchParams }: Balanc
                     <InfoRow label="사번" value={balance.user.profile?.employeeNumber ?? "-"} />
                     <InfoRow label="입사일" value={hireDateOnly ?? "미입력"} />
                     <InfoRow label="기본 부여 연차" value={formatLeaveDays(balance.annualEntitled)} />
+                    {balance.underOneYearProratedAnnualDays > 0 ? (
+                      <>
+                        <InfoRow label="1년 미만 월차" value={formatLeaveDays(balance.monthlyAccruedDays)} />
+                        <InfoRow
+                          label="회계연도 비례 연차"
+                          value={formatLeaveDays(balance.underOneYearProratedAnnualDays)}
+                        />
+                      </>
+                    ) : null}
                     <InfoRow label="조정" value={formatLeaveDays(balance.manualGranted)} />
                     <InfoRow label="맞춤휴가 잔여" value={formatLeaveDays(grants?.customRemaining ?? 0)} />
                     <InfoRow label="생일 반차 잔여" value={formatLeaveDays(grants?.birthdayRemaining ?? 0)} />

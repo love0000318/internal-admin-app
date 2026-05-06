@@ -13,6 +13,7 @@ import {
   type NotificationGroup,
 } from "@/lib/notifications/notifications";
 import { requireRouteAccess } from "@/lib/rbac/server-guards";
+import type { NotificationPriority } from "@/generated/prisma/enums";
 
 export const dynamic = "force-dynamic";
 
@@ -39,16 +40,46 @@ const priorityLabels = {
   HIGH: "높음",
 };
 
-function priorityTone(priority: "LOW" | "NORMAL" | "HIGH") {
-  if (priority === "HIGH") {
+const notificationPriorityLabels: Record<NotificationPriority, string> = {
+  ...priorityLabels,
+  CRITICAL: "긴급",
+};
+
+type PriorityTone = "default" | "primary" | "warning" | "danger";
+
+function normalizePriority(priority: string | null | undefined): NotificationPriority {
+  if (
+    priority === "LOW" ||
+    priority === "NORMAL" ||
+    priority === "HIGH" ||
+    priority === "CRITICAL"
+  ) {
+    return priority;
+  }
+
+  return "NORMAL";
+}
+
+function priorityTone(priority: string | null | undefined): PriorityTone {
+  const normalizedPriority = normalizePriority(priority);
+
+  if (normalizedPriority === "CRITICAL") {
     return "danger" as const;
   }
 
-  if (priority === "LOW") {
+  if (normalizedPriority === "HIGH") {
+    return "warning" as const;
+  }
+
+  if (normalizedPriority === "LOW") {
     return "default" as const;
   }
 
   return "primary" as const;
+}
+
+function priorityLabel(priority: string | null | undefined) {
+  return notificationPriorityLabels[normalizePriority(priority)];
 }
 
 export default async function NotificationsPage({
@@ -137,7 +168,7 @@ export default async function NotificationsPage({
                   </h2>
                 </div>
                 <Badge tone={priorityTone(notification.priority)}>
-                  {priorityLabels[notification.priority]}
+                  {priorityLabel(notification.priority)}
                 </Badge>
               </div>
               <p className="mt-2 text-safe text-sm leading-relaxed text-slate-600">
@@ -211,7 +242,7 @@ export default async function NotificationsPage({
                 <td>{groupLabels[getNotificationGroup(notification.type)]}</td>
                 <td>
                   <Badge tone={priorityTone(notification.priority)}>
-                    {priorityLabels[notification.priority]}
+                    {priorityLabel(notification.priority)}
                   </Badge>
                 </td>
                 <td className="font-semibold text-slate-950">

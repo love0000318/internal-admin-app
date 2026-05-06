@@ -31,6 +31,7 @@
     "jobs:expire-annual-leaves": "tsx scripts/expire-annual-leaves.ts",
     "jobs:fix-fiscal-year-leave-expirations": "tsx scripts/fix-fiscal-year-leave-expirations.ts",
     "jobs:fix-leave-import-reference-year": "tsx scripts/fix-leave-import-reference-year.ts",
+    "jobs:audit-fix-leave-integrity": "tsx scripts/audit-and-fix-leave-balance-integrity.ts",
     "jobs:auto-confirm-pending-leaves": "tsx scripts/auto-confirm-pending-leaves.ts",
     "jobs:auto-confirm-past-start-leaves": "tsx scripts/auto-confirm-past-start-leaves.ts"
   },

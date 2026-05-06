@@ -156,6 +156,22 @@ function completedYears(from: DateOnly, to: DateOnly) {
   return Math.max(0, years);
 }
 
+function daysBetween(start: DateOnly, end: DateOnly) {
+  const startDate = dateOnlyToDate(start);
+  const endDate = dateOnlyToDate(end);
+  const millisecondsPerDay = 24 * 60 * 60 * 1000;
+
+  return Math.floor((endDate.getTime() - startDate.getTime()) / millisecondsPerDay);
+}
+
+function dateOnlyMax(first: DateOnly, second: DateOnly) {
+  return first > second ? first : second;
+}
+
+function dateOnlyMin(first: DateOnly, second: DateOnly) {
+  return first < second ? first : second;
+}
+
 function completedMonths(from: DateOnly, to: DateOnly) {
   const start = parseDateOnly(from);
   const end = parseDateOnly(to);
@@ -229,10 +245,92 @@ export function calculateMonthlyLeaveEntitlement({
   return Math.min(completedMonths(hireDate, asOfDate) * policy.monthlyLeaveAmount, 11);
 }
 
+export function roundUpToHalfDay(value: number): number {
+  if (!Number.isFinite(value) || value <= 0) {
+    return 0;
+  }
+
+  return Math.ceil(value * 2) / 2;
+}
+
+export function calculateWorkedDaysInYear({
+  hireDate,
+  year,
+  endDate,
+}: {
+  hireDate: DateOnly;
+  year: number;
+  endDate?: DateOnly | null;
+}) {
+  const yearStart = `${year}-01-01` as DateOnly;
+  const yearEnd = `${year}-12-31` as DateOnly;
+  const workedFrom = dateOnlyMax(hireDate, yearStart);
+  const workedTo = dateOnlyMin(endDate ?? yearEnd, yearEnd);
+
+  if (workedFrom > workedTo) {
+    return 0;
+  }
+
+  return daysBetween(workedFrom, workedTo) + 1;
+}
+
+export function calculateUnderOneYearFiscalProratedLeave({
+  hireDate,
+  fiscalYear,
+  asOfDate,
+  baseAnnualDays = 15,
+}: {
+  hireDate: DateOnly | null | undefined;
+  fiscalYear: number;
+  asOfDate: DateOnly;
+  baseAnnualDays?: number;
+}) {
+  const previousYear = fiscalYear - 1;
+  const notEligible = {
+    isEligible: false,
+    previousYear,
+    workedDaysInPreviousYear: 0,
+    rawDays: 0,
+    roundedDays: 0,
+    roundingPolicy: "CEIL_TO_HALF_DAY" as const,
+  };
+
+  if (!hireDate) {
+    return { ...notEligible, reason: "MISSING_HIRE_DATE" as const };
+  }
+
+  if (daysBetween(hireDate, asOfDate) >= 365) {
+    return { ...notEligible, reason: "SERVICE_DAYS_AT_LEAST_365" as const };
+  }
+
+  if (!hireDate.startsWith(`${previousYear}-`)) {
+    return { ...notEligible, reason: "NOT_PREVIOUS_YEAR_NEW_HIRE" as const };
+  }
+
+  const workedDaysInPreviousYear = calculateWorkedDaysInYear({
+    hireDate,
+    year: previousYear,
+  });
+  const rawDays = (baseAnnualDays * workedDaysInPreviousYear) / 365;
+  const roundedDays = roundUpToHalfDay(rawDays);
+
+  return {
+    isEligible: roundedDays > 0,
+    previousYear,
+    workedDaysInPreviousYear,
+    rawDays,
+    roundedDays,
+    roundingPolicy: "CEIL_TO_HALF_DAY" as const,
+    reason: roundedDays > 0 ? ("ELIGIBLE" as const) : ("NO_WORKED_DAYS" as const),
+  };
+}
+
 export function calculateAnnualLeaveEntitlement({
   hireDate,
   asOfDate,
   policy,
+  fiscalYear,
+  includeUnderOneYearFiscalProratedLeave = false,
 }: {
   hireDate: DateOnly | null | undefined;
   asOfDate: DateOnly;
@@ -246,6 +344,8 @@ export function calculateAnnualLeaveEntitlement({
     | "monthlyLeaveAmount"
     | "monthlyLeaveGrantRule"
   >;
+  fiscalYear?: number;
+  includeUnderOneYearFiscalProratedLeave?: boolean;
 }) {
   if (!hireDate || !policy.annualLeaveEnabled) {
     return 0;
@@ -254,7 +354,22 @@ export function calculateAnnualLeaveEntitlement({
   const years = completedYears(hireDate, asOfDate);
 
   if (years < 1) {
-    return calculateMonthlyLeaveEntitlement({ hireDate, asOfDate, policy });
+    const monthlyLeaveEntitlement = calculateMonthlyLeaveEntitlement({
+      hireDate,
+      asOfDate,
+      policy,
+    });
+    const proratedLeaveEntitlement =
+      includeUnderOneYearFiscalProratedLeave && fiscalYear
+        ? calculateUnderOneYearFiscalProratedLeave({
+            hireDate,
+            fiscalYear,
+            asOfDate,
+            baseAnnualDays: policy.baseAnnualDays,
+          }).roundedDays
+        : 0;
+
+    return monthlyLeaveEntitlement + proratedLeaveEntitlement;
   }
 
   const additionalDays = calculateLongServiceAdditionalDays({

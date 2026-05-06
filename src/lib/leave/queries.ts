@@ -204,9 +204,13 @@ export async function getUserLeaveBalance({
   }
 
   const hireDate = user.hireDate ?? user.profile?.hireDate ?? null;
+  const includeUnderOneYearFiscalProratedLeave =
+    user.status === "ACTIVE" && user.role !== "EXTERNAL_PARTNER";
   const balance = calculateLeaveBalanceForUser({
     hireDate: hireDate ? dateToDateOnly(hireDate) : null,
     asOfDate,
+    fiscalYear: year,
+    includeUnderOneYearFiscalProratedLeave,
     adjustments: adjustments.map((adjustment) => ({
       days: toNumber(adjustment.days),
     })),
@@ -261,6 +265,8 @@ export async function getUserLeaveBalance({
     ...(ledgerBalance
       ? {
           annualEntitled: ledgerBalance.grantedAmount,
+          monthlyAccruedDays: 0,
+          underOneYearProratedAnnualDays: 0,
           manualGranted: ledgerBalance.adjustedAmount,
           grantedDays: ledgerBalance.grantedAmount + ledgerBalance.adjustedAmount,
           usedDays: ledgerBalance.usedAmount,
