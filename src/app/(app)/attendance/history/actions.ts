@@ -7,6 +7,7 @@ import {
   assertAttendanceMonthOpen,
   getYearMonthFromDate,
 } from "@/lib/attendance/monthly-summary";
+import { isAttendanceSchemaPreparationError } from "@/lib/attendance/monthly-close-availability";
 import { requireUser } from "@/lib/rbac/server-guards";
 import { getPrisma } from "@/lib/db/prisma";
 import { notifyUsers } from "@/lib/notifications/notifications";
@@ -62,19 +63,29 @@ export async function createAttendanceChangeRequestAction(formData: FormData) {
     redirect("/attendance/history?error=month-closed");
   }
 
-  const request = await prisma.attendanceChangeRequest.create({
-    data: {
-      userId: actor.id,
-      workDate,
-      reason,
-      requestedCheckInAt: value(formData, "requestedCheckInAt")
-        ? new Date(value(formData, "requestedCheckInAt"))
-        : null,
-      requestedCheckOutAt: value(formData, "requestedCheckOutAt")
-        ? new Date(value(formData, "requestedCheckOutAt"))
-        : null,
-    },
-  });
+  let request;
+
+  try {
+    request = await prisma.attendanceChangeRequest.create({
+      data: {
+        userId: actor.id,
+        workDate,
+        reason,
+        requestedCheckInAt: value(formData, "requestedCheckInAt")
+          ? new Date(value(formData, "requestedCheckInAt"))
+          : null,
+        requestedCheckOutAt: value(formData, "requestedCheckOutAt")
+          ? new Date(value(formData, "requestedCheckOutAt"))
+          : null,
+      },
+    });
+  } catch (error) {
+    if (isAttendanceSchemaPreparationError(error)) {
+      redirect("/attendance/history?error=db-not-ready");
+    }
+
+    throw error;
+  }
 
   await prisma.auditLog.create({
     data: {

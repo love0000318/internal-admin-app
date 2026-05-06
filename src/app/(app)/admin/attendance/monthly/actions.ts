@@ -9,6 +9,10 @@ import {
   assertValidYearMonth,
   getMonthlyAttendanceSummary,
 } from "@/lib/attendance/monthly-summary";
+import {
+  isAttendanceMonthlyCloseEnabled,
+  isAttendanceMonthlyCloseSchemaError,
+} from "@/lib/attendance/monthly-close-availability";
 import { notifyUsers } from "@/lib/notifications/notifications";
 import { requireOwner } from "@/lib/rbac/server-guards";
 import { assertStepUpPassword } from "@/lib/security/step-up";
@@ -40,6 +44,10 @@ export async function closeAttendanceMonthAction(formData: FormData) {
   const memo = formValue(formData, "memo") || null;
   const forceCloseWithWarnings =
     formValue(formData, "forceCloseWithWarnings") === "true";
+
+  if (!isAttendanceMonthlyCloseEnabled()) {
+    redirect(`${monthlyPath(year, month)}&error=db-not-ready`);
+  }
 
   try {
     await assertStepUpPassword({
@@ -83,27 +91,37 @@ export async function closeAttendanceMonthAction(formData: FormData) {
     redirect(`${monthlyPath(year, month)}&error=warnings`);
   }
 
-  const close = await prisma.attendanceMonthlyClose.upsert({
-    where: { year_month: { year, month } },
-    create: {
-      year,
-      month,
-      status: "CLOSED",
-      closedByUserId: actor.id,
-      closedAt: new Date(),
-      reopenedByUserId: null,
-      reopenedAt: null,
-      memo,
-    },
-    update: {
-      status: "CLOSED",
-      closedByUserId: actor.id,
-      closedAt: new Date(),
-      reopenedByUserId: null,
-      reopenedAt: null,
-      memo,
-    },
-  });
+  let close;
+
+  try {
+    close = await prisma.attendanceMonthlyClose.upsert({
+      where: { year_month: { year, month } },
+      create: {
+        year,
+        month,
+        status: "CLOSED",
+        closedByUserId: actor.id,
+        closedAt: new Date(),
+        reopenedByUserId: null,
+        reopenedAt: null,
+        memo,
+      },
+      update: {
+        status: "CLOSED",
+        closedByUserId: actor.id,
+        closedAt: new Date(),
+        reopenedByUserId: null,
+        reopenedAt: null,
+        memo,
+      },
+    });
+  } catch (error) {
+    if (isAttendanceMonthlyCloseSchemaError(error)) {
+      redirect(`${monthlyPath(year, month)}&error=db-not-ready`);
+    }
+
+    throw error;
+  }
 
   await prisma.auditLog.create({
     data: {
@@ -155,6 +173,10 @@ export async function reopenAttendanceMonthAction(formData: FormData) {
   const { year, month } = parseYearMonth(formData);
   const memo = formValue(formData, "memo") || null;
 
+  if (!isAttendanceMonthlyCloseEnabled()) {
+    redirect(`${monthlyPath(year, month)}&error=db-not-ready`);
+  }
+
   try {
     await assertStepUpPassword({
       userId: actor.id,
@@ -165,9 +187,19 @@ export async function reopenAttendanceMonthAction(formData: FormData) {
     redirect(`${monthlyPath(year, month)}&error=step-up-required`);
   }
 
-  const before = await prisma.attendanceMonthlyClose.findUnique({
-    where: { year_month: { year, month } },
-  });
+  let before;
+
+  try {
+    before = await prisma.attendanceMonthlyClose.findUnique({
+      where: { year_month: { year, month } },
+    });
+  } catch (error) {
+    if (isAttendanceMonthlyCloseSchemaError(error)) {
+      redirect(`${monthlyPath(year, month)}&error=db-not-ready`);
+    }
+
+    throw error;
+  }
 
   if (!before || before.status !== "CLOSED") {
     await prisma.auditLog.create({
@@ -189,15 +221,25 @@ export async function reopenAttendanceMonthAction(formData: FormData) {
     redirect(`${monthlyPath(year, month)}&error=not-closed`);
   }
 
-  const close = await prisma.attendanceMonthlyClose.update({
-    where: { year_month: { year, month } },
-    data: {
-      status: "REOPENED",
-      reopenedByUserId: actor.id,
-      reopenedAt: new Date(),
-      memo,
-    },
-  });
+  let close;
+
+  try {
+    close = await prisma.attendanceMonthlyClose.update({
+      where: { year_month: { year, month } },
+      data: {
+        status: "REOPENED",
+        reopenedByUserId: actor.id,
+        reopenedAt: new Date(),
+        memo,
+      },
+    });
+  } catch (error) {
+    if (isAttendanceMonthlyCloseSchemaError(error)) {
+      redirect(`${monthlyPath(year, month)}&error=db-not-ready`);
+    }
+
+    throw error;
+  }
 
   await prisma.auditLog.create({
     data: {

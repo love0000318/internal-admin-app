@@ -7,6 +7,10 @@ import {
   getMonthlyAttendanceSummary,
   type MonthlyAttendanceStatus,
 } from "@/lib/attendance/monthly-summary";
+import {
+  isAttendanceMonthlyCloseEnabled,
+  isAttendanceMonthlyCloseSchemaError,
+} from "@/lib/attendance/monthly-close-availability";
 import { getPrisma } from "@/lib/db/prisma";
 import { getManagedScopeForUser } from "@/lib/organization/permissions";
 import { requireOwnerOrLead } from "@/lib/rbac/server-guards";
@@ -40,6 +44,7 @@ const errorMessages: Record<string, string> = {
   "step-up-required": "마감/해제는 현재 비밀번호 확인이 필요합니다.",
   warnings: "누락/이상 근태 또는 수정 요청 대기가 있습니다. 확인 후 강제 마감을 선택하세요.",
   "not-closed": "마감 완료 상태인 월만 마감 해제할 수 있습니다.",
+  "db-not-ready": "근태 월별 마감 기능은 데이터베이스 준비가 필요합니다.",
 };
 
 export default async function MonthlyAttendancePage({
@@ -50,6 +55,11 @@ export default async function MonthlyAttendancePage({
   const now = new Date();
   const year = Number.parseInt(params.year ?? `${now.getUTCFullYear()}`, 10);
   const month = Number.parseInt(params.month ?? `${now.getUTCMonth() + 1}`, 10);
+
+  if (!isAttendanceMonthlyCloseEnabled()) {
+    return <MonthlyCloseUnavailableNotice year={year} month={month} />;
+  }
+
   const prisma = getPrisma();
   const scope = await getManagedScopeForUser(actor, "ATTENDANCE");
 
@@ -57,25 +67,39 @@ export default async function MonthlyAttendancePage({
     redirect("/forbidden");
   }
 
-  const teams = await prisma.team.findMany({
-    where: {
-      status: "ACTIVE",
-      ...(scope.scope === "MANAGED_TEAMS" ? { id: { in: scope.teamIds } } : {}),
-    },
-    orderBy: { name: "asc" },
-  });
-  const selectedTeamId =
-    params.teamId && teams.some((team) => team.id === params.teamId)
-      ? params.teamId
-      : null;
-  const selectedStatus = params.status && params.status in statusLabels ? params.status : null;
-  const summary = await getMonthlyAttendanceSummary({
-    year,
-    month,
-    actor,
-    teamId: selectedTeamId,
-    status: selectedStatus,
-  });
+  let teams: Array<{ id: string; name: string }>;
+  let selectedTeamId: string | null = null;
+  let selectedStatus: MonthlyAttendanceStatus | null = null;
+  let summary: Awaited<ReturnType<typeof getMonthlyAttendanceSummary>>;
+
+  try {
+    teams = await prisma.team.findMany({
+      where: {
+        status: "ACTIVE",
+        ...(scope.scope === "MANAGED_TEAMS" ? { id: { in: scope.teamIds } } : {}),
+      },
+      orderBy: { name: "asc" },
+    });
+    selectedTeamId =
+      params.teamId && teams.some((team) => team.id === params.teamId)
+        ? params.teamId
+        : null;
+    selectedStatus =
+      params.status && params.status in statusLabels ? params.status : null;
+    summary = await getMonthlyAttendanceSummary({
+      year,
+      month,
+      actor,
+      teamId: selectedTeamId,
+      status: selectedStatus,
+    });
+  } catch (error) {
+    if (isAttendanceMonthlyCloseSchemaError(error)) {
+      return <MonthlyCloseUnavailableNotice year={year} month={month} />;
+    }
+
+    throw error;
+  }
   const query = (params.q ?? "").trim().toLowerCase();
   const rows = query
     ? summary.rows.filter(
@@ -291,6 +315,31 @@ export default async function MonthlyAttendancePage({
           </table>
         </div>
       </section>
+    </section>
+  );
+}
+
+function MonthlyCloseUnavailableNotice({
+  year,
+  month,
+}: {
+  year: number;
+  month: number;
+}) {
+  return (
+    <section className="min-w-0">
+      <p className="text-sm font-medium text-neutral-500">근태</p>
+      <h1 className="mt-2 break-keep text-2xl font-semibold tracking-normal">
+        근태 마감
+      </h1>
+      <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-5 text-amber-900 shadow-sm">
+        <p className="text-base font-semibold">
+          근태 월별 마감 기능은 데이터베이스 준비가 필요합니다. 관리자에게 문의해 주세요.
+        </p>
+        <p className="mt-2 text-sm">
+          현재 조회 월: {year}년 {month}월. 기본 출퇴근/근태 이력 화면은 계속 사용할 수 있습니다.
+        </p>
+      </div>
     </section>
   );
 }

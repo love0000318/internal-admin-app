@@ -21,6 +21,7 @@ export type NavigationItem = {
   href: string;
   iconKey?: NavigationIconKey;
   allowedRoles: Role[];
+  enabled?: boolean;
   matchPatterns?: string[];
 };
 
@@ -34,6 +35,8 @@ export type NavigationSection = {
 const INTERNAL_ROLES: Role[] = ["OWNER", "LEAD", "MANAGER"];
 const OWNER_ONLY: Role[] = ["OWNER"];
 const OWNER_LEAD: Role[] = ["OWNER", "LEAD"];
+const ATTENDANCE_MONTHLY_CLOSE_ENABLED =
+  process.env.ATTENDANCE_MONTHLY_CLOSE_ENABLED === "true";
 
 export const navigationSections: NavigationSection[] = [
   {
@@ -144,6 +147,7 @@ export const navigationSections: NavigationSection[] = [
         href: "/admin/attendance/monthly",
         iconKey: "approval",
         allowedRoles: OWNER_LEAD,
+        enabled: ATTENDANCE_MONTHLY_CLOSE_ENABLED,
       },
     ],
   },
@@ -221,7 +225,9 @@ export function getNavigationForRole(role?: Role | null) {
   return navigationSections
     .map((section) => ({
       ...section,
-      items: section.items.filter((item) => item.allowedRoles.includes(role)),
+      items: section.items.filter(
+        (item) => item.allowedRoles.includes(role) && item.enabled !== false,
+      ),
     }))
     .filter((section) => section.items.length > 0);
 }

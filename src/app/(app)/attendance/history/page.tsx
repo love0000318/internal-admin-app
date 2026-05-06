@@ -1,6 +1,10 @@
 import { createAttendanceChangeRequestAction } from "@/app/(app)/attendance/history/actions";
 import { redirect } from "next/navigation";
-import { getMonthDateRange } from "@/lib/attendance/monthly-summary";
+import {
+  getAttendanceMonthlyCloseSafe,
+  getMonthDateRange,
+} from "@/lib/attendance/monthly-summary";
+import { isAttendanceSchemaPreparationError } from "@/lib/attendance/monthly-close-availability";
 import { getPrisma } from "@/lib/db/prisma";
 import { requireUser } from "@/lib/rbac/server-guards";
 
@@ -13,6 +17,7 @@ type AttendanceHistoryPageProps = {
 const errorMessages: Record<string, string> = {
   invalid: "입력값을 확인해 주세요.",
   "month-closed": "이미 마감된 월입니다. 관리자에게 문의해 주세요.",
+  "db-not-ready": "근태 수정 요청 기능은 데이터베이스 준비가 필요합니다.",
 };
 
 export default async function AttendanceHistoryPage({
@@ -34,13 +39,13 @@ export default async function AttendanceHistoryPage({
       where: { userId: actor.id, workDate: { gte: start, lte: end } },
       orderBy: { workDate: "desc" },
     }),
-    prisma.attendanceChangeRequest.findMany({
-      where: { userId: actor.id, workDate: { gte: start, lte: end } },
-      orderBy: { createdAt: "desc" },
+    getAttendanceChangeRequestsSafe({
+      userId: actor.id,
+      start,
+      end,
+      prisma,
     }),
-    prisma.attendanceMonthlyClose.findUnique({
-      where: { year_month: { year, month } },
-    }),
+    getAttendanceMonthlyCloseSafe({ year, month, prisma }),
   ]);
   const isClosed = close?.status === "CLOSED";
 
@@ -91,7 +96,11 @@ export default async function AttendanceHistoryPage({
             <h2 className="text-lg font-semibold">월 마감 상태</h2>
             <p className="mt-1 text-sm text-neutral-600">
               {year}년 {month}월:{" "}
-              {isClosed ? "마감 완료" : close?.status === "REOPENED" ? "재오픈됨" : "마감 전"}
+              {isClosed
+                ? "마감 완료"
+                : close?.status === "REOPENED"
+                  ? "재오픈됨"
+                  : "마감 정보 없음"}
             </p>
           </div>
           {isClosed ? (
@@ -196,6 +205,31 @@ export default async function AttendanceHistoryPage({
       </section>
     </section>
   );
+}
+
+async function getAttendanceChangeRequestsSafe({
+  userId,
+  start,
+  end,
+  prisma,
+}: {
+  userId: string;
+  start: Date;
+  end: Date;
+  prisma: ReturnType<typeof getPrisma>;
+}) {
+  try {
+    return await prisma.attendanceChangeRequest.findMany({
+      where: { userId, workDate: { gte: start, lte: end } },
+      orderBy: { createdAt: "desc" },
+    });
+  } catch (error) {
+    if (isAttendanceSchemaPreparationError(error)) {
+      return [];
+    }
+
+    throw error;
+  }
 }
 
 function formatTime(value: Date | null) {

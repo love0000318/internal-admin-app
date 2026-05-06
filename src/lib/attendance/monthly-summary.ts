@@ -1,4 +1,5 @@
 import { getPrisma } from "@/lib/db/prisma";
+import { isAttendanceMonthlyCloseSchemaError } from "@/lib/attendance/monthly-close-availability";
 import { getManagedScopeForUser } from "@/lib/organization/permissions";
 import type { RbacUser } from "@/lib/rbac/roles";
 
@@ -81,9 +82,10 @@ export async function isAttendanceMonthClosed(params: {
   prisma?: MonthlyAttendancePrisma;
 }) {
   const prisma = params.prisma ?? getPrisma();
-  const close = await prisma.attendanceMonthlyClose.findUnique({
-    where: { year_month: { year: params.year, month: params.month } },
-    select: { status: true },
+  const close = await getAttendanceMonthlyCloseSafe({
+    year: params.year,
+    month: params.month,
+    prisma,
   });
 
   return close?.status === "CLOSED";
@@ -133,8 +135,10 @@ export async function getMonthlyAttendanceSummary(params: {
 
   const [close, users, records, changeRequests, holidays, leaves] =
     await Promise.all([
-      prisma.attendanceMonthlyClose.findUnique({
-        where: { year_month: { year: params.year, month: params.month } },
+      getAttendanceMonthlyCloseSafe({
+        year: params.year,
+        month: params.month,
+        prisma,
       }),
       prisma.user.findMany({
         where: {
@@ -285,6 +289,26 @@ export async function getMonthlyAttendanceSummary(params: {
     },
     rows,
   };
+}
+
+export async function getAttendanceMonthlyCloseSafe(params: {
+  year: number;
+  month: number;
+  prisma?: MonthlyAttendancePrisma;
+}) {
+  const prisma = params.prisma ?? getPrisma();
+
+  try {
+    return await prisma.attendanceMonthlyClose.findUnique({
+      where: { year_month: { year: params.year, month: params.month } },
+    });
+  } catch (error) {
+    if (isAttendanceMonthlyCloseSchemaError(error)) {
+      return null;
+    }
+
+    throw error;
+  }
 }
 
 function getDatesInMonth(start: Date, end: Date) {
