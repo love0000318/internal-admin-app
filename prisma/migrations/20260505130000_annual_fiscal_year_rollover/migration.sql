@@ -1,0 +1,9 @@
+-- Annual fiscal-year leave rollover support.
+-- Production/Neon must use `prisma migrate deploy`; never use migrate reset.
+
+ALTER TYPE "LeaveGrantSource" ADD VALUE IF NOT EXISTS 'ANNUAL_AUTO';
+ALTER TYPE "StepUpPurpose" ADD VALUE IF NOT EXISTS 'ANNUAL_LEAVE_GRANT';
+
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'ANNUAL_LEAVE_GRANT_PREVIEWED';
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'ANNUAL_LEAVE_GRANT_SKIPPED_DUPLICATE';
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'ANNUAL_LEAVE_GRANT_FAILED';

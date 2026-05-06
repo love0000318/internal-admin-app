@@ -1,0 +1,25 @@
+-- Password reset and forced password-change flow.
+-- Production/Neon must use `prisma migrate deploy`; never use migrate reset.
+
+ALTER TYPE "StepUpPurpose" ADD VALUE IF NOT EXISTS 'PASSWORD_RESET';
+
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'PASSWORD_CHANGED';
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'PASSWORD_CHANGE_FAILED';
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'PASSWORD_RESET_BY_OWNER';
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'PASSWORD_RESET_FAILED';
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'PASSWORD_CHANGE_REQUIRED_SET';
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'USER_SESSIONS_REVOKED_AFTER_PASSWORD_RESET';
+
+ALTER TABLE "User" ADD COLUMN "passwordChangedAt" TIMESTAMP(3);
+ALTER TABLE "User" ADD COLUMN "passwordChangeRequired" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "User" ADD COLUMN "passwordResetAt" TIMESTAMP(3);
+ALTER TABLE "User" ADD COLUMN "passwordResetByUserId" TEXT;
+
+CREATE INDEX "User_passwordResetByUserId_idx" ON "User"("passwordResetByUserId");
+
+ALTER TABLE "User"
+  ADD CONSTRAINT "User_passwordResetByUserId_fkey"
+  FOREIGN KEY ("passwordResetByUserId")
+  REFERENCES "User"("id")
+  ON DELETE SET NULL
+  ON UPDATE CASCADE;
