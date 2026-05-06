@@ -1,6 +1,9 @@
 import type { AuditAction, NotificationType } from "@/generated/prisma/client";
 import { getPrisma } from "@/lib/db/prisma";
 import {
+  isEmailProviderUsable,
+  isExternalEmailEnabled,
+  isSlackProviderUsable,
   shouldNotifySlackLeaveRequests,
 } from "@/lib/external-notifications/config";
 import { sendEmail } from "@/lib/external-notifications/send-email";
@@ -24,12 +27,25 @@ type DispatchExternalNotificationParams = {
 
 const EMAIL_NOTIFICATION_TYPES = new Set<NotificationType>([
   "LEAVE_REQUESTED",
+  "LEAVE_REQUEST_CREATED",
   "LEAVE_APPROVED",
+  "LEAVE_REQUEST_APPROVED",
   "LEAVE_REJECTED",
+  "LEAVE_REQUEST_REJECTED",
   "LEAVE_CANCELLED",
+  "LEAVE_REQUEST_CANCELLED",
   "LEAVE_ATTACHMENT_RESUBMISSION_REQUESTED",
   "ANNUAL_LEAVE_PROMOTION",
+  "ANNUAL_LEAVE_PROMOTION_REQUESTED",
   "ANNUAL_LEAVE_USE_PLAN_REMINDER",
+  "ANNUAL_LEAVE_EXPIRING",
+  "ATTENDANCE_CHANGE_REQUEST_CREATED",
+  "ATTENDANCE_MONTH_CLOSED",
+  "ATTENDANCE_MONTH_REOPENED",
+  "PASSWORD_RESET_BY_OWNER",
+  "PASSWORD_CHANGE_REQUIRED",
+  "SECURITY_EVENT",
+  "STEP_UP_FAILED",
   "JOB_FAILED",
 ]);
 
@@ -54,9 +70,7 @@ async function recordExternalAudit(params: {
         targetId: params.targetId ?? null,
         metadata: sanitizeAuditMetadata({
           ...params.metadata,
-          recipientMasked: params.recipientEmail
-            ? maskEmail(params.recipientEmail)
-            : undefined,
+          recipientMasked: params.recipientEmail ? maskEmail(params.recipientEmail) : undefined,
         }),
       },
     });
@@ -69,6 +83,10 @@ export async function dispatchExternalNotification(
   params: DispatchExternalNotificationParams,
 ) {
   if (!EMAIL_NOTIFICATION_TYPES.has(params.type)) {
+    return;
+  }
+
+  if (!isExternalEmailEnabled() || !isEmailProviderUsable()) {
     return;
   }
 
@@ -113,9 +131,14 @@ export async function dispatchExternalNotification(
       },
     });
 
-    if (params.type === "LEAVE_REQUESTED" && shouldNotifySlackLeaveRequests()) {
+    if (
+      (params.type === "LEAVE_REQUESTED" || params.type === "LEAVE_REQUEST_CREATED") &&
+      shouldNotifySlackLeaveRequests()
+    ) {
       await dispatchSlackMessage({
-        text: `[운영 알림] 휴가 승인 요청이 등록되었습니다.\n${params.message}`,
+        text: `[운영 알림] 휴가 승인 요청이 등록되었습니다.\n${String(
+          sanitizeSecurityValue(params.message),
+        )}`,
         type: params.type,
         context: params.context,
       });
@@ -131,6 +154,10 @@ export async function dispatchInvitationEmail(params: {
   invitationUrl: string;
   verificationCode: string;
 }) {
+  if (!isExternalEmailEnabled() || !isEmailProviderUsable()) {
+    return;
+  }
+
   try {
     const template = buildInvitationEmailTemplate({
       invitationUrl: params.invitationUrl,
@@ -165,8 +192,12 @@ export async function dispatchSlackMessage(params: {
   type: NotificationType | "JOB_FAILED";
   context?: Record<string, unknown>;
 }) {
+  if (!isSlackProviderUsable()) {
+    return;
+  }
+
   try {
-    const result = await sendSlackMessage({ text: params.text });
+    const result = await sendSlackMessage({ text: String(sanitizeSecurityValue(params.text)) });
 
     await recordExternalAudit({
       action: result.ok ? "EXTERNAL_SLACK_SENT" : "EXTERNAL_SLACK_FAILED",

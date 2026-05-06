@@ -16,7 +16,7 @@ export function CopyButton({ value }: CopyButtonProps) {
         await navigator.clipboard.writeText(value);
         setCopied(true);
       }}
-      className="h-9 rounded-md border border-neutral-300 px-3 text-sm font-medium text-neutral-700 hover:bg-neutral-100"
+      className="inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700 sm:w-auto"
     >
       {copied ? "복사됨" : "복사"}
     </button>

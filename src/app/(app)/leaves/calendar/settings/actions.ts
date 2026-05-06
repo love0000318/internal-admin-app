@@ -7,7 +7,7 @@ import {
   regenerateCalendarSubscription,
   revokeCalendarSubscription,
 } from "@/lib/calendar-subscriptions/service";
-import { isCalendarSubscriptionScope } from "@/lib/calendar-subscriptions/permissions";
+import { isCalendarProvider } from "@/lib/calendar-subscriptions/permissions";
 import { requireRouteAccess } from "@/lib/rbac/server-guards";
 
 function encodeCreatedUrl(url: string) {
@@ -16,13 +16,17 @@ function encodeCreatedUrl(url: string) {
 
 export async function createCalendarSubscriptionAction(formData: FormData) {
   const actor = await requireRouteAccess("/leaves/calendar");
-  const scope = formData.get("scope");
+  const provider = formData.get("provider");
 
-  if (!isCalendarSubscriptionScope(scope)) {
-    redirect("/leaves/calendar/settings?error=invalid-scope");
+  if (!isCalendarProvider(provider)) {
+    redirect("/leaves/calendar/settings?error=invalid-provider");
   }
 
-  const result = await createCalendarSubscription({ actor, scope });
+  const result = await createCalendarSubscription({
+    actor,
+    scope: "ME",
+    provider,
+  });
   redirect(`/leaves/calendar/settings?created=${encodeCreatedUrl(result.url)}`);
 }
 

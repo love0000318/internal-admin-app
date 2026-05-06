@@ -1,8 +1,10 @@
 import Link from "next/link";
 
 import { runManualJob } from "@/app/(app)/admin/jobs/actions";
+import { PaginationControls } from "@/components/ui/pagination";
 import { MANUAL_JOB_OPTIONS } from "@/lib/jobs/job-names";
 import { listJobRuns } from "@/lib/jobs/job-runner";
+import { buildPaginationHref, parsePagination } from "@/lib/pagination";
 import { requireOwner } from "@/lib/rbac/server-guards";
 
 export const dynamic = "force-dynamic";
@@ -14,13 +16,29 @@ type AdminJobsPageProps = {
     triggeredBy?: string;
     dryRun?: string;
     error?: string;
+    page?: string;
+    pageSize?: string;
   }>;
 };
 
 export default async function AdminJobsPage({ searchParams }: AdminJobsPageProps) {
   await requireOwner();
   const filters = await searchParams;
-  const jobRuns = await listJobRuns(filters);
+  const pagination = parsePagination(filters);
+  const jobRuns = await listJobRuns({
+    ...filters,
+    skip: pagination.skip,
+    take: pagination.take + 1,
+  });
+  const hasNextPage = jobRuns.length > pagination.take;
+  const visibleJobRuns = jobRuns.slice(0, pagination.take);
+  const paginationParams = {
+    jobName: filters.jobName,
+    status: filters.status,
+    triggeredBy: filters.triggeredBy,
+    dryRun: filters.dryRun,
+    pageSize: filters.pageSize,
+  };
 
   return (
     <section>
@@ -129,14 +147,14 @@ export default async function AdminJobsPage({ searchParams }: AdminJobsPageProps
             </tr>
           </thead>
           <tbody className="divide-y divide-neutral-100">
-            {jobRuns.length === 0 ? (
+            {visibleJobRuns.length === 0 ? (
               <tr>
                 <td className="px-4 py-6 text-neutral-500" colSpan={12}>
                   작업 실행 이력이 없습니다.
                 </td>
               </tr>
             ) : (
-              jobRuns.map((jobRun) => (
+              visibleJobRuns.map((jobRun) => (
                 <tr key={jobRun.id}>
                   <td className="px-4 py-3 font-medium">{jobRun.jobName}</td>
                   <td className="px-4 py-3">{jobRun.status}</td>
@@ -160,6 +178,17 @@ export default async function AdminJobsPage({ searchParams }: AdminJobsPageProps
           </tbody>
         </table>
       </div>
+      <PaginationControls
+        hasNext={hasNextPage}
+        hasPrevious={pagination.page > 1}
+        nextHref={buildPaginationHref("/admin/jobs", paginationParams, pagination.page + 1)}
+        page={pagination.page}
+        previousHref={buildPaginationHref(
+          "/admin/jobs",
+          paginationParams,
+          pagination.page - 1,
+        )}
+      />
     </section>
   );
 }

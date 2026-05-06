@@ -1,15 +1,18 @@
 import Link from "next/link";
 
 import { CopyButton } from "@/components/copy-button";
+import { Badge, buttonClassName, Card, EmptyState } from "@/components/design-system/primitives";
+import { PageHeader } from "@/components/ui/page-header";
+import {
+  CALENDAR_PROVIDERS,
+  getCalendarProviderFromName,
+  getCalendarProviderLabel,
+} from "@/lib/calendar-subscriptions/permissions";
 import {
   type CalendarSubscriptionWithTeam,
   getCalendarSubscriptionStatus,
   listCalendarSubscriptions,
 } from "@/lib/calendar-subscriptions/service";
-import {
-  canCreateCalendarSubscription,
-  getCalendarSubscriptionScopeLabel,
-} from "@/lib/calendar-subscriptions/permissions";
 import { requireRouteAccess } from "@/lib/rbac/server-guards";
 
 import {
@@ -24,6 +27,37 @@ type PageProps = {
   searchParams: Promise<{ created?: string; error?: string }>;
 };
 
+const ONE_WAY_NOTICE =
+  "외부 캘린더 연동은 구독 방식의 단방향 동기화입니다. Internal Ops에서 생성된 휴가와 이벤트만 외부 캘린더에 표시됩니다. 외부 캘린더에서 추가하거나 수정한 일정은 Internal Ops에 반영되지 않습니다.";
+
+const providerGuides = [
+  {
+    title: "Google Calendar",
+    description:
+      "Google Calendar에서 다른 캘린더 추가를 선택한 뒤 URL로 추가 메뉴에 구독 URL을 붙여넣습니다. Google의 갱신 주기에 따라 반영이 지연될 수 있습니다.",
+  },
+  {
+    title: "Apple Calendar",
+    description:
+      "iPhone 또는 macOS 캘린더 앱에서 새 캘린더 구독 추가를 선택하고 구독 URL을 입력합니다. OS 버전에 따라 메뉴명이 다를 수 있습니다.",
+  },
+  {
+    title: "Samsung Calendar",
+    description:
+      "Samsung Calendar는 직접 URL 구독이 제한될 수 있습니다. Google Calendar에 먼저 구독 URL을 추가한 뒤 Samsung Calendar에서 Google 계정을 동기화하세요.",
+  },
+  {
+    title: "Outlook Calendar",
+    description:
+      "Outlook에서 인터넷 캘린더 구독 또는 웹에서 구독 캘린더 추가를 선택한 뒤 URL을 붙여넣습니다.",
+  },
+  {
+    title: "기타 iCal 지원 앱",
+    description:
+      "iCal 또는 ICS URL 구독을 지원하는 앱에서 사용할 수 있습니다. 앱별 갱신 주기에 따라 일정 반영과 삭제가 늦어질 수 있습니다.",
+  },
+];
+
 function formatDateTime(value: Date | null) {
   if (!value) {
     return "-";
@@ -36,69 +70,89 @@ function formatDateTime(value: Date | null) {
   }).format(value);
 }
 
+function toWebcalUrl(url: string) {
+  return url.replace(/^https?:\/\//, "webcal://");
+}
+
+function statusBadge(status: ReturnType<typeof getCalendarSubscriptionStatus>) {
+  if (status === "ACTIVE") {
+    return <Badge tone="success">활성</Badge>;
+  }
+
+  if (status === "EXPIRED") {
+    return <Badge tone="warning">만료됨</Badge>;
+  }
+
+  return <Badge>해제됨</Badge>;
+}
+
 function SubscriptionCard({
   subscription,
 }: {
   subscription: CalendarSubscriptionWithTeam;
 }) {
   const status = getCalendarSubscriptionStatus(subscription);
-  const isActive = status === "사용 가능";
+  const provider = getCalendarProviderFromName(subscription.name);
+  const isActive = status === "ACTIVE";
 
   return (
-    <article className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <p className="text-sm font-semibold text-neutral-900">
-            {subscription.name ?? getCalendarSubscriptionScopeLabel(subscription.scope)}
+    <Card className="space-y-4">
+      <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <p className="break-keep text-base font-bold text-slate-950">
+            {getCalendarProviderLabel(provider)}
           </p>
-          <p className="mt-1 text-sm text-neutral-500">
-            {getCalendarSubscriptionScopeLabel(subscription.scope)}
-            {subscription.team ? ` · ${subscription.team.name}` : ""}
+          <p className="mt-1 break-keep text-sm text-slate-500">
+            개인 iCal 구독 URL
           </p>
         </div>
-        <span
-          className={`inline-flex w-fit rounded-full border px-2 py-1 text-xs font-medium ${
-            isActive
-              ? "border-green-200 bg-green-50 text-green-700"
-              : "border-neutral-200 bg-neutral-50 text-neutral-600"
-          }`}
-        >
-          {status}
-        </span>
+        {statusBadge(status)}
       </div>
 
-      <dl className="mt-4 grid gap-2 text-sm text-neutral-600 sm:grid-cols-3">
-        <div>
-          <dt className="text-xs text-neutral-400">생성일</dt>
-          <dd>{formatDateTime(subscription.createdAt)}</dd>
+      <dl className="grid gap-3 text-sm text-slate-600 sm:grid-cols-3">
+        <div className="min-w-0 rounded-xl bg-slate-50 p-3">
+          <dt className="text-xs font-semibold text-slate-400">생성일</dt>
+          <dd className="mt-1 break-words">{formatDateTime(subscription.createdAt)}</dd>
         </div>
-        <div>
-          <dt className="text-xs text-neutral-400">마지막 사용</dt>
-          <dd>{formatDateTime(subscription.lastUsedAt)}</dd>
+        <div className="min-w-0 rounded-xl bg-slate-50 p-3">
+          <dt className="text-xs font-semibold text-slate-400">최근 접근</dt>
+          <dd className="mt-1 break-words">{formatDateTime(subscription.lastUsedAt)}</dd>
         </div>
-        <div>
-          <dt className="text-xs text-neutral-400">만료일</dt>
-          <dd>{formatDateTime(subscription.expiresAt)}</dd>
+        <div className="min-w-0 rounded-xl bg-slate-50 p-3">
+          <dt className="text-xs font-semibold text-slate-400">해제일</dt>
+          <dd className="mt-1 break-words">{formatDateTime(subscription.revokedAt)}</dd>
         </div>
       </dl>
 
-      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+      <div className="grid gap-2 sm:flex sm:flex-wrap">
         <form action={regenerateCalendarSubscriptionAction}>
           <input type="hidden" name="subscriptionId" value={subscription.id} />
-          <button className="h-10 w-full rounded-md border border-neutral-300 px-4 text-sm font-medium text-neutral-700 hover:bg-neutral-100 sm:w-auto">
-            재발급
+          <button
+            type="submit"
+            className={buttonClassName({
+              tone: "neutral",
+              className: "w-full sm:w-auto",
+            })}
+          >
+            URL 재발급
           </button>
         </form>
         {isActive ? (
           <form action={revokeCalendarSubscriptionAction}>
             <input type="hidden" name="subscriptionId" value={subscription.id} />
-            <button className="h-10 w-full rounded-md border border-red-200 px-4 text-sm font-medium text-red-700 hover:bg-red-50 sm:w-auto">
-              비활성화
+            <button
+              type="submit"
+              className={buttonClassName({
+                tone: "danger",
+                className: "w-full sm:w-auto",
+              })}
+            >
+              연동 해제
             </button>
           </form>
         ) : null}
       </div>
-    </article>
+    </Card>
   );
 }
 
@@ -109,115 +163,160 @@ export default async function CalendarSubscriptionSettingsPage({
   const params = await searchParams;
   const subscriptions = await listCalendarSubscriptions(actor.id);
   const createdUrl = params.created ? decodeURIComponent(params.created) : null;
-  const availableScopes = [
-    "ME",
-    "TEAM",
-    "MANAGED_TEAMS",
-    "ALL_COMPANY",
-  ] as const;
-  const creatableScopes = availableScopes.filter((scope) =>
-    canCreateCalendarSubscription(actor, scope) &&
-    (scope !== "TEAM" || Boolean(actor.teamId)) &&
-    (scope !== "MANAGED_TEAMS" || actor.role === "LEAD"),
-  );
+  const webcalUrl = createdUrl ? toWebcalUrl(createdUrl) : null;
 
   return (
-    <section className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-sm font-medium text-neutral-500">외부 캘린더 연동</p>
-          <h1 className="mt-2 text-2xl font-semibold tracking-normal">
-            iCal/ICS 구독 링크
-          </h1>
-          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-neutral-600">
-            승인된 휴가 일정을 Google Calendar, Apple Calendar, Samsung Calendar에서
-            읽기 전용으로 확인할 수 있습니다. 구독 링크를 아는 사람은 일정 정보를 볼 수
-            있으므로 외부에 공유하지 마세요.
-          </p>
-        </div>
-        <Link
-          href="/leaves/calendar"
-          className="inline-flex h-10 items-center justify-center rounded-md border border-neutral-300 px-4 text-sm font-medium text-neutral-700 hover:bg-neutral-100"
-        >
-          휴가 캘린더로 돌아가기
-        </Link>
-      </div>
+    <section className="min-w-0 space-y-6">
+      <PageHeader
+        eyebrow="외부 캘린더 연동"
+        title="iCal/ICS 구독 설정"
+        description="개인 휴가 일정을 Google, Apple, Samsung, Outlook 등 iCal 지원 캘린더에 단방향 구독 URL로 연결합니다."
+        actions={[{ href: "/leaves/calendar", label: "휴가 캘린더로 돌아가기" }]}
+      />
+
+      <Card className="border-blue-200 bg-blue-50">
+        <p className="break-keep text-sm font-bold text-blue-950">
+          단방향 구독 안내
+        </p>
+        <p className="mt-2 break-keep text-sm leading-relaxed text-blue-900">
+          {ONE_WAY_NOTICE}
+        </p>
+      </Card>
 
       {createdUrl ? (
-        <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
-          <p className="text-sm font-semibold text-blue-900">
-            새 구독 링크가 생성되었습니다.
+        <Card className="border-emerald-200 bg-emerald-50">
+          <p className="text-sm font-bold text-emerald-950">
+            새 구독 URL이 발급되었습니다.
           </p>
-          <p className="mt-1 text-sm text-blue-800">
-            이 URL은 지금 복사해 캘린더 앱에 추가하세요. 원문 토큰은 다시 표시되지
-            않습니다.
+          <p className="mt-2 break-keep text-sm leading-relaxed text-emerald-900">
+            이 URL은 지금만 확인할 수 있습니다. 외부 캘린더에 추가한 뒤 외부에 공유하지 마세요.
           </p>
-          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-            <input
-              readOnly
-              value={createdUrl}
-              className="h-10 min-w-0 flex-1 rounded-md border border-blue-200 bg-white px-3 text-sm"
-            />
-            <CopyButton value={createdUrl} />
+          <div className="mt-4 grid gap-3">
+            <div className="grid gap-2">
+              <label className="text-xs font-semibold text-emerald-900">
+                HTTPS 구독 URL
+              </label>
+              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                <input
+                  readOnly
+                  value={createdUrl}
+                  className="min-h-11 min-w-0 rounded-xl border border-emerald-200 bg-white px-3 text-sm text-slate-800"
+                />
+                <CopyButton value={createdUrl} />
+              </div>
+            </div>
+            {webcalUrl ? (
+              <div className="grid gap-2">
+                <label className="text-xs font-semibold text-emerald-900">
+                  webcal 링크
+                </label>
+                <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                  <input
+                    readOnly
+                    value={webcalUrl}
+                    className="min-h-11 min-w-0 rounded-xl border border-emerald-200 bg-white px-3 text-sm text-slate-800"
+                  />
+                  <Link
+                    href={webcalUrl}
+                    className={buttonClassName({
+                      tone: "neutral",
+                      className: "w-full sm:w-auto",
+                    })}
+                  >
+                    열기
+                  </Link>
+                </div>
+              </div>
+            ) : null}
           </div>
-        </div>
+        </Card>
       ) : null}
 
       {params.error ? (
-        <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          구독 링크 요청을 처리하지 못했습니다. 권한과 입력값을 확인해 주세요.
+        <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+          구독 URL 요청을 처리하지 못했습니다. 캘린더 프로그램 선택값과 권한을 확인해 주세요.
         </p>
       ) : null}
 
-      <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
-        <h2 className="text-base font-semibold text-neutral-900">구독 링크 생성</h2>
-        <p className="mt-1 text-sm text-neutral-500">
-          외부 캘린더에는 승인 완료 휴가만 표시되며, 휴가 사유와 증명자료 정보는 포함되지
-          않습니다.
-        </p>
-        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          {creatableScopes.map((scope) => (
-            <form key={scope} action={createCalendarSubscriptionAction}>
-              <input type="hidden" name="scope" value={scope} />
-              <button className="h-11 w-full rounded-md bg-neutral-950 px-4 text-sm font-medium text-white hover:bg-neutral-800">
-                {getCalendarSubscriptionScopeLabel(scope)} 생성
-              </button>
-            </form>
+      <Card>
+        <div className="min-w-0">
+          <h2 className="break-keep text-lg font-bold text-slate-950">
+            구독 URL 발급
+          </h2>
+          <p className="mt-2 break-keep text-sm leading-relaxed text-slate-600">
+            승인된 내 휴가만 ICS feed에 포함됩니다. 반려, 취소, 철회, 승인 대기 휴가는 제외됩니다.
+          </p>
+        </div>
+        <form action={createCalendarSubscriptionAction} className="mt-4 grid gap-4">
+          <fieldset className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            <legend className="sr-only">캘린더 프로그램 선택</legend>
+            {CALENDAR_PROVIDERS.map((provider, index) => (
+              <label
+                key={provider}
+                className="flex min-h-14 cursor-pointer items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-800 transition hover:border-blue-200 hover:bg-blue-50"
+              >
+                <input
+                  type="radio"
+                  name="provider"
+                  value={provider}
+                  defaultChecked={index === 0}
+                  className="h-4 w-4"
+                />
+                <span className="break-keep">{getCalendarProviderLabel(provider)}</span>
+              </label>
+            ))}
+          </fieldset>
+          <button
+            type="submit"
+            className={buttonClassName({ className: "w-full sm:w-fit" })}
+          >
+            구독 URL 생성
+          </button>
+        </form>
+      </Card>
+
+      <Card>
+        <h2 className="break-keep text-lg font-bold text-slate-950">
+          보안 안내
+        </h2>
+        <ul className="mt-3 grid gap-2 text-sm leading-relaxed text-slate-600">
+          <li>구독 URL은 개인 일정 정보를 볼 수 있는 비밀 링크입니다.</li>
+          <li>URL을 외부에 공유하지 마세요.</li>
+          <li>유출이 의심되면 즉시 URL을 재발급하세요.</li>
+          <li>연동 해제 후에도 외부 캘린더 앱에서는 사용자가 직접 구독 캘린더를 삭제해야 할 수 있습니다.</li>
+        </ul>
+      </Card>
+
+      <Card>
+        <h2 className="break-keep text-lg font-bold text-slate-950">
+          프로그램별 연결 방법
+        </h2>
+        <div className="mt-4 grid gap-3">
+          {providerGuides.map((guide) => (
+            <details
+              key={guide.title}
+              className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+            >
+              <summary className="cursor-pointer break-keep text-sm font-bold text-slate-900">
+                {guide.title}
+              </summary>
+              <p className="mt-3 break-keep text-sm leading-relaxed text-slate-600">
+                {guide.description}
+              </p>
+            </details>
           ))}
         </div>
-      </div>
-
-      <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
-        <h2 className="text-base font-semibold text-neutral-900">캘린더 앱 추가 방법</h2>
-        <div className="mt-3 grid gap-3 text-sm leading-relaxed text-neutral-600 lg:grid-cols-3">
-          <div className="rounded-lg border border-neutral-200 p-3">
-            <p className="font-medium text-neutral-900">Google Calendar</p>
-            <p className="mt-1">
-              웹에서 “다른 캘린더 +” → “URL로 추가”를 선택한 뒤 구독 링크를 붙여넣으세요.
-            </p>
-          </div>
-          <div className="rounded-lg border border-neutral-200 p-3">
-            <p className="font-medium text-neutral-900">Apple Calendar</p>
-            <p className="mt-1">
-              iPhone/iPad에서는 “캘린더 추가” → “구독 캘린더 추가”에서 URL을 입력하세요.
-            </p>
-          </div>
-          <div className="rounded-lg border border-neutral-200 p-3">
-            <p className="font-medium text-neutral-900">Samsung Calendar</p>
-            <p className="mt-1">
-              앱에서 URL 구독 메뉴가 보이지 않으면 Google Calendar 웹에 URL을 추가한 뒤
-              Google 계정을 동기화해 주세요.
-            </p>
-          </div>
-        </div>
-      </div>
+      </Card>
 
       <div className="grid gap-3">
-        <h2 className="text-base font-semibold text-neutral-900">기존 구독 링크</h2>
+        <h2 className="break-keep text-lg font-bold text-slate-950">
+          기존 구독 URL
+        </h2>
         {subscriptions.length === 0 ? (
-          <p className="rounded-xl border border-neutral-200 bg-white px-4 py-8 text-sm text-neutral-500">
-            생성된 외부 캘린더 구독 링크가 없습니다.
-          </p>
+          <EmptyState
+            title="생성된 외부 캘린더 구독 URL이 없습니다."
+            description="캘린더 프로그램을 선택하고 개인 구독 URL을 발급하세요."
+          />
         ) : (
           subscriptions.map((subscription) => (
             <SubscriptionCard key={subscription.id} subscription={subscription} />

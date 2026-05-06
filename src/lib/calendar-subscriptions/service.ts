@@ -5,7 +5,9 @@ import type {
 import { buildIcsCalendar } from "@/lib/calendar-subscriptions/ics";
 import {
   canCreateCalendarSubscription,
+  encodeCalendarProviderName,
   getCalendarSubscriptionScopeLabel,
+  type CalendarProvider,
 } from "@/lib/calendar-subscriptions/permissions";
 import {
   generateCalendarSubscriptionToken,
@@ -13,10 +15,7 @@ import {
   hashCalendarSubscriptionToken,
 } from "@/lib/calendar-subscriptions/tokens";
 import { getPrisma } from "@/lib/db/prisma";
-import {
-  listCalendarLeaveEvents,
-  type CalendarScope,
-} from "@/lib/leave/calendar";
+import { listCalendarLeaveEvents } from "@/lib/leave/calendar";
 import { todayInSeoul } from "@/lib/leave/calculate-business-days";
 import { hydrateReviewScope } from "@/lib/leave/review";
 import type { DateOnly } from "@/lib/leave/types";
@@ -48,24 +47,10 @@ function resolveTeamIdForScope(actor: RbacUser, scope: CalendarSubscriptionScope
   }
 
   if (!actor.teamId) {
-    throw new Error("팀 캘린더 구독 링크를 만들 수 있는 소속 팀이 없습니다.");
+    throw new Error("팀 캘린더 구독 URL을 만들 수 있는 소속 팀이 없습니다.");
   }
 
   return actor.teamId;
-}
-
-function mapSubscriptionScopeToCalendarScope(
-  scope: CalendarSubscriptionScope,
-): CalendarScope {
-  if (scope === "ME") {
-    return "ME";
-  }
-
-  if (scope === "ALL_COMPANY") {
-    return "ALL";
-  }
-
-  return "TEAM";
 }
 
 async function createCalendarAudit(params: {
@@ -110,23 +95,24 @@ export function getCalendarSubscriptionStatus(
   const now = new Date();
 
   if (subscription.revokedAt || !subscription.isEnabled) {
-    return "비활성화됨";
+    return "REVOKED" as const;
   }
 
   if (subscription.expiresAt && subscription.expiresAt <= now) {
-    return "만료됨";
+    return "EXPIRED" as const;
   }
 
-  return "사용 가능";
+  return "ACTIVE" as const;
 }
 
 export async function createCalendarSubscription(params: {
   actor: RbacUser;
   scope: CalendarSubscriptionScope;
+  provider?: CalendarProvider;
   name?: string | null;
 }) {
   if (!canCreateCalendarSubscription(params.actor, params.scope)) {
-    throw new Error("외부 캘린더 구독 링크를 생성할 권한이 없습니다.");
+    throw new Error("외부 캘린더 구독 URL을 생성할 권한이 없습니다.");
   }
 
   const rawToken = generateCalendarSubscriptionToken();
@@ -138,7 +124,9 @@ export async function createCalendarSubscription(params: {
       tokenHash,
       scope: params.scope,
       teamId,
-      name: params.name?.trim() || getCalendarSubscriptionScopeLabel(params.scope),
+      name:
+        params.name?.trim() ||
+        encodeCalendarProviderName(params.provider ?? "OTHER"),
     },
     include: { team: { select: { id: true, name: true } } },
   });
@@ -149,6 +137,7 @@ export async function createCalendarSubscription(params: {
     targetId: subscription.id,
     metadata: {
       scope: params.scope,
+      provider: params.provider ?? "OTHER",
       teamId,
       userId: params.actor.id,
     },
@@ -175,7 +164,7 @@ export async function revokeCalendarSubscription(params: {
   });
 
   if (!subscription) {
-    throw new Error("비활성화할 구독 링크를 찾을 수 없습니다.");
+    throw new Error("해제할 구독 URL을 찾을 수 없습니다.");
   }
 
   const revoked = await prisma.calendarSubscriptionToken.update({
@@ -207,11 +196,11 @@ export async function regenerateCalendarSubscription(params: {
   });
 
   if (!previous) {
-    throw new Error("재발급할 구독 링크를 찾을 수 없습니다.");
+    throw new Error("재발급할 구독 URL을 찾을 수 없습니다.");
   }
 
   if (!canCreateCalendarSubscription(params.actor, previous.scope)) {
-    throw new Error("외부 캘린더 구독 링크를 재발급할 권한이 없습니다.");
+    throw new Error("외부 캘린더 구독 URL을 재발급할 권한이 없습니다.");
   }
 
   const rawToken = generateCalendarSubscriptionToken();
@@ -287,6 +276,14 @@ async function verifyCalendarSubscriptionToken(
   return subscription;
 }
 
+function shouldUpdateLastUsedAt(lastUsedAt: Date | null) {
+  if (!lastUsedAt) {
+    return true;
+  }
+
+  return Date.now() - lastUsedAt.getTime() > 24 * 60 * 60 * 1000;
+}
+
 export async function buildCalendarSubscriptionIcs(rawToken: string) {
   const subscription = await verifyCalendarSubscriptionToken(rawToken);
 
@@ -301,25 +298,25 @@ export async function buildCalendarSubscriptionIcs(rawToken: string) {
     teamId: subscription.user.teamId,
   });
   const today = todayInSeoul();
-  const fromDate = addMonthsDateOnly(today, -3);
-  const toDate = addMonthsDateOnly(today, 12);
-  const calendarScope = mapSubscriptionScopeToCalendarScope(subscription.scope);
+  const fromDate = addMonthsDateOnly(today, -12);
+  const toDate = addMonthsDateOnly(today, 24);
   const events = await listCalendarLeaveEvents({
     actor,
     fromDate,
     toDate,
     statuses: ["APPROVED"],
-    scope: calendarScope,
-    teamId: subscription.teamId,
+    scope: "ME",
   });
 
-  await getPrisma().calendarSubscriptionToken.update({
-    where: { id: subscription.id },
-    data: { lastUsedAt: new Date() },
-  });
+  if (shouldUpdateLastUsedAt(subscription.lastUsedAt)) {
+    await getPrisma().calendarSubscriptionToken.update({
+      where: { id: subscription.id },
+      data: { lastUsedAt: new Date() },
+    });
+  }
 
   return buildIcsCalendar({
-    calendarName: getCalendarSubscriptionScopeLabel(subscription.scope),
+    calendarName: getCalendarSubscriptionScopeLabel("ME"),
     events,
   });
 }

@@ -12,6 +12,7 @@ import {
   buildExternalEmailTemplate,
   buildInvitationEmailTemplate,
 } from "@/lib/external-notifications/templates";
+import { dispatchExternalNotification } from "@/lib/external-notifications/dispatch-external-notification";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -75,6 +76,26 @@ describe("external notification templates", () => {
     expect(template.text).toContain("https://app.example.com/leaves/me/requests/request-1");
   });
 
+  it("handles new leave request notification aliases without private reasons", () => {
+    const template = buildExternalEmailTemplate({
+      type: "LEAVE_REQUEST_CREATED",
+      title: "ignored",
+      message: "private reason should not be copied",
+      linkUrl: "/leaves/approvals/request-1",
+      appBaseUrl: "https://app.example.com",
+      context: {
+        leaveTypeName: "연차",
+        startDate: "2026-05-01",
+        endDate: "2026-05-01",
+        reason: "private reason",
+      },
+    });
+
+    expect(template.subject).toBe("휴가 승인 요청이 등록되었습니다.");
+    expect(template.text).toContain("연차");
+    expect(template.text).not.toContain("private reason");
+  });
+
   it("builds invitation email with link and one-time code", () => {
     const template = buildInvitationEmailTemplate({
       invitationUrl: "https://app.example.com/i/A7K9P2Q8",
@@ -107,6 +128,19 @@ describe("email and Slack providers", () => {
     });
 
     expect(result.ok).toBe(false);
+  });
+
+  it("skips external notification dispatch when email is disabled", async () => {
+    await expect(
+      dispatchExternalNotification({
+        type: "SECURITY_EVENT",
+        recipientEmail: "owner@example.com",
+        title: "중요 보안 이벤트가 발생했습니다.",
+        message: "보안 대시보드에서 내용을 확인해 주세요.",
+        linkUrl: "/admin/security",
+        context: { token: "secret-token" },
+      }),
+    ).resolves.toBeUndefined();
   });
 
   it("Slack webhook provider returns failure instead of throwing", async () => {

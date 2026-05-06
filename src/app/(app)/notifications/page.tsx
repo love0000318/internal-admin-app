@@ -5,81 +5,78 @@ import {
 } from "@/app/(app)/notifications/actions";
 import { Badge, buttonClassName, Card, EmptyState } from "@/components/design-system/primitives";
 import { ResponsiveTabs, ResponsiveTable } from "@/components/design-system/responsive";
+import { PaginationControls } from "@/components/ui/pagination";
+import type { NotificationPriority } from "@/generated/prisma/enums";
 import {
   NOTIFICATION_GROUPS,
+  NOTIFICATION_PRIORITIES,
   countUnreadNotifications,
   getNotificationGroup,
   listMyNotifications,
+  normalizeNotificationPriority,
   type NotificationGroup,
 } from "@/lib/notifications/notifications";
+import { buildPaginationHref, parsePagination } from "@/lib/pagination";
 import { requireRouteAccess } from "@/lib/rbac/server-guards";
-import type { NotificationPriority } from "@/generated/prisma/enums";
 
 export const dynamic = "force-dynamic";
 
 type NotificationsPageProps = {
-  searchParams: Promise<{ group?: string; success?: string; error?: string }>;
+  searchParams: Promise<{
+    group?: string;
+    priority?: string;
+    success?: string;
+    error?: string;
+    page?: string;
+    pageSize?: string;
+  }>;
 };
 
 const groupLabels: Record<NotificationGroup, string> = {
   ALL: "전체",
   UNREAD: "읽지 않음",
   LEAVE: "휴가",
-  ATTACHMENT: "증명자료",
+  ATTACHMENT: "증빙자료",
   ANNUAL_PROMOTION: "연차 촉진",
   HR: "인사정보",
   ONBOARDING: "온보딩",
+  ATTENDANCE: "근태",
+  ACCOUNT: "계정",
+  SECURITY: "보안",
   REPORT: "리포트",
-  JOB: "Job",
+  JOB: "작업",
   SYSTEM: "시스템",
 };
 
-const priorityLabels = {
+const priorityLabels: Record<NotificationPriority, string> = {
   LOW: "낮음",
   NORMAL: "보통",
   HIGH: "높음",
-};
-
-const notificationPriorityLabels: Record<NotificationPriority, string> = {
-  ...priorityLabels,
   CRITICAL: "긴급",
 };
 
 type PriorityTone = "default" | "primary" | "warning" | "danger";
 
-function normalizePriority(priority: string | null | undefined): NotificationPriority {
-  if (
-    priority === "LOW" ||
-    priority === "NORMAL" ||
-    priority === "HIGH" ||
-    priority === "CRITICAL"
-  ) {
-    return priority;
-  }
-
-  return "NORMAL";
-}
-
 function priorityTone(priority: string | null | undefined): PriorityTone {
-  const normalizedPriority = normalizePriority(priority);
+  const normalizedPriority = normalizeNotificationPriority(priority);
 
   if (normalizedPriority === "CRITICAL") {
-    return "danger" as const;
+    return "danger";
   }
 
   if (normalizedPriority === "HIGH") {
-    return "warning" as const;
+    return "warning";
   }
 
   if (normalizedPriority === "LOW") {
-    return "default" as const;
+    return "default";
   }
 
-  return "primary" as const;
+  return "primary";
 }
 
 function priorityLabel(priority: string | null | undefined) {
-  return notificationPriorityLabels[normalizePriority(priority)];
+  return priorityLabels[normalizeNotificationPriority(priority)];
 }
 
 export default async function NotificationsPage({
@@ -88,10 +85,26 @@ export default async function NotificationsPage({
   const user = await requireRouteAccess("/notifications");
   const params = await searchParams;
   const selectedGroup = isNotificationGroup(params.group) ? params.group : "ALL";
+  const selectedPriority = isNotificationPriority(params.priority)
+    ? params.priority
+    : undefined;
+  const pagination = parsePagination(params);
   const [notifications, unreadCount] = await Promise.all([
-    listMyNotifications(user.id, { group: selectedGroup }),
+    listMyNotifications(user.id, {
+      group: selectedGroup,
+      priority: selectedPriority,
+      skip: pagination.skip,
+      take: pagination.take + 1,
+    }),
     countUnreadNotifications(user.id),
   ]);
+  const hasNextPage = notifications.length > pagination.take;
+  const visibleNotifications = notifications.slice(0, pagination.take);
+  const paginationParams = {
+    group: selectedGroup === "ALL" ? undefined : selectedGroup,
+    priority: selectedPriority,
+    pageSize: params.pageSize,
+  };
 
   return (
     <section className="min-w-0 space-y-5">
@@ -102,7 +115,8 @@ export default async function NotificationsPage({
             알림센터
           </h1>
           <p className="mt-2 max-w-3xl break-keep text-sm leading-relaxed text-slate-600">
-            휴가, 증명자료, 연차 촉진, 인사정보, 자동 작업 관련 알림을 한곳에서 확인합니다.
+            휴가, 근태, 계정, 보안, 작업 알림을 한곳에서 확인합니다. 알림에는
+            민감한 원문 정보가 포함되지 않습니다.
           </p>
         </div>
         <form action={markAllNotificationsRead}>
@@ -112,7 +126,7 @@ export default async function NotificationsPage({
         </form>
       </div>
 
-      <Card className="flex items-center justify-between gap-4">
+      <Card className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <p className="break-keep text-sm font-medium text-slate-500">읽지 않은 알림</p>
           <p className="mt-1 text-3xl font-bold text-slate-950">{unreadCount}</p>
@@ -129,20 +143,44 @@ export default async function NotificationsPage({
       ) : null}
       {params.error ? (
         <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-          처리 중 오류가 발생했습니다.
+          알림 처리 중 오류가 발생했습니다.
         </p>
       ) : null}
 
       <ResponsiveTabs
         items={NOTIFICATION_GROUPS.map((group) => ({
-          href: `/notifications?group=${group}`,
+          href: `/notifications?group=${group}${
+            selectedPriority ? `&priority=${selectedPriority}` : ""
+          }`,
           label: groupLabels[group],
           active: selectedGroup === group,
         }))}
       />
 
+      <form className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 sm:max-w-xs">
+        <input name="group" type="hidden" value={selectedGroup} />
+        <label className="grid gap-1 text-sm font-medium text-slate-700">
+          우선순위 필터
+          <select
+            className="min-h-11 w-full rounded-lg border border-slate-200 px-3 text-sm"
+            defaultValue={selectedPriority ?? ""}
+            name="priority"
+          >
+            <option value="">전체</option>
+            {NOTIFICATION_PRIORITIES.map((priority) => (
+              <option key={priority} value={priority}>
+                {priorityLabels[priority]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button className={buttonClassName({ tone: "neutral", className: "w-full" })}>
+          필터 적용
+        </button>
+      </form>
+
       <div className="grid gap-3 md:hidden">
-        {notifications.length === 0 ? (
+        {visibleNotifications.length === 0 ? (
           <EmptyState
             title={
               selectedGroup === "UNREAD"
@@ -151,7 +189,7 @@ export default async function NotificationsPage({
             }
           />
         ) : (
-          notifications.map((notification) => (
+          visibleNotifications.map((notification) => (
             <article
               key={notification.id}
               className={`min-w-0 rounded-2xl border bg-white p-4 shadow-sm ${
@@ -189,11 +227,7 @@ export default async function NotificationsPage({
                 ) : null}
                 {notification.readAt ? null : (
                   <form action={markNotificationRead}>
-                    <input
-                      name="notificationId"
-                      type="hidden"
-                      value={notification.id}
-                    />
+                    <input name="notificationId" type="hidden" value={notification.id} />
                     <button className={buttonClassName({ tone: "neutral", className: "w-full" })}>
                       읽음 처리
                     </button>
@@ -219,7 +253,7 @@ export default async function NotificationsPage({
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
-          {notifications.length === 0 ? (
+          {visibleNotifications.length === 0 ? (
             <tr>
               <td className="text-slate-500" colSpan={8}>
                 {selectedGroup === "UNREAD"
@@ -228,15 +262,13 @@ export default async function NotificationsPage({
               </td>
             </tr>
           ) : (
-            notifications.map((notification) => (
+            visibleNotifications.map((notification) => (
               <tr key={notification.id} className="align-top">
                 <td>
                   {notification.readAt ? (
                     <span className="text-slate-500">읽음</span>
                   ) : (
-                    <span className="font-semibold text-slate-950">
-                      읽지 않음
-                    </span>
+                    <span className="font-semibold text-slate-950">읽지 않음</span>
                   )}
                 </td>
                 <td>{groupLabels[getNotificationGroup(notification.type)]}</td>
@@ -245,13 +277,9 @@ export default async function NotificationsPage({
                     {priorityLabel(notification.priority)}
                   </Badge>
                 </td>
-                <td className="font-semibold text-slate-950">
-                  {notification.title}
-                </td>
+                <td className="font-semibold text-slate-950">{notification.title}</td>
                 <td className="max-w-md text-safe">{notification.message}</td>
-                <td>
-                  {notification.createdAt.toISOString().slice(0, 16).replace("T", " ")}
-                </td>
+                <td>{notification.createdAt.toISOString().slice(0, 16).replace("T", " ")}</td>
                 <td>
                   {notification.linkUrl ? (
                     <form action={markNotificationReadAndRedirect}>
@@ -270,14 +298,8 @@ export default async function NotificationsPage({
                     "-"
                   ) : (
                     <form action={markNotificationRead}>
-                      <input
-                        name="notificationId"
-                        type="hidden"
-                        value={notification.id}
-                      />
-                      <button className={buttonClassName({ tone: "neutral" })}>
-                        읽음 처리
-                      </button>
+                      <input name="notificationId" type="hidden" value={notification.id} />
+                      <button className={buttonClassName({ tone: "neutral" })}>읽음 처리</button>
                     </form>
                   )}
                 </td>
@@ -286,10 +308,25 @@ export default async function NotificationsPage({
           )}
         </tbody>
       </ResponsiveTable>
+      <PaginationControls
+        hasNext={hasNextPage}
+        hasPrevious={pagination.page > 1}
+        nextHref={buildPaginationHref("/notifications", paginationParams, pagination.page + 1)}
+        page={pagination.page}
+        previousHref={buildPaginationHref(
+          "/notifications",
+          paginationParams,
+          pagination.page - 1,
+        )}
+      />
     </section>
   );
 }
 
 function isNotificationGroup(value: string | undefined): value is NotificationGroup {
   return NOTIFICATION_GROUPS.includes(value as NotificationGroup);
+}
+
+function isNotificationPriority(value: string | undefined): value is NotificationPriority {
+  return NOTIFICATION_PRIORITIES.includes(value as NotificationPriority);
 }

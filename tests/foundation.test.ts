@@ -23,6 +23,8 @@ describe("foundation contracts", () => {
       "/leaves/me",
       "/leaves/calendar",
       "/notifications",
+      "/attendance/history",
+      "/admin/attendance/monthly",
       "/leaves/me/requests",
       "/leaves/me/use-plan",
       "/leaves/approvals",
@@ -42,6 +44,7 @@ describe("foundation contracts", () => {
       "/organization/teams",
       "/organization/employees",
       "/organization/invitations",
+      "/admin/organization/permissions-preview",
       "/admin/profile-change-requests",
       "/admin/audit-logs",
       "/admin/security",
@@ -68,6 +71,8 @@ describe("foundation contracts", () => {
       "/leaves/me",
       "/leaves/calendar",
       "/notifications",
+      "/attendance/history",
+      "/admin/attendance/monthly",
       "/leaves/approvals",
       "/admin/leaves/settings",
       "/admin/leaves/balances",
@@ -83,8 +88,11 @@ describe("foundation contracts", () => {
       "/leaves/me",
       "/leaves/calendar",
       "/notifications",
+      "/attendance/history",
+      "/admin/attendance/monthly",
       "/leaves/approvals",
       "/admin/leaves/balances",
+      "/admin/reports",
     ]);
     expect(getVisibleNavItems("MANAGER").map((route) => route.href)).toEqual([
       "/dashboard",
@@ -92,6 +100,7 @@ describe("foundation contracts", () => {
       "/leaves/me",
       "/leaves/calendar",
       "/notifications",
+      "/attendance/history",
     ]);
     expect(getVisibleNavItems("EXTERNAL_PARTNER")).toEqual([]);
   });

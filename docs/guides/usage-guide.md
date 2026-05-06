@@ -253,3 +253,10 @@ LEAD, MANAGER, EXTERNAL_PARTNER는 업로드/반영/취소 화면에 접근할 �
 생일 반차는 생일 기준 사용 가능 기간이 별도로 표시되며, 연말 12월 31일 규칙으로 강제 변경되지 않습니다.
 
 운영자는 `/leaves/me`, `/admin/leaves/balances`, `/admin/leaves/history`에서 만료일과 잔여 계산이 같은 기준으로 표시되는지 확인합니다.
+# 외부 캘린더 연동
+
+외부 캘린더 연동은 구독 방식의 단방향 동기화입니다. Internal Ops에서 생성된 휴가와 이벤트만 외부 캘린더에 표시됩니다. 외부 캘린더에서 추가하거나 수정한 일정은 Internal Ops에 반영되지 않습니다.
+
+직원은 내 프로필 또는 휴가 캘린더의 외부 캘린더 연동 화면에서 Google Calendar, Apple Calendar, Samsung Calendar, Outlook Calendar, 기타 iCal 지원 캘린더를 선택하고 개인 구독 URL을 발급할 수 있습니다.
+
+구독 URL은 개인 일정 정보를 볼 수 있는 링크이므로 외부에 공유하지 않습니다. 유출이 의심되면 URL을 재발급합니다. 캘린더 앱의 갱신 주기에 따라 일정 반영 또는 삭제가 지연될 수 있습니다.

@@ -18,7 +18,12 @@ export async function markNotificationRead(formData: FormData) {
     redirect("/notifications?error=invalid");
   }
 
-  await markNotificationAsRead(user.id, notificationId);
+  const result = await markNotificationAsRead(user.id, notificationId);
+
+  if (result.count === 0) {
+    redirect("/notifications?error=forbidden");
+  }
+
   await getPrisma().auditLog.create({
     data: {
       actorId: user.id,
@@ -43,7 +48,12 @@ export async function markNotificationReadAndRedirect(formData: FormData) {
     redirect("/notifications?error=invalid");
   }
 
-  await markNotificationAsRead(user.id, notificationId);
+  const result = await markNotificationAsRead(user.id, notificationId);
+
+  if (result.count === 0) {
+    redirect("/notifications?error=forbidden");
+  }
+
   await getPrisma().auditLog.create({
     data: {
       actorId: user.id,

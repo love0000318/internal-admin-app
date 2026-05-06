@@ -1012,3 +1012,23 @@ OWNER + Step-up 필요. ACTIVE 직원, 자기 자신, 마지막 OWNER는 삭제 
 내 휴가 현황, 구성원 휴가 현황, 휴가 요청 화면은 `LeaveGrant.expiresAt`과 `LeaveLedger.referenceYear/expiresAt` 기준을 함께 사용합니다. 2026년 지급분은 2027년 잔여로 남지 않아야 합니다.
 
 생일 반차는 생일 당일~정책상 사용 가능 기간을 유지하며 회계연도 말일 규칙을 적용하지 않습니다.
+# 외부 캘린더 단방향 구독
+
+직원은 외부 캘린더 연동 화면에서 개인 iCal/ICS 구독 URL을 발급할 수 있습니다. 이 기능은 Internal Ops에서 승인된 휴가와 이벤트만 외부 캘린더로 내보내는 단방향 구독입니다. 외부 캘린더에서 만든 일정은 Internal Ops에 가져오지 않습니다.
+
+제공 범위:
+
+- Google Calendar URL 구독 안내
+- Apple Calendar 구독 안내
+- Samsung Calendar 연동 우회 안내
+- Outlook 인터넷 캘린더 구독 안내
+- 구독 URL 재발급
+- 연동 해제
+- token hash 저장
+## 알림 고도화
+
+- 휴가 요청/승인/반려/취소, 근태 수정 요청, 근태 월별 마감, Job 실패, 보안 이벤트 알림을 내부 Notification으로 기록한다.
+- NotificationPriority는 LOW, NORMAL, HIGH, CRITICAL을 지원한다.
+- NotificationBell은 현재 로그인 사용자 본인의 unread count만 표시한다.
+- 외부 이메일/Slack은 환경변수로 활성화된 경우에만 보조 발송한다.
+- 알림 복구는 1년 미만 비례연차 계산 로직과 무관하며 휴가 잔여 계산 helper를 변경하지 않는다.

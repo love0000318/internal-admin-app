@@ -86,3 +86,36 @@ LEAD에게 전체 직원 데이터를 내려준 뒤 클라이언트에서 필터
 - 초대 URL과 가입 인증 코드를 seed/reissue script에서 1회 출력하는 경우, 출력 로그를 안전하게 관리하고 노출 시 즉시 폐기/재발급합니다.
 - secret 노출이 의심되면 값을 문서에 복사하지 말고 위치와 유형만 기록한 뒤 해당 secret을 rotate합니다.
 - 정기 점검 결과는 `docs/security-secret-scan-report.md`에 원문 없이 기록합니다.
+
+## 외부 캘린더 구독 URL 보안
+
+- 외부 캘린더 구독 URL은 개인별 비밀 링크로 취급합니다.
+- token 원문은 DB에 저장하지 않고 HMAC hash만 저장합니다.
+- token 원문, tokenHash, 전체 구독 URL은 AuditLog, Notification, console에 저장하지 않습니다.
+- URL 재발급 시 기존 URL은 폐기하고 새 tokenHash를 저장합니다.
+- 연동 해제 시 기존 URL 접근을 차단합니다.
+- ICS feed에는 휴가 사유, 증명자료, 관리자 메모를 포함하지 않습니다.
+- 외부 캘린더 구독은 로그인 없이 token으로 접근하므로 URL 유출에 특히 주의합니다.
+- 유출이 의심되면 즉시 URL을 재발급합니다.
+## 관리자 리포트 보안
+
+- OWNER는 전체 운영 리포트를 볼 수 있습니다.
+- LEAD는 담당 팀과 하위 팀 범위의 휴가/직원 요약만 볼 수 있습니다.
+- MANAGER와 EXTERNAL_PARTNER는 관리자 리포트에 접근할 수 없습니다.
+- CSV export는 OWNER + Step-up 재인증 후에만 허용합니다.
+- 리포트 export에는 passwordHash, tokenHash, codeHash, 주민등록번호, 계좌번호, 주소, 가족정보, 급여정보, fileKey, privatePath, secret, DATABASE_URL을 포함하지 않습니다.
+- AuditLog에는 CSV 본문이나 민감정보 원문을 저장하지 않고 reportType, scope, filterSummary, rowCount 같은 추적 정보만 저장합니다.
+
+## 조직 권한 보안
+
+- 팀 담당자 지정은 ACTIVE OWNER 또는 LEAD만 허용합니다.
+- 팀 담당자 지정/변경/해제, role 변경, 직원 비활성화는 서버에서 OWNER 권한과 Step-up을 검증합니다.
+- 마지막 OWNER 제거와 자기 자신 OWNER 강등/비활성화는 차단합니다.
+- LEAD scope는 서버 query 단계에서 담당 팀과 하위 팀으로 제한합니다.
+- 권한 미리보기에는 token, password, 주민등록번호, 계좌번호 등 민감정보를 표시하지 않습니다.
+## 알림 개인정보 보호
+
+- Notification, AuditLog, 외부 이메일/Slack payload에는 비밀번호, token, codeHash, secret, DATABASE_URL, 주민등록번호, 계좌번호를 저장하지 않는다.
+- 휴가 사유 원문, 반려 사유 원문, 관리자 메모, 증빙자료 파일명/내용은 알림에 포함하지 않는다.
+- 외부 알림 provider 오류는 업무 action rollback 사유가 아니다. 내부 업무 처리는 완료하고 실패 정보는 sanitize된 요약만 남긴다.
+- CRITICAL 알림은 긴급도 표시일 뿐이며 민감 상세는 보안 대시보드와 권한 검증된 화면에서 확인한다.

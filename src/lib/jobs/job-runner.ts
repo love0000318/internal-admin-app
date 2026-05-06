@@ -148,7 +148,7 @@ export async function failJobRun(jobRunId: string, error: unknown) {
       createNotification({
         userId: owner.id,
         type: "JOB_FAILED",
-        priority: "HIGH",
+        priority: "CRITICAL",
         title: "자동 작업 실행에 실패했습니다.",
         message: `${jobRun.jobName} 작업이 실패했습니다. 작업 이력을 확인해 주세요.`,
         linkUrl: `/admin/jobs/${jobRun.id}`,
@@ -204,6 +204,8 @@ export async function listJobRuns(filters: {
   status?: string;
   triggeredBy?: string;
   dryRun?: string;
+  skip?: number;
+  take?: number;
 }) {
   return getPrisma().jobRun.findMany({
     where: {
@@ -218,7 +220,8 @@ export async function listJobRuns(filters: {
     },
     include: { triggeredByUser: true },
     orderBy: { startedAt: "desc" },
-    take: 100,
+    skip: filters.skip ?? 0,
+    take: Math.min(filters.take ?? 50, 100),
   });
 }
 

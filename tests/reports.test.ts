@@ -6,8 +6,9 @@ import {
   maskReportPhoneNumber,
   sanitizeCsvValue,
 } from "@/lib/reports/csv";
+import { scopedUserWhere } from "@/lib/reports/data";
 import { sanitizeReportRow } from "@/lib/reports/definitions";
-import { assertCanExportReport } from "@/lib/reports/permissions";
+import { assertCanExportReport, canViewReports } from "@/lib/reports/permissions";
 
 describe("admin report CSV security", () => {
   it("includes UTF-8 BOM for Korean Excel compatibility", () => {
@@ -65,5 +66,37 @@ describe("admin report CSV security", () => {
         "LEAVE_USAGE",
       ),
     ).toThrow("reports-forbidden");
+  });
+
+  it("allows OWNER and LEAD to view reports but blocks MANAGER and EXTERNAL_PARTNER", () => {
+    expect(canViewReports({ id: "owner", role: "OWNER", status: "ACTIVE" })).toBe(true);
+    expect(canViewReports({ id: "lead", role: "LEAD", status: "ACTIVE" })).toBe(true);
+    expect(canViewReports({ id: "manager", role: "MANAGER", status: "ACTIVE" })).toBe(false);
+    expect(canViewReports({ id: "partner", role: "EXTERNAL_PARTNER", status: "ACTIVE" })).toBe(
+      false,
+    );
+  });
+
+  it("keeps LEAD report queries scoped at the DB filter level", () => {
+    expect(
+      scopedUserWhere(
+        { teamId: "team-a" },
+        {
+          scope: "MANAGED_TEAMS",
+          userIds: ["user-a"],
+          teamIds: ["team-a", "team-child"],
+          canViewSecurity: false,
+          canExport: false,
+        },
+      ),
+    ).toEqual({
+      AND: [
+        {
+          id: { in: ["user-a"] },
+          teamId: { in: ["team-a", "team-child"] },
+        },
+        { teamId: "team-a" },
+      ],
+    });
   });
 });

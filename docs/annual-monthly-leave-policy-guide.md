@@ -8,6 +8,26 @@ The fiscal-year prorated annual leave described here applies only to employees w
 
 Company policy and labor-law interpretation still require final review before operational rollout.
 
+## Preservation Target
+
+The under-one-year fiscal proration implemented in commit `ced6e08` is a protected regression area.
+
+When restoring or reintroducing other Internal Ops features, do not change these files without rerunning the leave regression suite:
+
+- `src/lib/leave/annual-policy.ts`
+- `src/lib/leave/calculate-entitlement.ts`
+- `src/lib/leave/balance.ts`
+- `src/lib/leave/queries.ts`
+- `tests/leave-calculations.test.ts`
+
+Protected behavior:
+
+- Only employees with service days under 365 can receive this fiscal-year prorated annual leave.
+- Employees with service days 365 or more must keep their existing calculated annual entitlement, adjustments, used days, pending days, and remaining days.
+- The 2025-09-01 / 2026-05-01 regression case must remain at 8 monthly days, 5.5 fiscal prorated days, 3 used days, and 10.5 remaining days.
+- Long-service employees must not receive repeated first-year monthly accrual or first-anniversary annual leave in the current fiscal year.
+- Used leave and adjustment values must remain separate.
+
 ## Under-One-Year Fiscal Proration
 
 Policy:
@@ -60,3 +80,10 @@ Required checks:
 - 2024-10-04 hire date, fiscal year 2026 and as-of date after one year of service: existing value remains unchanged.
 - 2025-09-01 hire date, fiscal year 2026, as-of date 2026-05-01: prorated annual leave is 5.5.
 
+Run before release:
+
+```powershell
+pnpm.cmd typecheck
+pnpm.cmd test
+pnpm.cmd build
+```

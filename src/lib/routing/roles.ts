@@ -40,6 +40,18 @@ export const IMPLEMENTED_ROUTE_POLICIES: RoutePolicy[] = [
     mvpStatus: "included",
   },
   {
+    href: "/attendance/history",
+    label: "내 근태 이력",
+    roles: ["OWNER", "LEAD", "MANAGER"],
+    mvpStatus: "included",
+  },
+  {
+    href: "/admin/attendance/monthly",
+    label: "근태 마감",
+    roles: ["OWNER", "LEAD"],
+    mvpStatus: "included",
+  },
+  {
     href: "/leaves/me/requests",
     label: "내 휴가 요청",
     roles: ["OWNER", "LEAD", "MANAGER"],
@@ -169,6 +181,13 @@ export const IMPLEMENTED_ROUTE_POLICIES: RoutePolicy[] = [
     showInNav: false,
   },
   {
+    href: "/admin/organization/permissions-preview",
+    label: "권한 미리보기",
+    roles: ["OWNER"],
+    mvpStatus: "included",
+    showInNav: false,
+  },
+  {
     href: "/admin/profile-change-requests",
     label: "인사정보 수정 요청",
     roles: ["OWNER"],
@@ -190,7 +209,7 @@ export const IMPLEMENTED_ROUTE_POLICIES: RoutePolicy[] = [
   {
     href: "/admin/reports",
     label: "관리자 리포트",
-    roles: ["OWNER"],
+    roles: ["OWNER", "LEAD"],
     mvpStatus: "included",
   },
   {

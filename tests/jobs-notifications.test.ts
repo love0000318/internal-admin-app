@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import { assertCronRequestAuthorized } from "@/lib/jobs/cron";
 import { sanitizeJobError, sanitizeJobSummary } from "@/lib/jobs/sanitize";
-import { getNotificationGroup } from "@/lib/notifications/notifications";
+import {
+  dedupeRecipientUserIds,
+  getNotificationGroup,
+  normalizeNotificationPriority,
+  sanitizeNotificationMetadata,
+} from "@/lib/notifications/notifications";
 
 describe("notifications and job operations", () => {
   it("groups notification types for filtering", () => {
@@ -14,7 +19,37 @@ describe("notifications and job operations", () => {
     expect(getNotificationGroup("ONBOARDING_COMPLETED")).toBe("ONBOARDING");
     expect(getNotificationGroup("REPORT_EXPORTED")).toBe("REPORT");
     expect(getNotificationGroup("JOB_FAILED")).toBe("JOB");
+    expect(getNotificationGroup("ATTENDANCE_CHANGE_REQUEST_CREATED")).toBe("ATTENDANCE");
+    expect(getNotificationGroup("PASSWORD_RESET_BY_OWNER")).toBe("ACCOUNT");
+    expect(getNotificationGroup("SECURITY_EVENT")).toBe("SECURITY");
     expect(getNotificationGroup("SYSTEM")).toBe("SYSTEM");
+  });
+
+  it("handles CRITICAL priority and unknown priority fallback", () => {
+    expect(normalizeNotificationPriority("CRITICAL")).toBe("CRITICAL");
+    expect(normalizeNotificationPriority("HIGH")).toBe("HIGH");
+    expect(normalizeNotificationPriority(undefined)).toBe("NORMAL");
+    expect(normalizeNotificationPriority("UNKNOWN")).toBe("NORMAL");
+  });
+
+  it("deduplicates recipients and sanitizes notification metadata", () => {
+    expect(dedupeRecipientUserIds(["u1", "u1", "", "u2"])).toEqual(["u1", "u2"]);
+
+    const metadata = sanitizeNotificationMetadata({
+      safeId: "leave-1",
+      token: "raw-token",
+      nested: {
+        passwordHash: "hash",
+        attachmentContent: "private content",
+      },
+    }) as Record<string, unknown>;
+
+    expect(metadata.safeId).toBe("leave-1");
+    expect(metadata.token).not.toBe("raw-token");
+    expect((metadata.nested as Record<string, unknown>).passwordHash).not.toBe("hash");
+    expect((metadata.nested as Record<string, unknown>).attachmentContent).not.toBe(
+      "private content",
+    );
   });
 
   it("redacts sensitive keys from job result summaries", () => {

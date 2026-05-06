@@ -21,7 +21,9 @@ export function NotificationBell({ unreadCount }: NotificationBellProps) {
     >
       <Bell
         aria-hidden="true"
-        className={`h-5 w-5 ${hasUnread ? "animate-bell-shake text-slate-950" : ""}`}
+        className={`h-5 w-5 ${
+          hasUnread ? "motion-safe:animate-bell-shake text-slate-950" : ""
+        }`}
       />
       {hasUnread ? (
         <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[11px] font-semibold leading-none text-white ring-2 ring-white">

@@ -25,6 +25,7 @@ import {
   getEmployeeMutationBlockReason,
   wouldCreateTeamCycle,
 } from "@/lib/organization/rules";
+import { isEligibleTeamLeadCandidate } from "@/lib/organization/permissions";
 import {
   employeeUpdateSchema,
   inviteEmployeeSchema,
@@ -58,6 +59,41 @@ function metadata(
   });
 }
 
+async function assertTeamLeadCandidate(
+  prisma: ReturnType<typeof getPrisma>,
+  leadUserId: string | null,
+) {
+  if (!leadUserId) {
+    return;
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: leadUserId },
+    select: { id: true, role: true, status: true },
+  });
+
+  if (!user || !isEligibleTeamLeadCandidate(user)) {
+    redirect("/organization/teams?error=invalid-lead");
+  }
+}
+
+async function requireTeamLeadChangeStepUp(params: {
+  actorUserId: string;
+  formData: FormData;
+}) {
+  const stepUpPassword = getRequiredFormValue(params.formData, "stepUpPassword");
+
+  try {
+    await assertStepUpPassword({
+      userId: params.actorUserId,
+      purpose: "POLICY_CHANGE",
+      password: stepUpPassword,
+    });
+  } catch {
+    redirect("/organization/teams?error=step-up-required");
+  }
+}
+
 export async function createTeam(formData: FormData) {
   const actor = await requireOwner();
   const parsed = teamInputSchema.safeParse({
@@ -73,6 +109,7 @@ export async function createTeam(formData: FormData) {
 
   const prisma = getPrisma();
   const parentTeamId = normalizeOptionalId(parsed.data.parentTeamId);
+  const leadUserId = normalizeOptionalId(parsed.data.leadUserId);
   const duplicate = await prisma.team.findFirst({
     where: {
       name: parsed.data.name,
@@ -84,12 +121,21 @@ export async function createTeam(formData: FormData) {
     redirect("/organization/teams?error=duplicate");
   }
 
+  await assertTeamLeadCandidate(prisma, leadUserId);
+
+  if (leadUserId) {
+    await requireTeamLeadChangeStepUp({
+      actorUserId: actor.id,
+      formData,
+    });
+  }
+
   const team = await prisma.team.create({
     data: {
       name: parsed.data.name,
       description: parsed.data.description || null,
       parentTeamId,
-      leadUserId: normalizeOptionalId(parsed.data.leadUserId),
+      leadUserId,
     },
   });
 
@@ -139,6 +185,7 @@ export async function updateTeam(formData: FormData) {
   }
 
   const parentTeamId = normalizeOptionalId(parsed.data.parentTeamId);
+  const leadUserId = normalizeOptionalId(parsed.data.leadUserId);
   const teams = await prisma.team.findMany({
     select: {
       id: true,
@@ -162,6 +209,15 @@ export async function updateTeam(formData: FormData) {
     redirect("/organization/teams?error=duplicate");
   }
 
+  await assertTeamLeadCandidate(prisma, leadUserId);
+
+  if (before.leadUserId !== leadUserId) {
+    await requireTeamLeadChangeStepUp({
+      actorUserId: actor.id,
+      formData,
+    });
+  }
+
   const status = parsed.data.status ?? before.status;
   const team = await prisma.team.update({
     where: { id: teamId },
@@ -169,7 +225,7 @@ export async function updateTeam(formData: FormData) {
       name: parsed.data.name,
       description: parsed.data.description || null,
       parentTeamId,
-      leadUserId: normalizeOptionalId(parsed.data.leadUserId),
+      leadUserId,
       status,
       deactivatedAt:
         status === "INACTIVE" && before.status !== "INACTIVE"

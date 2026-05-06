@@ -277,7 +277,13 @@ describe("leave calculations", () => {
     expect(yangBalance.manualGranted).toBe(0);
     expect(yangBalance.remainingDays).toBe(10.5);
 
-    for (const hireDate of ["2019-08-19", "2023-06-30", "2024-10-04"] as const) {
+    const longServiceCases = [
+      { hireDate: "2019-08-19", expectedAnnualEntitled: 17 },
+      { hireDate: "2023-06-30", expectedAnnualEntitled: 15 },
+      { hireDate: "2024-10-04", expectedAnnualEntitled: 15 },
+    ] as const;
+
+    for (const { hireDate, expectedAnnualEntitled } of longServiceCases) {
       const before = calculateLeaveBalanceForUser({
         hireDate,
         asOfDate: "2026-05-01",
@@ -299,6 +305,7 @@ describe("leave calculations", () => {
 
       expect(after.underOneYearProratedAnnualDays).toBe(0);
       expect(after.monthlyAccruedDays).toBe(0);
+      expect(after.annualEntitled).toBe(expectedAnnualEntitled);
       expect(after.grantedDays).toBe(before.grantedDays);
       expect(after.manualGranted).toBe(before.manualGranted);
       expect(after.remainingDays).toBe(before.remainingDays);

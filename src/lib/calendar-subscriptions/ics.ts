@@ -1,7 +1,7 @@
 import type { LeaveCalendarEvent } from "@/lib/leave/calendar";
 
 const ICS_DESCRIPTION =
-  "사내 휴가 일정에서 생성된 읽기 전용 일정입니다.";
+  "Internal Ops에서 승인된 휴가 일정입니다. 민감한 세부 내용은 포함하지 않습니다.";
 
 function pad2(value: number) {
   return String(value).padStart(2, "0");
@@ -43,6 +43,18 @@ function dateTimeInSeoul(dateOnly: string, time: string) {
   return `${formatIcsDate(dateOnly)}T${time}`;
 }
 
+function eventSummary(event: LeaveCalendarEvent) {
+  if (event.halfDayPeriod === "AM") {
+    return "오전 반차";
+  }
+
+  if (event.halfDayPeriod === "PM") {
+    return "오후 반차";
+  }
+
+  return event.leaveTypeLabel ?? "휴가";
+}
+
 function buildEventDateLines(event: LeaveCalendarEvent) {
   if (event.halfDayPeriod === "AM") {
     return [
@@ -59,9 +71,35 @@ function buildEventDateLines(event: LeaveCalendarEvent) {
   }
 
   return [
-    `DTSTART;VALUE=DATE:${formatIcsDate(event.date)}`,
-    `DTEND;VALUE=DATE:${formatIcsDate(nextDateOnly(event.date))}`,
+    `DTSTART;VALUE=DATE:${formatIcsDate(event.startDate)}`,
+    `DTEND;VALUE=DATE:${formatIcsDate(nextDateOnly(event.endDate))}`,
   ];
+}
+
+function groupEventsByLeaveRequest(events: LeaveCalendarEvent[]) {
+  const grouped = new Map<string, LeaveCalendarEvent>();
+
+  for (const event of events) {
+    const existing = grouped.get(event.leaveRequestId);
+
+    if (!existing) {
+      grouped.set(event.leaveRequestId, event);
+      continue;
+    }
+
+    grouped.set(event.leaveRequestId, {
+      ...existing,
+      startDate:
+        event.startDate < existing.startDate ? event.startDate : existing.startDate,
+      endDate: event.endDate > existing.endDate ? event.endDate : existing.endDate,
+    });
+  }
+
+  return [...grouped.values()].sort(
+    (left, right) =>
+      left.startDate.localeCompare(right.startDate) ||
+      left.leaveRequestId.localeCompare(right.leaveRequestId),
+  );
 }
 
 export function buildIcsCalendar(params: {
@@ -81,14 +119,18 @@ export function buildIcsCalendar(params: {
     "X-WR-TIMEZONE:Asia/Seoul",
   ];
 
-  for (const event of params.events) {
+  for (const event of groupEventsByLeaveRequest(params.events)) {
     lines.push(
       "BEGIN:VEVENT",
-      `UID:leave-${escapeIcsText(event.leaveRequestId)}-${event.date}@internal-ops`,
+      `UID:leave-request-${escapeIcsText(event.leaveRequestId)}@internal-ops`,
       `DTSTAMP:${dtstamp}`,
+      `CREATED:${dtstamp}`,
+      `LAST-MODIFIED:${dtstamp}`,
       ...buildEventDateLines(event),
-      `SUMMARY:${escapeIcsText(event.title)}`,
+      `SUMMARY:${escapeIcsText(eventSummary(event))}`,
       `DESCRIPTION:${escapeIcsText(ICS_DESCRIPTION)}`,
+      "STATUS:CONFIRMED",
+      "TRANSP:OPAQUE",
       "END:VEVENT",
     );
   }

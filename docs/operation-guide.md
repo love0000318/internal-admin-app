@@ -232,3 +232,43 @@ pnpm jobs:fix-fiscal-year-leave-expirations -- --apply --year=2026
 - 이미 잘못 생성된 미반영 batch는 `jobs:fix-leave-import-reference-year -- --dry-run --from=2019 --to=2026`으로 먼저 확인한 뒤 필요한 경우에만 apply한다.
 - 적용 명령은 `jobs:fix-leave-import-reference-year -- --apply --from=2019 --to=2026`이다.
 - APPLIED 또는 REVERSED batch는 기본 보정 대상에서 제외한다. 이미 반영된 batch는 역조정/취소 후 재업로드하는 절차를 따른다.
+# 외부 캘린더 단방향 구독 운영
+
+- 외부 캘린더 연동은 iCal/ICS 구독 방식의 단방향 동기화입니다.
+- Google OAuth, Apple CalDAV, 외부 webhook, 양방향 sync는 운영 범위에 포함하지 않습니다.
+- 구독 URL 생성/재발급/해제는 사용자 본인 구독만 대상으로 합니다.
+- token 원문과 전체 구독 URL은 AuditLog, Notification, 문서, console에 저장하지 않습니다.
+- 운영 확인 시 `/api/calendar/ical?token=...` 응답이 `text/calendar`인지 확인하되 실제 token 값은 기록하지 않습니다.
+- URL 재발급 후 기존 URL이 403 또는 404로 차단되는지 확인합니다.
+## 관리자 리포트 운영
+
+- OWNER는 `/admin/reports`에서 전체 휴가, 직원, 데이터 이상, 보안/감사 요약을 확인할 수 있습니다.
+- LEAD는 담당 팀과 하위 팀 범위의 리포트만 볼 수 있으며, 보안/감사 요약과 CSV export는 비활성화됩니다.
+- MANAGER와 EXTERNAL_PARTNER는 관리자 리포트에 접근할 수 없습니다.
+- CSV export는 OWNER + Step-up 재인증 후에만 허용하며, 민감정보와 secret/token/hash 값은 포함하지 않습니다.
+- 휴가 리포트는 기존 안정 계산 helper를 읽기 전용으로 사용해야 하며, 1년 미만 직원 비례연차 회귀 테스트를 보존합니다.
+
+## 조직/권한 관리 운영
+
+- 팀 담당자는 `Team.leadUserId`로 관리하며 ACTIVE OWNER 또는 LEAD만 지정할 수 있습니다.
+- 담당자 지정/변경/해제는 OWNER 전용이며 Step-up 재인증이 필요합니다.
+- LEAD는 담당 팀과 모든 하위 팀 범위만 조회할 수 있습니다.
+- `/admin/organization/permissions-preview`에서 role/team 변경 전 가시 범위와 영향 설명을 확인합니다.
+- 마지막 OWNER 강등/비활성화, 자기 자신 OWNER 강등/비활성화는 서버에서 차단합니다.
+- 권한 scope helper는 조회 범위만 제한하며 휴가 잔여 계산 helper를 변경하지 않습니다.
+
+## 근태 월별 마감 운영
+
+- OWNER는 `/admin/attendance/monthly`에서 전체 월별 근태 요약을 확인하고 Step-up 후 마감/해제할 수 있습니다.
+- LEAD는 담당 팀과 하위 팀 범위의 근태 요약만 조회할 수 있으며 마감/해제는 불가합니다.
+- 마감 전에는 결근 후보, 출근/퇴근 누락, 수정 요청 대기를 먼저 확인합니다.
+- 마감된 월에는 직원의 신규 근태 수정 요청이 차단됩니다.
+- 마감 해제 후 수정 요청이 다시 가능하며 해제 사유는 AuditLog에 남깁니다.
+- 이 기능은 급여 정산이나 수당 자동 계산 기능이 아닙니다.
+## 알림 운영
+
+- 내부 알림은 휴가, 근태, 계정, 보안, Job 실패 이벤트를 사용자별 Notification으로 기록한다.
+- 외부 이메일/Slack 알림은 환경변수로 활성화된 경우에만 발송한다. 비활성 또는 provider 설정 누락 상태에서는 업무 처리를 실패시키지 않고 건너뛴다.
+- HIGH/CRITICAL 알림은 운영자가 우선 확인한다.
+- 알림 metadata와 외부 payload에는 token, password, 휴가 사유 원문, 반려 사유 원문, 증빙자료 파일명/내용을 넣지 않는다.
+- 알림 복구 작업은 1년 미만 비례연차 계산 로직과 독립되어 있으며, 휴가 잔여 계산 helper를 수정하지 않는다.

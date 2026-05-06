@@ -6,7 +6,7 @@ const MAX_ARRAY_ITEMS = 20;
 const MAX_STRING_LENGTH = 500;
 
 const SENSITIVE_KEY_PATTERN =
-  /(password|token|hash|secret|resident|registration|account|bank|fileKey|fileUrl|filePath|attachmentUrl|storagePath|privatePath|internalPath|private|address|salary|wage|compensation|contractAmount|payroll|beforeSnapshot|requestedChanges|raw|plaintext|plainText)/i;
+  /(password|token|hash|secret|resident|registration|account|bank|fileKey|fileUrl|filePath|attachmentUrl|attachmentContent|storagePath|privatePath|internalPath|private|address|salary|wage|compensation|contractAmount|payroll|beforeSnapshot|requestedChanges|raw|plaintext|plainText)/i;
 
 const SECRET_LIKE_VALUE_PATTERN =
   /(v1:[A-Za-z0-9_-]{8,}:[A-Za-z0-9_-]{8,}:[A-Za-z0-9_-]{8,}|[A-Za-z0-9+/=_-]{32,})/g;

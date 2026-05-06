@@ -291,7 +291,10 @@
   - 기대 결과: UTF-8 BOM, CSV escaping, injection 방어, REPORT_EXPORTED AuditLog가 적용된다.
   - 실패 시 확인할 것: `generateCsvReport`, `sanitizeReportRow`.
 
-- [ ] MANAGER/LEAD가 리포트 또는 export에 접근한다.
+- [ ] LEAD가 `/admin/reports`에 접근한다.
+  - 기대 결과: 담당 팀과 하위 팀 범위의 휴가/직원 요약만 보이고 보안/감사 요약과 CSV export는 보이지 않는다.
+
+- [ ] MANAGER/EXTERNAL_PARTNER가 리포트 또는 export에 접근한다.
   - 기대 결과: 접근이 차단된다.
   - 실패 시 확인할 것: report page/export route guard.
 
@@ -891,3 +894,39 @@ https://interal-admin-app.vercel.app
 - [ ] 화면 표시 기준연도와 LeaveLedger/잔여 계산에 사용되는 연도가 일치한다.
 - [ ] 기존 2019 PARSED batch는 dry-run에서 보정 가능 대상으로 표시된다.
 - [ ] 기존 2019 APPLIED batch는 기본 dry-run/apply 대상에서 제외되고 경고가 표시된다.
+# 외부 캘린더 구독 smoke test
+
+- [ ] 직원으로 로그인한다.
+- [ ] 내 프로필 또는 휴가 캘린더에서 외부 캘린더 연동 화면에 접근한다.
+- [ ] Google/Apple/Samsung/Outlook/기타 iCal 지원 캘린더 선택지가 표시된다.
+- [ ] 구독 URL을 생성한다.
+- [ ] 구독 URL 새 탭 접근 시 `Content-Type: text/calendar` 응답을 확인한다.
+- [ ] `BEGIN:VCALENDAR`, `VERSION:2.0`, `VEVENT`를 확인한다.
+- [ ] 승인된 휴가가 포함되는지 확인한다.
+- [ ] 취소/반려/철회 휴가가 제외되는지 확인한다.
+- [ ] 휴가 사유, 증명자료, 관리자 메모가 ICS에 포함되지 않는지 확인한다.
+- [ ] URL 재발급 후 기존 URL이 차단되는지 확인한다.
+- [ ] 연동 해제 후 URL이 차단되는지 확인한다.
+- [ ] 모바일에서 구독 URL, 복사 버튼, 재발급/해제 버튼이 잘리지 않는지 확인한다.
+
+## 근태 월별 마감 smoke test
+
+- [ ] OWNER가 `/admin/attendance/monthly`에 접근할 수 있다.
+- [ ] LEAD가 담당 팀 범위의 월별 근태만 조회한다.
+- [ ] MANAGER가 관리자 근태 마감 화면에 접근할 수 없다.
+- [ ] 요약 카드에 정상, 지각, 조퇴, 결근, 퇴근 누락, 휴가, 수정 요청 대기가 표시된다.
+- [ ] OWNER가 Step-up 없이 마감을 시도하면 실패한다.
+- [ ] OWNER가 Step-up 후 월 마감을 수행할 수 있다.
+- [ ] 마감된 월에서 직원 신규 수정 요청이 차단된다.
+- [ ] OWNER가 Step-up 후 마감 해제를 수행할 수 있다.
+- [ ] 모바일에서 필터, 카드, 마감 버튼이 잘리지 않는다.
+## 알림 고도화 Smoke Test
+
+1. OWNER로 로그인한 뒤 TopBar/MobileTopBar의 NotificationBell unread badge가 표시되는지 확인한다.
+2. `/notifications`에서 전체/읽지 않음/근태/보안/Job 그룹과 우선순위 필터를 확인한다.
+3. 휴가 요청 생성 후 승인권자 알림이 생성되는지 확인한다.
+4. 휴가 승인/반려 후 요청 직원 알림이 생성되는지 확인한다.
+5. 근태 수정 요청 생성 후 OWNER 또는 담당 LEAD 알림이 생성되는지 확인한다.
+6. Job 실패 테스트 또는 dry-run 실패 케이스에서 OWNER CRITICAL 알림이 생성되는지 확인한다.
+7. 개별 읽음과 모두 읽음 처리 후 unread badge가 줄어드는지 확인한다.
+8. 알림 화면/API/AuditLog/외부 payload에 token, password, 휴가 사유 원문, 증빙자료 정보가 없는지 확인한다.

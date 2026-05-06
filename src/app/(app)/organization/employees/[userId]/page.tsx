@@ -17,7 +17,9 @@ import { getPrisma } from "@/lib/db/prisma";
 import { decryptForMasking } from "@/lib/hr/profile-provisioning";
 import { maskBankAccount, maskResidentId } from "@/lib/hr/sensitive";
 import { analyzeEmployeeDeletionImpact } from "@/lib/organization/employee-deletion";
+import { collectDescendantTeamIds } from "@/lib/organization/permissions";
 import { requireOwner } from "@/lib/rbac/server-guards";
+import type { Role } from "@/lib/rbac/roles";
 
 export const dynamic = "force-dynamic";
 
@@ -53,6 +55,7 @@ export default async function EmployeeDetailPage({
     }),
     prisma.team.findMany({
       where: { status: "ACTIVE" },
+      include: { lead: true },
       orderBy: { name: "asc" },
     }),
   ]);
@@ -72,6 +75,16 @@ export default async function EmployeeDetailPage({
     user.status === "DEACTIVATED" && user.id !== actor.id
       ? await analyzeEmployeeDeletionImpact(user.id)
       : null;
+  const visibleLeadNames = getLeadNamesForTeam({ teamId: user.teamId, teams });
+  const leadRootTeams = teams.filter((team) => team.leadUserId === user.id);
+  const leadVisibleTeamIds = collectDescendantTeamIds({
+    rootTeamIds: leadRootTeams.map((team) => team.id),
+    teams,
+  });
+  const leadVisibleTeamNames = teams
+    .filter((team) => leadVisibleTeamIds.includes(team.id))
+    .map((team) => team.name)
+    .sort();
 
   return (
     <section>
@@ -196,6 +209,52 @@ export default async function EmployeeDetailPage({
           <div><dt className="text-neutral-500">경력</dt><dd className="font-medium">{user.careerRecords.length}건</dd></div>
           <div><dt className="text-neutral-500">학력</dt><dd className="font-medium">{user.educationRecords.length}건</dd></div>
           <div><dt className="text-neutral-500">자격/교육</dt><dd className="font-medium">{user.certificateRecords.length + user.trainingRecords.length}건</dd></div>
+        </dl>
+      </section>
+
+      <section className="mt-6 rounded-lg border border-neutral-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold">권한 정보</h2>
+            <p className="mt-1 break-keep text-sm text-neutral-600">
+              팀 담당자와 하위 팀 기준으로 이 직원이 어떤 관리자에게 보이는지 확인합니다.
+              OWNER는 항상 전체 직원에 접근할 수 있습니다.
+            </p>
+          </div>
+          <a
+            href={`/admin/organization/permissions-preview?userId=${user.id}`}
+            className="inline-flex min-h-10 items-center justify-center rounded-md border border-neutral-200 px-4 text-sm font-medium text-neutral-700"
+          >
+            권한 미리보기
+          </a>
+        </div>
+        <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-4">
+          <div>
+            <dt className="text-neutral-500">현재 role</dt>
+            <dd className="mt-1 font-medium">{roleLabel(user.role)}</dd>
+          </div>
+          <div>
+            <dt className="text-neutral-500">소속 팀</dt>
+            <dd className="mt-1 font-medium">{user.team?.name ?? "-"}</dd>
+          </div>
+          <div>
+            <dt className="text-neutral-500">이 직원을 볼 수 있는 LEAD</dt>
+            <dd className="mt-1 break-words font-medium">
+              {visibleLeadNames.length > 0 ? visibleLeadNames.join(", ") : "없음"}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-neutral-500">OWNER 접근</dt>
+            <dd className="mt-1 font-medium">가능</dd>
+          </div>
+          <div className="md:col-span-2 xl:col-span-4">
+            <dt className="text-neutral-500">이 사용자가 담당자로 볼 수 있는 팀</dt>
+            <dd className="mt-1 break-words font-medium">
+              {leadVisibleTeamNames.length > 0
+                ? leadVisibleTeamNames.join(", ")
+                : "담당 팀 없음"}
+            </dd>
+          </div>
         </dl>
       </section>
 
@@ -396,4 +455,37 @@ function ImpactItem({ label, value }: { label: string; value: number }) {
       <p className="mt-1 text-base font-semibold text-neutral-950">{value}</p>
     </div>
   );
+}
+
+function getLeadNamesForTeam(params: {
+  teamId: string | null;
+  teams: Array<{
+    id: string;
+    parentTeamId: string | null;
+    status: "ACTIVE" | "INACTIVE";
+    lead: { id: string; name: string; role: Role; status: string } | null;
+  }>;
+}) {
+  if (!params.teamId) {
+    return [];
+  }
+
+  const names = new Set<string>();
+
+  for (const team of params.teams) {
+    if (!team.lead || team.lead.role !== "LEAD" || team.lead.status !== "ACTIVE") {
+      continue;
+    }
+
+    const visibleTeamIds = collectDescendantTeamIds({
+      rootTeamIds: [team.id],
+      teams: params.teams,
+    });
+
+    if (visibleTeamIds.includes(params.teamId)) {
+      names.add(team.lead.name);
+    }
+  }
+
+  return [...names].sort();
 }

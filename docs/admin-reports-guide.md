@@ -1,78 +1,64 @@
 # 관리자 리포트 가이드
 
-## 목적
+## 범위
 
-관리자 리포트는 OWNER가 휴가, 인사, 온보딩, 증명자료 운영 현황을 확인하고 필요한 데이터를 CSV로 안전하게 내보내기 위한 기능이다.
+`/admin/reports`는 운영 리포트 허브입니다.
 
-이번 단계는 내부 관리자 화면과 CSV 다운로드까지만 제공한다. 외부 BI 연동, XLSX/PDF 생성, 예약 발송, 이메일 발송은 후순위다.
+- OWNER는 전체 회사 범위의 휴가, 직원, 데이터 이상, 보안/감사 요약을 볼 수 있습니다.
+- LEAD는 담당 팀과 하위 팀 범위의 휴가/직원 요약만 볼 수 있습니다.
+- MANAGER와 EXTERNAL_PARTNER는 관리자 리포트에 접근할 수 없습니다.
 
-## 제공 리포트
+LEAD 범위 제한은 UI 필터가 아니라 서버 query 단계에서 적용합니다. 클라이언트에 전체 직원 데이터를 내려놓고 필터링하지 않습니다.
 
-- 휴가 사용 현황: 휴가 요청 기간, 상태, 승인자, 증명자료 상태를 확인한다.
-- 휴가 장부: LeaveLedger 기준 부여, 대기, 사용, 조정, 소멸, 회수 이력을 확인한다.
-- 맞춤휴가 지급: LeaveGrant 기준 지급 수량, 사용 수량, 잔여 수량, 상태를 확인한다.
-- 생일 반차 지급: BIRTHDAY_AUTO 지급 결과와 사용 가능 기간을 확인한다.
-- 연차 촉진·사용계획: 촉진 알림, 소멸 예정 수량, 사용계획 제출 상태를 확인한다.
-- 증명자료 제출 현황: 제출 파일의 검토 상태와 재제출 요청 여부를 확인한다.
-- 직원 온보딩 현황: prejoin profile, 초대 연결, 가입 연결, 프로필 확인 완료 여부를 확인한다.
-- 직원 프로필 확인 현황: 직원별 정보 확인과 수정 요청 개수를 확인한다.
+## 리포트 섹션
 
-## 접근 권한
+- 휴가 리포트: 승인 완료, 승인 대기, 사용 완료, 소멸 장부 이벤트, 휴가 사용/장부/지급 상세
+- 근태 리포트: 현재 안정 커밋에는 근태 월별 마감/상세 모델이 없으므로 TODO 상태로 표시
+- 직원 리포트: 전체, ACTIVE, INVITED, DEACTIVATED, 대기 초대
+- 데이터 이상 리포트: 팀 미지정 직원, 담당 팀 없는 LEAD, 과도한 조정값, 1년 미만/연차 장부 검토 필요 항목
+- 보안/감사 리포트: OWNER만 볼 수 있으며 HIGH/CRITICAL AuditLog와 차단 이벤트를 요약
 
-- OWNER만 `/admin/reports`와 하위 리포트에 접근할 수 있다.
-- LEAD, MANAGER, EXTERNAL_PARTNER는 접근할 수 없다.
-- CSV export route도 서버에서 OWNER 권한을 다시 검증한다.
+## Export 보안
 
-## CSV 내보내기
+CSV export는 OWNER만 사용할 수 있으며 `REPORT_EXPORT` Step-up 재인증이 필요합니다.
 
-각 리포트 화면의 `CSV 내보내기` 버튼은 현재 필터를 유지한 상태로 CSV를 내려받는다.
+CSV에는 다음 값을 포함하지 않습니다.
 
-CSV는 한국어 Excel 호환을 위해 UTF-8 BOM을 포함한다. 쉼표, 따옴표, 줄바꿈은 CSV 규칙에 맞게 escape한다.
+- password/passwordHash
+- token/tokenHash/codeHash
+- 주민등록번호/외국인등록번호
+- 계좌번호
+- 주소, 가족정보, 급여정보
+- fileKey, privatePath, attachment private URL
+- secret, DATABASE_URL
 
-## 민감정보 보호
-
-CSV export는 리포트별 allowlist 컬럼만 내보낸다. 다음 값은 export하지 않는다.
-
-- 주민등록번호와 외국인등록번호 원문
-- 가족 주민등록번호 원문
-- 계좌번호 원문
-- passwordHash
-- session token과 tokenHash
-- invitation token과 tokenHash
-- fileKey
-- private file path와 내부 storage 경로
-- 증명자료 파일 내용
-- AuditLog metadata 전체
-- 급여/보상 계약 상세 원문
-
-전화번호는 HR 온보딩 리포트에서 마스킹한다. 생일 반차 리포트는 생년월일 전체 대신 월/일만 표시한다.
-
-## CSV Injection 방어
-
-CSV 값이 `=`, `+`, `-`, `@`로 시작하면 앞에 `'`를 붙여 스프레드시트 수식 실행을 방지한다.
+CSV injection 방어를 위해 `=`, `+`, `-`, `@`로 시작하는 셀 값은 `'` prefix로 escape합니다.
 
 ## AuditLog
 
-CSV export가 실행되면 `REPORT_EXPORTED` AuditLog가 기록된다.
+CSV export 성공 시 `REPORT_EXPORTED` AuditLog를 남깁니다.
 
-metadata에는 다음만 저장한다.
+metadata에는 reportType, filterSummary, rowCount, exportedAt 같은 운영 추적 정보만 저장합니다. CSV 본문과 민감정보 원문은 저장하지 않습니다.
 
-- reportType
-- exportedByUserId
-- filterSummary
-- rowCount
-- exportedAt
+Step-up 없이 export하면 `REPORT_EXPORT_STEP_UP_REQUIRED`를 남기고 차단합니다.
 
-CSV 본문과 민감정보는 AuditLog에 저장하지 않는다.
+## 휴가 계산 회귀 보호
 
-## 운영 주의사항
+관리자 리포트는 기존 안정 휴가 계산 helper를 수정하지 않습니다.
 
-- 화면 조회는 최대 100건을 표시한다.
-- CSV export는 현재 최대 5,000건까지 내려받는다.
-- 대량 export streaming, 비동기 export, 예약 발송은 후순위 고도화다.
-- 증명자료 리포트에는 fileKey, 다운로드 URL, private path가 포함되지 않는다.
-- 연차 촉진 리포트는 운영 참고용이며 실제 법무/노무 판단은 별도 검토가 필요하다.
+보존 대상:
 
-## 자동 확정 휴가 반영
+- 근로 기간 1년 미만 직원에게만 회계연도 기준 비례 연차 적용
+- 1년 이상 직원 기존 계산값 불변
+- 양태식 케이스 잔여 10.5일 유지
+- 장기근속자에게 월차 11일/입사 1년차 연차 15일 반복 합산 금지
+- 사용 완료와 조정 분리
 
-미승인 휴가 자동 확정으로 `APPROVED` 처리된 요청은 일반 승인 완료 휴가와 같이 휴가 사용 현황 리포트와 장부 리포트에 반영된다. 장부 리포트에서는 source가 `LEAVE_AUTO_CONFIRM`으로 표시된다.
+리포트에서 이상 징후가 보이면 자동 수정하지 않고 `jobs:audit-fix-leave-integrity -- --dry-run --year=YYYY`로 REVIEW_REQUIRED 항목을 확인합니다.
+
+## 모바일 확인
+
+- 요약 카드는 1열 또는 2열로 줄바꿈됩니다.
+- 필터는 모바일에서 한 줄에 하나씩 표시됩니다.
+- 상세 리포트 표는 table wrapper 내부에서만 가로 스크롤됩니다.
+- export 버튼은 OWNER 화면에서만 표시됩니다.

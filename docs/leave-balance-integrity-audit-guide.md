@@ -28,6 +28,13 @@ Flag these as REVIEW_REQUIRED:
 - Adjustment amount looks like an imported remaining balance rather than a delta.
 - Remaining balance changes for a one-year-or-more employee after this policy patch.
 
+Protected regression baselines:
+
+- 2025-09-01 hire date, fiscal year 2026, as-of 2026-05-01: 122 worked days in 2025, 5.5 prorated annual days, 8 monthly days, 3 used days, 0 adjustment days, 10.5 remaining days.
+- 2019-08-19 hire date, fiscal year 2026: no under-one-year proration and no repeated first-year monthly or first-anniversary annual leave.
+- 2023-06-30 hire date, fiscal year 2026: no under-one-year proration and no repeated first-year monthly or first-anniversary annual leave.
+- Any restoration of profile, calendar, mobile drawer, reporting, attendance, cleanup, or optimization work must preserve these baselines.
+
 ## Safe Operating Policy
 
 - Dry-run first.
@@ -35,4 +42,3 @@ Flag these as REVIEW_REQUIRED:
 - Do not create historical LeaveRequest rows automatically from imported used values.
 - Use correction adjustment only when the operator has verified the cause.
 - Record any labor-policy uncertainty as REVIEW_REQUIRED.
-

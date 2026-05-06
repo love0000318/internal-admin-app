@@ -8,9 +8,11 @@ import {
   type CsvRow,
 } from "@/lib/reports/csv";
 import type { ReportType } from "@/lib/reports/definitions";
+import type { ReportScope } from "@/lib/reports/permissions";
 
 export type ReportFilters = {
   year?: string;
+  month?: string;
   q?: string;
   teamId?: string;
   userId?: string;
@@ -26,6 +28,7 @@ export type ReportFilters = {
 
 export type ListReportRowsOptions = {
   limit?: number;
+  scope?: ReportScope;
 };
 
 const DEFAULT_LIMIT = 100;
@@ -79,8 +82,18 @@ function clampLimit(value: number | undefined) {
   return Math.min(Math.max(value, 1), EXPORT_LIMIT);
 }
 
-function userWhere(filters: ReportFilters): Prisma.UserWhereInput {
+export function scopedUserWhere(
+  filters: ReportFilters,
+  scope?: ReportScope,
+): Prisma.UserWhereInput {
   const and: Prisma.UserWhereInput[] = [];
+
+  if (scope?.scope === "MANAGED_TEAMS") {
+    and.push({
+      id: { in: scope.userIds.length > 0 ? scope.userIds : ["__no_visible_user__"] },
+      teamId: { in: scope.teamIds.length > 0 ? scope.teamIds : ["__no_visible_team__"] },
+    });
+  }
 
   if (filters.teamId) {
     and.push({ teamId: filters.teamId });
@@ -103,14 +116,17 @@ function userWhere(filters: ReportFilters): Prisma.UserWhereInput {
   return and.length ? { AND: and } : {};
 }
 
-function leaveRequestWhere(filters: ReportFilters): Prisma.LeaveRequestWhereInput {
+function leaveRequestWhere(
+  filters: ReportFilters,
+  scope?: ReportScope,
+): Prisma.LeaveRequestWhereInput {
   const range = dateRange(filters);
   return {
     startDate: { lte: range.to },
     endDate: { gte: range.from },
     ...(filters.status ? { status: filters.status as never } : { status: "APPROVED" }),
     ...(filters.leaveTypeId ? { leaveTypeId: filters.leaveTypeId } : {}),
-    user: userWhere(filters),
+    user: scopedUserWhere(filters, scope),
   };
 }
 
@@ -152,24 +168,25 @@ export async function listReportRows(
 ): Promise<CsvRow[]> {
   const prisma = getPrisma();
   const limit = clampLimit(options.limit);
+  const scope = options.scope;
 
   switch (reportType) {
     case "LEAVE_USAGE":
-      return listLeaveUsageRows(prisma, filters, limit);
+      return listLeaveUsageRows(prisma, filters, limit, scope);
     case "LEAVE_LEDGER":
-      return listLeaveLedgerRows(prisma, filters, limit);
+      return listLeaveLedgerRows(prisma, filters, limit, scope);
     case "LEAVE_GRANTS":
-      return listLeaveGrantRows(prisma, filters, limit, false);
+      return listLeaveGrantRows(prisma, filters, limit, false, scope);
     case "BIRTHDAY_HALF_DAYS":
-      return listLeaveGrantRows(prisma, filters, limit, true);
+      return listLeaveGrantRows(prisma, filters, limit, true, scope);
     case "ANNUAL_PROMOTIONS":
-      return listAnnualPromotionRows(prisma, filters, limit);
+      return listAnnualPromotionRows(prisma, filters, limit, scope);
     case "LEAVE_ATTACHMENTS":
-      return listLeaveAttachmentRows(prisma, filters, limit);
+      return listLeaveAttachmentRows(prisma, filters, limit, scope);
     case "HR_ONBOARDING":
-      return listHrOnboardingRows(prisma, filters, limit);
+      return listHrOnboardingRows(prisma, filters, limit, scope);
     case "PROFILE_CONFIRMATIONS":
-      return listProfileConfirmationRows(prisma, filters, limit);
+      return listProfileConfirmationRows(prisma, filters, limit, scope);
   }
 }
 
@@ -177,9 +194,10 @@ async function listLeaveUsageRows(
   prisma: ReturnType<typeof getPrisma>,
   filters: ReportFilters,
   take: number,
+  scope?: ReportScope,
 ) {
   const requests = await prisma.leaveRequest.findMany({
-    where: leaveRequestWhere(filters),
+    where: leaveRequestWhere(filters, scope),
     include: {
       user: { include: { team: true } },
       reviewer: true,
@@ -212,6 +230,7 @@ async function listLeaveLedgerRows(
   prisma: ReturnType<typeof getPrisma>,
   filters: ReportFilters,
   take: number,
+  scope?: ReportScope,
 ) {
   const range = dateRange(filters);
   const ledgers = await prisma.leaveLedger.findMany({
@@ -220,7 +239,7 @@ async function listLeaveLedgerRows(
       ...(filters.eventType ? { eventType: filters.eventType as never } : {}),
       ...(filters.source ? { source: filters.source as never } : {}),
       ...(filters.leaveTypeId ? { leaveTypeId: filters.leaveTypeId } : {}),
-      user: userWhere(filters),
+      user: scopedUserWhere(filters, scope),
     },
     include: {
       user: { include: { team: true } },
@@ -256,6 +275,7 @@ async function listLeaveGrantRows(
   filters: ReportFilters,
   take: number,
   birthdayOnly: boolean,
+  scope?: ReportScope,
 ) {
   const range = dateRange(filters);
   const grants = await prisma.leaveGrant.findMany({
@@ -265,7 +285,7 @@ async function listLeaveGrantRows(
       ...(filters.source ? { source: filters.source as never } : {}),
       ...(filters.status ? { status: filters.status as never } : {}),
       ...(filters.leaveTypeId ? { leaveTypeId: filters.leaveTypeId } : {}),
-      user: userWhere(filters),
+      user: scopedUserWhere(filters, scope),
     },
     include: {
       user: { include: { team: true } },
@@ -318,6 +338,7 @@ async function listAnnualPromotionRows(
   prisma: ReturnType<typeof getPrisma>,
   filters: ReportFilters,
   take: number,
+  scope?: ReportScope,
 ) {
   const range = dateRange(filters);
   const notices = await prisma.annualLeavePromotionNotice.findMany({
@@ -325,7 +346,7 @@ async function listAnnualPromotionRows(
       scheduledDate: { gte: range.from, lte: range.to },
       ...(filters.noticeType ? { noticeType: filters.noticeType as never } : {}),
       ...(filters.status ? { status: filters.status as never } : {}),
-      user: userWhere(filters),
+      user: scopedUserWhere(filters, scope),
     },
     include: {
       user: { include: { team: true, employmentProfile: true } },
@@ -357,6 +378,7 @@ async function listLeaveAttachmentRows(
   prisma: ReturnType<typeof getPrisma>,
   filters: ReportFilters,
   take: number,
+  scope?: ReportScope,
 ) {
   const range = dateRange(filters);
   const attachments = await prisma.leaveAttachment.findMany({
@@ -365,7 +387,7 @@ async function listLeaveAttachmentRows(
       ...(filters.attachmentStatus ? { status: filters.attachmentStatus as never } : {}),
       leaveRequest: {
         ...(filters.leaveTypeId ? { leaveTypeId: filters.leaveTypeId } : {}),
-        user: userWhere(filters),
+        user: scopedUserWhere(filters, scope),
       },
     },
     include: {
@@ -407,11 +429,19 @@ async function listHrOnboardingRows(
   prisma: ReturnType<typeof getPrisma>,
   filters: ReportFilters,
   take: number,
+  scope?: ReportScope,
 ) {
   const query = filters.q?.trim();
   const profiles = await prisma.employeePrejoinProfile.findMany({
     where: {
       ...(filters.status ? { sourceStatus: filters.status as never } : {}),
+      ...(scope?.scope === "MANAGED_TEAMS"
+        ? {
+            linkedUserId: {
+              in: scope.userIds.length > 0 ? scope.userIds : ["__no_visible_user__"],
+            },
+          }
+        : {}),
       ...(query
         ? {
             OR: [
@@ -456,10 +486,11 @@ async function listProfileConfirmationRows(
   prisma: ReturnType<typeof getPrisma>,
   filters: ReportFilters,
   take: number,
+  scope?: ReportScope,
 ) {
   const users = await prisma.user.findMany({
     where: {
-      ...userWhere(filters),
+      ...scopedUserWhere(filters, scope),
       role: { not: "EXTERNAL_PARTNER" },
     },
     include: {

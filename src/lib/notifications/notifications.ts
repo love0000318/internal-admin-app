@@ -1,8 +1,13 @@
-import { Prisma, type Notification, type NotificationType } from "@/generated/prisma/client";
+import {
+  Prisma,
+  type Notification,
+  type NotificationPriority,
+  type NotificationType,
+} from "@/generated/prisma/client";
 import { getPrisma } from "@/lib/db/prisma";
 import { dispatchExternalNotification } from "@/lib/external-notifications/dispatch-external-notification";
 import type { RbacUser } from "@/lib/rbac/roles";
-import { sanitizeNotificationMetadata } from "@/lib/security/sanitize";
+import { sanitizeNotificationMetadata as sanitizeNotificationMetadataValue } from "@/lib/security/sanitize";
 
 export const NOTIFICATION_GROUPS = [
   "ALL",
@@ -12,6 +17,9 @@ export const NOTIFICATION_GROUPS = [
   "ANNUAL_PROMOTION",
   "HR",
   "ONBOARDING",
+  "ATTENDANCE",
+  "ACCOUNT",
+  "SECURITY",
   "REPORT",
   "JOB",
   "SYSTEM",
@@ -21,7 +29,79 @@ export type NotificationGroup = (typeof NOTIFICATION_GROUPS)[number];
 
 export type NotificationFilters = {
   group?: NotificationGroup;
+  priority?: NotificationPriority;
+  skip?: number;
+  take?: number;
 };
+
+const NOTIFICATION_TYPES_BY_GROUP: Partial<Record<NotificationGroup, NotificationType[]>> = {
+  LEAVE: [
+    "LEAVE_GRANTED",
+    "LEAVE_REQUESTED",
+    "LEAVE_REQUEST_CREATED",
+    "LEAVE_APPROVED",
+    "LEAVE_REQUEST_APPROVED",
+    "LEAVE_AUTO_CONFIRMED",
+    "LEAVE_REQUEST_AUTO_CONFIRMED",
+    "LEAVE_REJECTED",
+    "LEAVE_REQUEST_REJECTED",
+    "LEAVE_CANCELLED",
+    "LEAVE_REQUEST_CANCELLED",
+    "BIRTHDAY_HALF_DAY_GRANTED",
+    "ANNUAL_LEAVE_EXPIRING",
+    "ANNUAL_LEAVE_PROMOTION_REQUESTED",
+    "ANNUAL_LEAVE_USE_PLAN_SUBMITTED",
+  ],
+  ATTACHMENT: [
+    "LEAVE_ATTACHMENT_SUBMITTED",
+    "LEAVE_ATTACHMENT_ACCEPTED",
+    "LEAVE_ATTACHMENT_REJECTED",
+    "LEAVE_ATTACHMENT_RESUBMISSION_REQUESTED",
+  ],
+  ANNUAL_PROMOTION: [
+    "ANNUAL_LEAVE_PROMOTION",
+    "ANNUAL_LEAVE_PROMOTION_REQUESTED",
+    "ANNUAL_LEAVE_USE_PLAN_REMINDER",
+    "ANNUAL_LEAVE_USE_PLAN_SUBMITTED",
+    "ANNUAL_LEAVE_EXPIRED",
+    "ANNUAL_LEAVE_EXPIRING",
+  ],
+  HR: [
+    "HR_PROFILE_CONFIRMATION_REQUIRED",
+    "HR_PROFILE_CHANGE_REQUEST_CREATED",
+    "HR_PROFILE_CHANGE_REQUEST_APPROVED",
+    "HR_PROFILE_CHANGE_REQUEST_REJECTED",
+  ],
+  ONBOARDING: ["INVITATION_CREATED", "ONBOARDING_COMPLETED"],
+  ATTENDANCE: [
+    "ATTENDANCE_MISSING_CHECK_OUT",
+    "ATTENDANCE_ABSENT_DETECTED",
+    "ATTENDANCE_CHANGE_REQUEST_CREATED",
+    "ATTENDANCE_CHANGE_REQUEST_APPROVED",
+    "ATTENDANCE_CHANGE_REQUEST_REJECTED",
+    "ATTENDANCE_MONTH_CLOSED",
+    "ATTENDANCE_MONTH_REOPENED",
+  ],
+  ACCOUNT: [
+    "INVITATION_CREATED",
+    "INVITATION_EXPIRING",
+    "INVITATION_ACCEPTED",
+    "ONBOARDING_COMPLETED",
+    "PASSWORD_RESET_BY_OWNER",
+    "PASSWORD_CHANGE_REQUIRED",
+    "PASSWORD_CHANGED",
+  ],
+  SECURITY: [
+    "SECURITY_EVENT",
+    "OWNER_ROLE_CHANGED",
+    "STEP_UP_FAILED",
+    "AUDIT_LOG_EXPORTED",
+  ],
+  REPORT: ["REPORT_EXPORTED"],
+  JOB: ["JOB_COMPLETED", "JOB_FAILED"],
+};
+
+const NON_SYSTEM_NOTIFICATION_TYPES = Object.values(NOTIFICATION_TYPES_BY_GROUP).flat();
 
 export type CreateNotificationParams = {
   userId: string;
@@ -29,58 +109,37 @@ export type CreateNotificationParams = {
   title: string;
   message: string;
   linkUrl?: string | null;
-  priority?: "LOW" | "NORMAL" | "HIGH";
+  priority?: NotificationPriority;
   metadata?: Prisma.InputJsonValue;
 };
 
+export type NotifyUsersParams = Omit<CreateNotificationParams, "userId"> & {
+  recipientUserIds: string[];
+};
+
+export const NOTIFICATION_PRIORITIES = ["LOW", "NORMAL", "HIGH", "CRITICAL"] as const;
+
+export function normalizeNotificationPriority(
+  priority: string | null | undefined,
+): NotificationPriority {
+  return NOTIFICATION_PRIORITIES.includes(priority as NotificationPriority)
+    ? (priority as NotificationPriority)
+    : "NORMAL";
+}
+
+export function sanitizeNotificationMetadata(value: unknown): Prisma.InputJsonValue {
+  return sanitizeNotificationMetadataValue(value);
+}
+
+export function dedupeRecipientUserIds(userIds: string[]) {
+  return [...new Set(userIds.filter((userId) => typeof userId === "string" && userId.length > 0))];
+}
+
 export function getNotificationGroup(type: NotificationType): NotificationGroup {
-  if (
-    type === "LEAVE_GRANTED" ||
-    type === "LEAVE_REQUESTED" ||
-    type === "LEAVE_APPROVED" ||
-    type === "LEAVE_AUTO_CONFIRMED" ||
-    type === "LEAVE_REJECTED" ||
-    type === "LEAVE_CANCELLED"
-  ) {
-    return "LEAVE";
-  }
-
-  if (
-    type === "LEAVE_ATTACHMENT_SUBMITTED" ||
-    type === "LEAVE_ATTACHMENT_ACCEPTED" ||
-    type === "LEAVE_ATTACHMENT_REJECTED" ||
-    type === "LEAVE_ATTACHMENT_RESUBMISSION_REQUESTED"
-  ) {
-    return "ATTACHMENT";
-  }
-
-  if (
-    type === "ANNUAL_LEAVE_PROMOTION" ||
-    type === "ANNUAL_LEAVE_USE_PLAN_REMINDER" ||
-    type === "ANNUAL_LEAVE_EXPIRED"
-  ) {
-    return "ANNUAL_PROMOTION";
-  }
-
-  if (
-    type === "HR_PROFILE_CONFIRMATION_REQUIRED" ||
-    type === "HR_PROFILE_CHANGE_REQUEST_CREATED" ||
-    type === "HR_PROFILE_CHANGE_REQUEST_APPROVED" ||
-    type === "HR_PROFILE_CHANGE_REQUEST_REJECTED"
-  ) {
-    return "HR";
-  }
-
-  if (type === "INVITATION_CREATED" || type === "ONBOARDING_COMPLETED") {
-    return "ONBOARDING";
-  }
-
-  if (type === "REPORT_EXPORTED") {
-    return "REPORT";
-  }
-
-  if (type === "JOB_COMPLETED" || type === "JOB_FAILED") {
-    return "JOB";
+  for (const [group, types] of Object.entries(NOTIFICATION_TYPES_BY_GROUP)) {
+    if (types?.includes(type)) {
+      return group as NotificationGroup;
+    }
   }
 
   return "SYSTEM";
@@ -91,7 +150,7 @@ export async function createNotification(params: CreateNotificationParams) {
     data: {
       userId: params.userId,
       type: params.type,
-      priority: params.priority ?? "NORMAL",
+      priority: normalizeNotificationPriority(params.priority),
       title: params.title,
       message: params.message,
       linkUrl: params.linkUrl ?? null,
@@ -120,7 +179,7 @@ export async function createNotifications(params: CreateNotificationParams[]) {
     data: params.map((notification) => ({
       userId: notification.userId,
       type: notification.type,
-      priority: notification.priority ?? "NORMAL",
+      priority: normalizeNotificationPriority(notification.priority),
       title: notification.title,
       message: notification.message,
       linkUrl: notification.linkUrl ?? null,
@@ -144,6 +203,47 @@ export async function createNotifications(params: CreateNotificationParams[]) {
   );
 
   return result;
+}
+
+export async function notifyUsers(params: NotifyUsersParams) {
+  const recipientUserIds = dedupeRecipientUserIds(params.recipientUserIds);
+
+  if (recipientUserIds.length === 0) {
+    return { count: 0 };
+  }
+
+  const activeRecipients = await getPrisma().user.findMany({
+    where: {
+      id: { in: recipientUserIds },
+      status: "ACTIVE",
+      role: { not: "EXTERNAL_PARTNER" },
+    },
+    select: { id: true },
+  });
+
+  return createNotifications(
+    activeRecipients.map((recipient) => ({
+      userId: recipient.id,
+      type: params.type,
+      priority: normalizeNotificationPriority(params.priority),
+      title: params.title,
+      message: params.message,
+      linkUrl: params.linkUrl,
+      metadata: params.metadata,
+    })),
+  );
+}
+
+export async function createInternalNotification(params: CreateNotificationParams) {
+  return createNotification(params);
+}
+
+export async function dispatchNotification(params: NotifyUsersParams) {
+  return notifyUsers(params);
+}
+
+export async function dispatchNotificationAndExternal(params: NotifyUsersParams) {
+  return notifyUsers(params);
 }
 
 export async function createNotificationOnce(params: CreateNotificationParams) {
@@ -177,22 +277,29 @@ export async function listMyNotifications(
   userId: string,
   filters: NotificationFilters = {},
 ) {
+  const groupTypes =
+    filters.group && filters.group !== "ALL" && filters.group !== "UNREAD"
+      ? NOTIFICATION_TYPES_BY_GROUP[filters.group]
+      : undefined;
+  const typeFilter =
+    filters.group === "SYSTEM"
+      ? { notIn: NON_SYSTEM_NOTIFICATION_TYPES }
+      : groupTypes
+        ? { in: groupTypes }
+        : undefined;
   const notifications = await getPrisma().notification.findMany({
     where: {
       userId,
       ...(filters.group === "UNREAD" ? { readAt: null } : {}),
+      ...(typeFilter ? { type: typeFilter } : {}),
+      ...(filters.priority ? { priority: filters.priority } : {}),
     },
     orderBy: [{ readAt: "asc" }, { createdAt: "desc" }],
-    take: 100,
+    skip: filters.skip ?? 0,
+    take: filters.take ?? 50,
   });
 
-  if (!filters.group || filters.group === "ALL" || filters.group === "UNREAD") {
-    return notifications;
-  }
-
-  return notifications.filter(
-    (notification) => getNotificationGroup(notification.type) === filters.group,
-  );
+  return notifications;
 }
 
 export async function countUnreadNotifications(userId: string) {
