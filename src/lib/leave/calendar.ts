@@ -99,10 +99,6 @@ function isInManagedTeam(actor: RbacUser, teamId: string | null) {
   return Boolean(teamId && actor.managedTeamIds?.includes(teamId));
 }
 
-function isSameTeam(actor: RbacUser, teamId: string | null) {
-  return Boolean(actor.teamId && teamId && actor.teamId === teamId);
-}
-
 export function resolveCalendarEventVisibility(
   request: CalendarLeaveRequest,
   leaveTypeDefinition?: Pick<LeaveTypeDefinition, "visibility"> | null,
@@ -124,26 +120,20 @@ export function canViewCalendarLeaveDetail(
 export function canViewCalendarLeaveEvent({
   actor,
   request,
-  visibility,
+  visibility: _visibility,
 }: {
   actor: RbacUser;
   request: CalendarLeaveRequest;
   visibility: LeaveVisibility;
 }) {
+  void _visibility;
+
   if (isSelf(actor, request) || isOwner(actor)) {
     return true;
   }
 
   if (isLead(actor)) {
     return isInManagedTeam(actor, request.user.teamId);
-  }
-
-  if (isManager(actor)) {
-    return (
-      request.status === "APPROVED" &&
-      isSameTeam(actor, request.user.teamId) &&
-      visibility !== "PRIVATE_TO_APPROVERS"
-    );
   }
 
   return false;
@@ -331,9 +321,7 @@ function baseUserWhere(
   }
 
   if (isManager(actor)) {
-    return actor.teamId
-      ? { OR: [{ id: actor.id }, { teamId: actor.teamId }] }
-      : { id: actor.id };
+    return { id: actor.id };
   }
 
   return { id: "__calendar_access_denied__" };

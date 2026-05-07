@@ -61,3 +61,12 @@ Notification metadata, AuditLog metadata, 외부 이메일/Slack payload에는 �
 - 양태식 케이스 잔여 10.5일 유지
 - 장기근속자 월차/입사 1년차 연차 반복 합산 금지
 - 사용 완료와 조정 분리
+
+## 휴가 승인 알림과 polling
+
+- 휴가 요청 생성 시 승인 대상 OWNER/담당 LEAD에게 `LEAVE_REQUEST_CREATED` 알림을 생성한다.
+- 휴가 승인 시 요청자에게 `LEAVE_REQUEST_APPROVED` 알림을 생성한다.
+- 담당 조직 구성원 휴가가 승인되면 해당 직원을 볼 수 있는 LEAD에게 `LEAVE_APPROVED` 알림을 생성한다.
+- NotificationBell은 `/api/notifications/latest`를 polling하여 로그인된 각 디바이스에서 새 알림 toast를 표시한다.
+- WebSocket, FCM, APNs, 외부 브라우저 push는 이번 단계 범위가 아니며 후속 TODO다.
+- 알림 metadata에는 휴가 사유 원문, 증명자료, 관리자 메모, token, secret을 저장하지 않는다.

@@ -8,7 +8,10 @@ import {
   getStepUpPurposeForAction,
   STEP_UP_TTL_MINUTES,
 } from "@/lib/security/step-up";
-import { getDeletedEmployeeDisplayName } from "@/lib/organization/employee-deletion";
+import {
+  buildDeletedEmployeeEmail,
+  getDeletedEmployeeDisplayName,
+} from "@/lib/organization/employee-deletion";
 import { isSameOriginRequest } from "@/lib/security/request-origin";
 import {
   sanitizeInvitationForResponse,
@@ -101,6 +104,12 @@ describe("employee deletion display", () => {
         status: "DELETED",
       } as Parameters<typeof getDeletedEmployeeDisplayName>[0]),
     ).toBe("삭제된 직원 #123456");
+  });
+
+  it("uses an internal tombstone email for safe-deleted employees", () => {
+    expect(buildDeletedEmployeeEmail("user_abc123")).toBe(
+      "deleted-user_abc123@deleted.internal",
+    );
   });
 });
 

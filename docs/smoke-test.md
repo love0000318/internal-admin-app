@@ -122,6 +122,32 @@
   - 기대 결과: 상태가 갱신되고 직원 Notification이 생성된다.
   - 실패 시 확인할 것: OWNER guard, requestedChanges 암호화 상태.
 
+## 비활성 직원 계정 삭제
+
+- [ ] OWNER가 ACTIVE 직원을 바로 삭제하려고 시도한다.
+  - 기대 결과: 서버에서 차단된다.
+  - 실패 시 확인할 것: 삭제 action의 status guard.
+
+- [ ] OWNER가 직원을 먼저 DEACTIVATED 상태로 변경한 뒤 계정 삭제를 수행한다.
+  - 기대 결과: Step-up 재인증과 `DELETE` 확인 문구가 필요하며, 성공 시 `User.status=DELETED`와 `deletedAt`이 기록된다.
+  - 실패 시 확인할 것: Step-up purpose, 마지막 OWNER 보호, 자기 자신 삭제 차단.
+
+- [ ] 삭제된 직원으로 로그인한다.
+  - 기대 결과: 로그인할 수 없다.
+  - 실패 시 확인할 것: session revoke, passwordHash tombstone, user status guard.
+
+- [ ] 삭제 후 직원 목록 기본 화면을 확인한다.
+  - 기대 결과: 삭제된 직원은 기본 목록에서 숨김 처리된다.
+  - 실패 시 확인할 것: `/organization/employees` 기본 status filter.
+
+- [ ] 삭제된 직원 포함 필터를 확인한다.
+  - 기대 결과: 삭제된 직원은 `삭제된 직원`으로 표시되고 이메일/전화번호 등 개인정보는 보이지 않는다.
+  - 실패 시 확인할 것: list/detail masking.
+
+- [ ] 휴가/근태/감사 로그 보존을 확인한다.
+  - 기대 결과: LeaveRequest, LeaveLedger, LeaveGrant, LeaveAdjustment, AttendanceRecord, AttendanceChangeRequest, AuditLog가 삭제되지 않는다.
+  - 실패 시 확인할 것: 안전 삭제 transaction.
+
 ## 기본 휴가 요청과 승인
 
 - [ ] 직원이 연차/반차/예비군/병가/경조사를 요청한다.
@@ -939,3 +965,14 @@ https://interal-admin-app.vercel.app
 6. Job 실패 테스트 또는 dry-run 실패 케이스에서 OWNER CRITICAL 알림이 생성되는지 확인한다.
 7. 개별 읽음과 모두 읽음 처리 후 unread badge가 줄어드는지 확인한다.
 8. 알림 화면/API/AuditLog/외부 payload에 token, password, 휴가 사유 원문, 증빙자료 정보가 없는지 확인한다.
+
+## 휴가 알림/캘린더 smoke test
+
+1. MANAGER가 휴가 요청을 생성한다.
+2. OWNER와 담당 LEAD 계정에서 NotificationBell unread count 증가를 확인한다.
+3. OWNER 또는 담당 LEAD가 휴가를 승인한다.
+4. 요청자 계정에서 승인 알림 toast 또는 알림센터 항목을 확인한다.
+5. 담당 LEAD 계정에서 담당 조직 휴가 승인 알림을 확인한다.
+6. LEAD `/leaves/calendar`에서 담당 팀/하위 팀 승인 휴가만 보이는지 확인한다.
+7. MANAGER `/leaves/calendar`에서 본인 휴가만 보이는지 확인한다.
+8. 알림과 캘린더에 휴가 사유 원문/증명자료/관리자 메모가 노출되지 않는지 확인한다.

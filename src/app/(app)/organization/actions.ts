@@ -1016,7 +1016,7 @@ export async function permanentlyDeleteEmployee(formData: FormData) {
       targetUserId: userId,
       reason: reason || null,
     });
-    mode = result.mode.toLowerCase();
+    mode = result.mode.toLowerCase().replace(/_/g, "-");
   } catch (error) {
     const code =
       error instanceof Error && error.message

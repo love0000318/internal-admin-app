@@ -170,10 +170,17 @@ describe("leave calendar visibility", () => {
     ).toBe(false);
   });
 
-  it("blocks managers from seeing other teams and other users pending requests", () => {
+  it("blocks managers from seeing other users on the calendar", () => {
     expect(
       canViewCalendarLeaveEvent({
         actor: otherTeamManager,
+        request: request(),
+        visibility: "PUBLIC_WITH_TYPE",
+      }),
+    ).toBe(false);
+    expect(
+      canViewCalendarLeaveEvent({
+        actor: manager,
         request: request(),
         visibility: "PUBLIC_WITH_TYPE",
       }),

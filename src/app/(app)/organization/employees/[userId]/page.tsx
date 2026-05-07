@@ -67,10 +67,14 @@ export default async function EmployeeDetailPage({
   const hireDate = user.hireDate ?? user.profile?.hireDate ?? null;
   const birthDate = user.birthDate ?? user.profile?.birthday ?? null;
   const hireDateOnly = dateOnlyFromDate(hireDate);
-  const residentId = decryptForMasking(user.sensitiveProfile?.residentIdEncrypted);
-  const bankAccount = decryptForMasking(
-    user.sensitiveProfile?.bankAccountEncrypted,
-  );
+  const isDeletedUser = user.status === "DELETED" || Boolean(user.deletedAt);
+  const displayName = isDeletedUser ? "삭제된 직원" : user.name;
+  const residentId = isDeletedUser
+    ? null
+    : decryptForMasking(user.sensitiveProfile?.residentIdEncrypted);
+  const bankAccount = isDeletedUser
+    ? null
+    : decryptForMasking(user.sensitiveProfile?.bankAccountEncrypted);
   const deletionImpact =
     user.status === "DEACTIVATED" && user.id !== actor.id
       ? await analyzeEmployeeDeletionImpact(user.id)
@@ -89,7 +93,7 @@ export default async function EmployeeDetailPage({
   return (
     <section>
       <p className="text-sm font-medium text-neutral-500">직원 상세</p>
-      <h1 className="mt-2 text-2xl font-semibold tracking-normal">{user.name}</h1>
+      <h1 className="mt-2 text-2xl font-semibold tracking-normal">{displayName}</h1>
       {error ? (
         <p className="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
           {error === "forbidden-change"
@@ -108,15 +112,17 @@ export default async function EmployeeDetailPage({
       <dl className="mt-6 grid gap-3 rounded-lg border border-neutral-200 bg-white p-4 text-sm shadow-sm md:grid-cols-3">
         <div>
           <dt className="text-neutral-500">이메일</dt>
-          <dd className="mt-1 font-medium">{user.email}</dd>
+          <dd className="mt-1 font-medium">{isDeletedUser ? "-" : user.email}</dd>
         </div>
         <div>
           <dt className="text-neutral-500">전화번호</dt>
-          <dd className="mt-1 font-medium">{user.phone ?? "-"}</dd>
+          <dd className="mt-1 font-medium">{isDeletedUser ? "-" : (user.phone ?? "-")}</dd>
         </div>
         <div>
           <dt className="text-neutral-500">직급</dt>
-          <dd className="mt-1 font-medium">{user.title ?? user.profile?.jobTitle ?? "-"}</dd>
+          <dd className="mt-1 font-medium">
+            {isDeletedUser ? "-" : (user.title ?? user.profile?.jobTitle ?? "-")}
+          </dd>
         </div>
         <div>
           <dt className="text-neutral-500">역할</dt>
@@ -128,11 +134,11 @@ export default async function EmployeeDetailPage({
         </div>
         <div>
           <dt className="text-neutral-500">소속 팀</dt>
-          <dd className="mt-1 font-medium">{user.team?.name ?? "-"}</dd>
+          <dd className="mt-1 font-medium">{isDeletedUser ? "-" : (user.team?.name ?? "-")}</dd>
         </div>
         <div>
           <dt className="text-neutral-500">입사일</dt>
-          <dd className="mt-1 font-medium">{toDisplayDate(hireDate)}</dd>
+          <dd className="mt-1 font-medium">{isDeletedUser ? "-" : toDisplayDate(hireDate)}</dd>
         </div>
         <div>
           <dt className="text-neutral-500">재직일</dt>
@@ -142,7 +148,7 @@ export default async function EmployeeDetailPage({
         </div>
         <div>
           <dt className="text-neutral-500">생일</dt>
-          <dd className="mt-1 font-medium">{toDisplayDate(birthDate)}</dd>
+          <dd className="mt-1 font-medium">{isDeletedUser ? "-" : toDisplayDate(birthDate)}</dd>
         </div>
         <div>
           <dt className="text-neutral-500">생성일</dt>
@@ -258,6 +264,15 @@ export default async function EmployeeDetailPage({
         </dl>
       </section>
 
+      {isDeletedUser ? (
+        <section className="mt-6 rounded-lg border border-neutral-200 bg-white p-4 text-sm text-neutral-600 shadow-sm">
+          <h2 className="text-lg font-semibold text-neutral-950">삭제된 계정</h2>
+          <p className="mt-2 break-keep">
+            이 계정은 개인정보가 익명화되었으며 로그인할 수 없습니다. 휴가,
+            근태, 감사 로그 등 업무 기록은 보존됩니다.
+          </p>
+        </section>
+      ) : (
       <form
         action={updateEmployeeProfile}
         className="mt-6 grid gap-4 rounded-lg border border-neutral-200 bg-white p-4 shadow-sm md:grid-cols-2"
@@ -367,16 +382,17 @@ export default async function EmployeeDetailPage({
           ) : null}
         </div>
       </form>
+      )}
       {deletionImpact ? (
         <section className="mt-6 rounded-lg border border-red-200 bg-red-50 p-4 shadow-sm">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <p className="text-sm font-semibold text-red-900">위험 작업</p>
               <h2 className="mt-1 text-lg font-semibold text-red-950">
-                비활성 직원 영구 삭제
+                비활성 직원 계정 삭제
               </h2>
               <p className="mt-2 text-sm leading-relaxed text-red-800">
-                영구 삭제를 진행하면 개인정보가 삭제됩니다. 휴가, 근태, 감사
+                삭제를 진행하면 로그인 권한과 개인정보가 삭제됩니다. 휴가, 근태, 감사
                 기록이 있는 경우 업무 기록 보존을 위해 직원 정보는 “삭제된
                 직원”으로 익명화됩니다.
               </p>
@@ -438,7 +454,7 @@ export default async function EmployeeDetailPage({
             </label>
             <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
               <button className="h-10 rounded-md bg-red-700 px-4 text-sm font-semibold text-white hover:bg-red-800">
-                직원 영구 삭제
+                계정 삭제
               </button>
             </div>
           </form>

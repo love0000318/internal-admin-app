@@ -170,3 +170,12 @@
 - [ ] dry-run에서 APPLIED/REVERSED batch 제외 여부 확인
 - [ ] PARSED/VALIDATED/FAILED/CANCELLED batch만 apply 보정
 - [ ] 이미 APPLIED된 batch는 역조정/취소 후 올바른 기준연도로 재업로드
+## 휴가 알림/캘린더 빠른 확인
+
+- [ ] 휴가 요청 생성 시 OWNER/담당 LEAD 알림 생성
+- [ ] 휴가 승인 시 요청자 알림 생성
+- [ ] 담당 조직 구성원 승인 시 LEAD 알림 생성
+- [ ] NotificationBell polling toast 표시
+- [ ] LEAD 캘린더는 담당 범위만 표시
+- [ ] MANAGER 캘린더는 본인 휴가만 표시
+- [ ] 휴가 사유/증명자료/관리자 메모 노출 없음

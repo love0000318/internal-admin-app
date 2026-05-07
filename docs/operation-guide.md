@@ -299,3 +299,20 @@ corepack pnpm prisma migrate status
 - 운영 DB 대상 `prisma migrate dev`, `prisma migrate reset`은 금지한다.
 - 이미 DB에 적용된 migration이 로컬 이력과 충돌하는 경우 임의 삭제하지 말고 `prisma migrate resolve --applied` 또는 `--rolled-back` 필요 여부를 검토한다.
 - `AttendanceMonthlyClose`, `AttendanceChangeRequest`, notification enum 관련 실패 이력은 기능 flag/fallback으로 먼저 production crash를 막고, migration 이력은 별도 maintenance window에서 정리한다.
+
+## 비활성 직원 계정 삭제 운영
+
+- 비활성 직원 계정 삭제는 OWNER 전용이며 Step-up 재인증이 필요하다.
+- ACTIVE 직원, 본인 계정, 마지막 OWNER, 이미 삭제된 계정은 삭제할 수 없다.
+- 삭제 방식은 안전 삭제다. `User.status=DELETED`, `deletedAt` 기록, 세션/초대/캘린더 token revoke, 개인정보 익명화를 수행한다.
+- 휴가, 근태, 감사 로그, 휴가 장부 기록은 삭제하지 않는다.
+- 삭제 전 이메일/전화번호/주민등록번호/계좌번호/token/hash/password는 AuditLog, Notification, 문서에 남기지 않는다.
+- 상세 절차는 `docs/employee-account-deletion-guide.md`를 따른다.
+
+## 휴가 승인 알림 운영 확인
+
+- 휴가 요청 생성 후 OWNER/담당 LEAD의 NotificationBell unread count가 증가하는지 확인한다.
+- 승인 처리 후 요청자에게 승인 알림이 생성되는지 확인한다.
+- 담당 조직 구성원의 휴가가 승인되면 해당 LEAD에게 캘린더 확인 알림이 생성되는지 확인한다.
+- 알림에는 휴가 사유 원문, 증명자료, 관리자 메모가 포함되지 않아야 한다.
+- NotificationBell polling은 내부 DB 조회 기반이며 외부 push/WebSocket은 사용하지 않는다.

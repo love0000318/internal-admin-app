@@ -1,11 +1,10 @@
-"use server";
+﻿"use server";
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { Prisma } from "@/generated/prisma/client";
 import { getPrisma } from "@/lib/db/prisma";
-import { dispatchExternalNotification } from "@/lib/external-notifications/dispatch-external-notification";
 import { assertEnoughLeaveBalance, policyDeductsAnnual, toNumber } from "@/lib/leave/balance";
 import { dateToDateOnly, todayInSeoul } from "@/lib/leave/calculate-business-days";
 import {
@@ -32,6 +31,10 @@ import {
   recordLeaveRequestCancelledLedger,
   recordLeaveRequestRejectedLedger,
 } from "@/lib/leave/ledger";
+import {
+  notifyLeaveRequestApproved,
+  notifyLeaveRequestRejectedOrCancelled,
+} from "@/lib/notifications/leave-notifications";
 import type { LeaveOverlapCandidate } from "@/lib/leave/types";
 import { requireRouteAccess } from "@/lib/rbac/server-guards";
 
@@ -111,33 +114,6 @@ const leaveRequestActionInclude = {
   grantUsages: true,
 } satisfies Prisma.LeaveRequestInclude;
 
-async function createRequesterNotification({
-  tx,
-  requesterId,
-  type,
-  title,
-  message,
-  leaveRequestId,
-}: {
-  tx: Prisma.TransactionClient;
-  requesterId: string;
-  type: "LEAVE_APPROVED" | "LEAVE_REJECTED" | "LEAVE_CANCELLED";
-  title: string;
-  message: string;
-  leaveRequestId: string;
-}) {
-  await tx.notification.create({
-    data: {
-      userId: requesterId,
-      type,
-      title,
-      message,
-      linkUrl: `/leaves/me/requests/${leaveRequestId}`,
-      metadata: toJsonValue({ leaveRequestId }),
-    },
-  });
-}
-
 function grantUsageMetadata(
   leaveRequest: {
     grantUsages?: Array<{
@@ -152,41 +128,6 @@ function grantUsageMetadata(
     amount: usage.amount,
     unit: usage.unit,
   }));
-}
-
-async function dispatchLeaveReviewExternalNotification(
-  leaveRequestId: string,
-  type: "LEAVE_APPROVED" | "LEAVE_REJECTED" | "LEAVE_CANCELLED",
-) {
-  const leaveRequest = await getPrisma().leaveRequest.findUnique({
-    where: { id: leaveRequestId },
-    include: { user: true, customLeaveType: true },
-  });
-
-  if (!leaveRequest) {
-    return;
-  }
-
-  const title =
-    type === "LEAVE_APPROVED"
-      ? "휴가 요청이 승인되었습니다."
-      : type === "LEAVE_REJECTED"
-        ? "휴가 요청이 반려되었습니다."
-        : "승인된 휴가가 취소되었습니다.";
-
-  await dispatchExternalNotification({
-    type,
-    recipientUserId: leaveRequest.userId,
-    title,
-    message: title,
-    linkUrl: `/leaves/me/requests/${leaveRequest.id}`,
-    context: {
-      leaveRequestId: leaveRequest.id,
-      leaveTypeName: leaveRequest.customLeaveType?.name ?? leaveRequest.type,
-      startDate: dateToDateOnly(leaveRequest.startDate),
-      endDate: dateToDateOnly(leaveRequest.endDate),
-    },
-  });
 }
 
 async function assertApprovalStillValid(params: {
@@ -351,17 +292,6 @@ export async function approveLeaveRequest(formData: FormData) {
           where: { id: leaveRequest.id },
         });
 
-        if (leaveRequest.requestKind === "CUSTOM_GRANT") {
-          await createRequesterNotification({
-            tx,
-            requesterId: leaveRequest.userId,
-            type: "LEAVE_APPROVED",
-            title: "휴가 요청이 승인되었습니다.",
-            message: `${leaveRequest.customLeaveType?.name ?? "맞춤휴가"} 요청이 승인되었습니다.`,
-            leaveRequestId: leaveRequest.id,
-          });
-        }
-
         await tx.auditLog.create({
           data: {
             actorId: actor.id,
@@ -412,7 +342,7 @@ export async function approveLeaveRequest(formData: FormData) {
   revalidatePath("/leaves/approvals");
   revalidatePath("/leaves/approvals/approved");
   revalidatePath("/leaves/me");
-  await dispatchLeaveReviewExternalNotification(requestId, "LEAVE_APPROVED");
+  await notifyLeaveRequestApproved({ leaveRequestId: requestId, approvedByUserId: actor.id, prisma });
   redirect(withSearchParam(returnTo, "success", "approved"));
 }
 
@@ -501,17 +431,6 @@ export async function rejectLeaveRequest(formData: FormData) {
           where: { id: leaveRequest.id },
         });
 
-        if (leaveRequest.requestKind === "CUSTOM_GRANT") {
-          await createRequesterNotification({
-            tx,
-            requesterId: leaveRequest.userId,
-            type: "LEAVE_REJECTED",
-            title: "휴가 요청이 반려되었습니다.",
-            message: `${leaveRequest.customLeaveType?.name ?? "맞춤휴가"} 요청이 반려되었습니다. 반려 사유를 확인해 주세요.`,
-            leaveRequestId: leaveRequest.id,
-          });
-        }
-
         await tx.auditLog.create({
           data: {
             actorId: actor.id,
@@ -561,7 +480,7 @@ export async function rejectLeaveRequest(formData: FormData) {
 
   revalidatePath("/leaves/approvals");
   revalidatePath("/leaves/me");
-  await dispatchLeaveReviewExternalNotification(requestId, "LEAVE_REJECTED");
+  await notifyLeaveRequestRejectedOrCancelled({ leaveRequestId: requestId, action: "REJECTED", prisma });
   redirect(withSearchParam(returnTo, "success", "rejected"));
 }
 
@@ -651,17 +570,6 @@ export async function cancelApprovedLeaveRequest(formData: FormData) {
           where: { id: leaveRequest.id },
         });
 
-        if (leaveRequest.requestKind === "CUSTOM_GRANT") {
-          await createRequesterNotification({
-            tx,
-            requesterId: leaveRequest.userId,
-            type: "LEAVE_CANCELLED",
-            title: "승인된 휴가가 취소되었습니다.",
-            message: `${leaveRequest.customLeaveType?.name ?? "맞춤휴가"} 승인이 취소되었습니다. 취소 사유를 확인해 주세요.`,
-            leaveRequestId: leaveRequest.id,
-          });
-        }
-
         await tx.auditLog.create({
           data: {
             actorId: actor.id,
@@ -712,6 +620,6 @@ export async function cancelApprovedLeaveRequest(formData: FormData) {
   revalidatePath("/leaves/approvals");
   revalidatePath("/leaves/approvals/approved");
   revalidatePath("/leaves/me");
-  await dispatchLeaveReviewExternalNotification(requestId, "LEAVE_CANCELLED");
+  await notifyLeaveRequestRejectedOrCancelled({ leaveRequestId: requestId, action: "CANCELLED", prisma });
   redirect(withSearchParam(returnTo, "success", "cancelled"));
 }

@@ -1,11 +1,10 @@
-"use server";
+﻿"use server";
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
-import { Prisma, type ApprovalPolicy } from "@/generated/prisma/client";
+import { Prisma } from "@/generated/prisma/client";
 import { getPrisma } from "@/lib/db/prisma";
-import { dispatchExternalNotification } from "@/lib/external-notifications/dispatch-external-notification";
 import { assertEnoughLeaveBalance, policyDeductsAnnual } from "@/lib/leave/balance";
 import {
   createLeaveAttachmentRecord,
@@ -34,7 +33,6 @@ import {
 } from "@/lib/leave/custom-grant-requests";
 import {
   approvalPolicySummary,
-  resolveNotificationApproversForLeaveRequest,
   resolveApprovalPolicyForLeaveRequest,
   resolveApprovalPolicyForLeaveTypeCode,
   shouldAutoApproveLeaveRequest,
@@ -52,6 +50,7 @@ import {
 } from "@/lib/leave/queries";
 import type { DateOnly, LeaveOverlapCandidate } from "@/lib/leave/types";
 import { leaveRequestSchema, optionalString } from "@/lib/leave/validation";
+import { notifyLeaveApprovalNeeded } from "@/lib/notifications/leave-notifications";
 import { requireRouteAccess } from "@/lib/rbac/server-guards";
 
 function toJsonValue(value: unknown): Prisma.InputJsonValue {
@@ -86,7 +85,7 @@ function preparedAttachmentFromUrl(attachmentUrl: string | null): PreparedLeaveA
 
   return {
     fileName: "external-reference",
-    originalFileName: "증명자료 참고 링크",
+    originalFileName: "利앸챸?먮즺 李멸퀬 留곹겕",
     fileKey: null,
     fileUrl: attachmentUrl,
     fileSize: null,
@@ -103,88 +102,6 @@ async function prepareOptionalAttachment(formData: FormData) {
     }
 
     throw error;
-  }
-}
-
-async function notifyApproversForLeaveRequest({
-  prisma,
-  leaveRequest,
-  approvalPolicy,
-  leaveRequestId,
-  leaveTypeName,
-}: {
-  prisma: ReturnType<typeof getPrisma>;
-  leaveRequest: Parameters<typeof resolveNotificationApproversForLeaveRequest>[0]["leaveRequest"];
-  approvalPolicy: Pick<
-    ApprovalPolicy,
-    "id" | "code" | "approvalMode" | "approverRule" | "customApproverUserId"
-  >;
-  leaveRequestId: string;
-  leaveTypeName: string;
-}) {
-  const reviewers = await resolveNotificationApproversForLeaveRequest({
-    leaveRequest,
-    policy: approvalPolicy,
-    prisma,
-  });
-
-  if (reviewers.length === 0) {
-    return;
-  }
-
-  await prisma.auditLog.create({
-    data: {
-      actorId: leaveRequest.userId,
-      actorUserId: leaveRequest.userId,
-      targetUserId: leaveRequest.userId,
-      action: "LEAVE_REQUEST_APPROVER_RESOLVED",
-      targetType: "LEAVE_REQUEST",
-      targetId: leaveRequestId,
-      metadata: toJsonValue({
-        leaveRequestId,
-        requesterId: leaveRequest.userId,
-        resolvedApproverIds: reviewers.map((reviewer) => reviewer.id),
-        approvalPolicy: approvalPolicySummary(approvalPolicy),
-      }),
-    },
-  });
-
-  const requester = leaveRequest.user;
-  const data = reviewers.map((reviewer) => ({
-      userId: reviewer.id,
-      type: "LEAVE_REQUESTED" as const,
-      title: "휴가 승인 요청이 등록되었습니다.",
-      message: `${requester.name} 님이 ${leaveTypeName}을 요청했습니다.`,
-      linkUrl: `/leaves/approvals/${leaveRequestId}`,
-      metadata: toJsonValue({
-        leaveRequestId,
-        requesterId: requester.id,
-        leaveTypeName,
-        startDate: dateToDateOnly(leaveRequest.startDate),
-        endDate: dateToDateOnly(leaveRequest.endDate),
-      }),
-    }));
-
-  if (data.length > 0) {
-    await prisma.notification.createMany({ data });
-    await Promise.all(
-      reviewers.map((reviewer) =>
-        dispatchExternalNotification({
-          type: "LEAVE_REQUESTED",
-          recipientUserId: reviewer.id,
-          title: "?닿? ?뱀씤 ?붿껌???깅줉?섏뿀?듬땲??",
-          message: `${requester.name} 님이 휴가를 요청했습니다.`,
-          linkUrl: `/leaves/approvals/${leaveRequestId}`,
-          context: {
-            leaveRequestId,
-            requesterId: requester.id,
-            leaveTypeName,
-            startDate: dateToDateOnly(leaveRequest.startDate),
-            endDate: dateToDateOnly(leaveRequest.endDate),
-          },
-        }),
-      ),
-    );
   }
 }
 
@@ -359,7 +276,7 @@ async function createCustomGrantLeaveRequest(formData: FormData) {
           dayCount: requestedDays,
           reason,
           reviewedAt: autoApprove ? new Date() : undefined,
-          reviewComment: autoApprove ? "승인 정책에 따라 자동 승인되었습니다." : undefined,
+          reviewComment: autoApprove ? "?뱀씤 ?뺤콉???곕씪 ?먮룞 ?뱀씤?섏뿀?듬땲??" : undefined,
           attachmentRequired:
             grant!.leaveType.attachmentPolicy === "REQUIRED_BEFORE_REQUEST" ||
             grant!.leaveType.attachmentPolicy === "REQUIRED_AFTER_REQUEST",
@@ -395,8 +312,8 @@ async function createCustomGrantLeaveRequest(formData: FormData) {
           data: {
             userId: actor.id,
             type: "LEAVE_ATTACHMENT_RESUBMISSION_REQUESTED",
-            title: "휴가 증명자료 제출이 필요합니다.",
-            message: `${grant!.leaveType.name} 요청은 증명자료를 나중에 제출해야 합니다.`,
+            title: "?닿? 利앸챸?먮즺 ?쒖텧???꾩슂?⑸땲??",
+            message: `${grant!.leaveType.name} ?붿껌? 利앸챸?먮즺瑜??섏쨷???쒖텧?댁빞 ?⑸땲??`,
             linkUrl: `/leaves/me/requests/${created.id}`,
             metadata: toJsonValue({ leaveRequestId: created.id }),
           },
@@ -473,8 +390,8 @@ async function createCustomGrantLeaveRequest(formData: FormData) {
           data: {
             userId: actor.id,
             type: "LEAVE_APPROVED",
-            title: "휴가 요청이 자동 승인되었습니다.",
-            message: `${grant!.leaveType.name} 요청이 승인 정책에 따라 자동 승인되었습니다.`,
+            title: "?닿? ?붿껌???먮룞 ?뱀씤?섏뿀?듬땲??",
+            message: `${grant!.leaveType.name} ?붿껌???뱀씤 ?뺤콉???곕씪 ?먮룞 ?뱀씤?섏뿀?듬땲??`,
             linkUrl: `/leaves/me/requests/${created.id}`,
             metadata: toJsonValue({
               leaveRequestId: created.id,
@@ -490,7 +407,7 @@ async function createCustomGrantLeaveRequest(formData: FormData) {
   );
 
   if (!autoApprove) {
-    await notifyApproversForLeaveRequest({
+    await notifyLeaveApprovalNeeded({
       prisma,
       leaveRequest: approvalCheckRequest,
       approvalPolicy,
@@ -709,7 +626,7 @@ export async function createLeaveRequest(formData: FormData) {
         reason: parsed.data.reason ?? null,
         reviewerId: autoApprove ? null : undefined,
         reviewedAt: autoApprove ? new Date() : undefined,
-        reviewComment: autoApprove ? "승인 정책에 따라 자동 승인되었습니다." : undefined,
+        reviewComment: autoApprove ? "?뱀씤 ?뺤콉???곕씪 ?먮룞 ?뱀씤?섏뿀?듬땲??" : undefined,
         attachmentRequired:
           attachmentPolicy === "REQUIRED_BEFORE_REQUEST" ||
           attachmentPolicy === "REQUIRED_AFTER_REQUEST",
@@ -732,8 +649,8 @@ export async function createLeaveRequest(formData: FormData) {
         data: {
           userId: actor.id,
           type: "LEAVE_ATTACHMENT_RESUBMISSION_REQUESTED",
-          title: "휴가 증명자료 제출이 필요합니다.",
-          message: `${policy.name} 요청은 증명자료를 나중에 제출해야 합니다.`,
+          title: "?닿? 利앸챸?먮즺 ?쒖텧???꾩슂?⑸땲??",
+          message: `${policy.name} ?붿껌? 利앸챸?먮즺瑜??섏쨷???쒖텧?댁빞 ?⑸땲??`,
           linkUrl: `/leaves/me/requests/${created.id}`,
           metadata: toJsonValue({ leaveRequestId: created.id }),
         },
@@ -776,8 +693,8 @@ export async function createLeaveRequest(formData: FormData) {
         data: {
           userId: actor.id,
           type: "LEAVE_APPROVED",
-          title: "휴가 요청이 자동 승인되었습니다.",
-          message: `${policy.name} 요청이 승인 정책에 따라 자동 승인되었습니다.`,
+          title: "?닿? ?붿껌???먮룞 ?뱀씤?섏뿀?듬땲??",
+          message: `${policy.name} ?붿껌???뱀씤 ?뺤콉???곕씪 ?먮룞 ?뱀씤?섏뿀?듬땲??`,
           linkUrl: `/leaves/me/requests/${created.id}`,
           metadata: toJsonValue({
             leaveRequestId: created.id,
@@ -791,7 +708,7 @@ export async function createLeaveRequest(formData: FormData) {
   });
 
   if (!autoApprove) {
-    await notifyApproversForLeaveRequest({
+    await notifyLeaveApprovalNeeded({
       prisma,
       leaveRequest: approvalCheckRequest,
       approvalPolicy,

@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { permanentlyDeleteEmployee } from "@/app/(app)/organization/actions";
 import { Card, EmptyState, buttonClassName } from "@/components/design-system/primitives";
 import { MobileCardList } from "@/components/design-system/responsive";
 import { RoleLabel, UserStatusBadge } from "@/components/ui/status-badge";
@@ -158,6 +159,40 @@ export default async function EmployeesPage({ searchParams }: EmployeesPageProps
                   <Link className={buttonClassName({ tone: "neutral", className: "w-full" })} href={`/organization/employees/${user.id}`}>
                     상세 보기
                   </Link>
+                  {user.status === "DEACTIVATED" && !user.deletedAt ? (
+                    <form
+                      action={permanentlyDeleteEmployee}
+                      className="grid gap-2 rounded-lg border border-red-100 bg-red-50 p-3"
+                    >
+                      <input name="userId" type="hidden" value={user.id} />
+                      <input
+                        name="deletionReason"
+                        type="hidden"
+                        value="직원 목록에서 비활성 직원 계정 삭제"
+                      />
+                      <input
+                        name="stepUpPassword"
+                        type="password"
+                        autoComplete="current-password"
+                        placeholder="현재 비밀번호"
+                        className="h-10 w-full rounded-md border border-red-200 bg-white px-3 text-sm"
+                        required
+                      />
+                      <input
+                        name="confirmation"
+                        placeholder="DELETE"
+                        pattern="DELETE"
+                        className="h-10 w-full rounded-md border border-red-200 bg-white px-3 text-sm"
+                        required
+                      />
+                      <p className="break-keep text-xs leading-relaxed text-red-700">
+                        개인정보는 익명화하고 휴가, 근태, 감사 로그는 보존합니다.
+                      </p>
+                      <button className="min-h-10 w-full rounded-md bg-red-700 px-3 text-sm font-semibold text-white">
+                        계정 삭제
+                      </button>
+                    </form>
+                  ) : null}
                 </Card>
               );
             })}
@@ -179,7 +214,7 @@ export default async function EmployeesPage({ searchParams }: EmployeesPageProps
                 <th className="whitespace-nowrap break-keep px-4 py-3">상태</th>
                 <th className="whitespace-nowrap break-keep px-4 py-3">입사일</th>
                 <th className="whitespace-nowrap break-keep px-4 py-3">재직일</th>
-                <th className="whitespace-nowrap break-keep px-4 py-3">상세</th>
+                <th className="whitespace-nowrap break-keep px-4 py-3">관리</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100">
@@ -204,9 +239,39 @@ export default async function EmployeesPage({ searchParams }: EmployeesPageProps
                       <td className="px-4 py-3">{toDisplayDate(user.hireDate ?? user.profile?.hireDate)}</td>
                       <td className="px-4 py-3">{formatTenureDays(calculateTenureDays(hireDate))}</td>
                       <td className="px-4 py-3">
-                        <Link className="whitespace-nowrap break-keep text-sm font-medium underline" href={`/organization/employees/${user.id}`}>
-                          상세 보기
-                        </Link>
+                        <div className="grid gap-2">
+                          <Link className="whitespace-nowrap break-keep text-sm font-medium underline" href={`/organization/employees/${user.id}`}>
+                            상세 보기
+                          </Link>
+                          {user.status === "DEACTIVATED" && !user.deletedAt ? (
+                            <form action={permanentlyDeleteEmployee} className="grid gap-1">
+                              <input name="userId" type="hidden" value={user.id} />
+                              <input
+                                name="deletionReason"
+                                type="hidden"
+                                value="직원 목록에서 비활성 직원 계정 삭제"
+                              />
+                              <input
+                                name="stepUpPassword"
+                                type="password"
+                                autoComplete="current-password"
+                                placeholder="현재 비밀번호"
+                                className="h-8 w-36 rounded-md border border-red-200 px-2 text-xs"
+                                required
+                              />
+                              <input
+                                name="confirmation"
+                                placeholder="DELETE"
+                                pattern="DELETE"
+                                className="h-8 w-36 rounded-md border border-red-200 px-2 text-xs"
+                                required
+                              />
+                              <button className="h-8 w-36 rounded-md bg-red-700 px-2 text-xs font-semibold text-white">
+                                계정 삭제
+                              </button>
+                            </form>
+                          ) : null}
+                        </div>
                       </td>
                     </tr>
                   );

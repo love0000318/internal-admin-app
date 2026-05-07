@@ -33,8 +33,8 @@ type Actor = {
 
 const DELETED_EMPLOYEE_NAME = "삭제된 직원";
 
-function deletedEmail(userId: string) {
-  return `deleted-${userId}@deleted.local`;
+export function buildDeletedEmployeeEmail(userId: string) {
+  return `deleted-${userId}@deleted.internal`;
 }
 
 function unusablePasswordHash(userId: string) {
@@ -53,6 +53,8 @@ export async function analyzeEmployeeDeletionImpact(
     leaveRequests,
     leaveLedgers,
     leaveGrants,
+    attendanceRecords,
+    attendanceChangeRequests,
     auditLogsAsActor,
     auditLogsAsTarget,
     notifications,
@@ -85,6 +87,8 @@ export async function analyzeEmployeeDeletionImpact(
     prisma.leaveRequest.count({ where: { userId } }),
     prisma.leaveLedger.count({ where: { userId } }),
     prisma.leaveGrant.count({ where: { userId } }),
+    prisma.attendanceRecord.count({ where: { userId } }),
+    prisma.attendanceChangeRequest.count({ where: { userId } }),
     prisma.auditLog.count({ where: { OR: [{ actorId: userId }, { actorUserId: userId }] } }),
     prisma.auditLog.count({ where: { targetUserId: userId } }),
     prisma.notification.count({ where: { userId } }),
@@ -160,8 +164,8 @@ export async function analyzeEmployeeDeletionImpact(
     leaveRequests,
     leaveLedgers,
     leaveGrants,
-    attendanceRecords: 0,
-    attendanceChangeRequests: 0,
+    attendanceRecords,
+    attendanceChangeRequests,
     auditLogsAsActor,
     auditLogsAsTarget,
     notifications,
@@ -170,18 +174,13 @@ export async function analyzeEmployeeDeletionImpact(
     hrProfiles,
     businessRecords,
   };
-  const blockingRecordCount =
-    leaveRequests +
-    leaveLedgers +
-    leaveGrants +
-    auditLogsAsActor +
-    auditLogsAsTarget +
-    hrProfiles +
-    businessRecords;
-  const canHardDelete = blockingRecordCount === 0;
+  const canHardDelete = false;
   const warnings = [
     ...(leaveRequests || leaveLedgers || leaveGrants
       ? ["휴가/장부 기록이 있어 익명화 삭제가 필요합니다."]
+      : []),
+    ...(attendanceRecords || attendanceChangeRequests
+      ? ["근태 기록이 있어 업무 기록을 보존하고 User row를 익명화합니다."]
       : []),
     ...(businessRecords
       ? ["휴가 보유/조정/사용계획/첨부/캘린더/Job 기록이 있어 User row를 보존하고 익명화합니다."]
@@ -190,6 +189,7 @@ export async function analyzeEmployeeDeletionImpact(
       ? ["AuditLog 참조가 있어 User row를 보존하고 개인정보를 익명화합니다."]
       : []),
     ...(hrProfiles ? ["HR 관련 개인정보는 삭제 또는 null 처리됩니다."] : []),
+    "기본 정책은 안전 삭제입니다. 업무 기록이 없어도 User row는 DELETED 상태로 보존하고 개인정보만 익명화합니다.",
     "증명자료 파일의 물리 삭제 정책은 별도 보존/파기 정책에 따라 처리해야 합니다.",
   ];
 
@@ -290,26 +290,19 @@ export async function deleteDeactivatedEmployeePermanently(params: {
       targetId: target.id,
       metadata: sanitizeAuditMetadata({
         targetUserId: target.id,
-        deletionMode: impact.canHardDelete ? "HARD_DELETE" : "ANONYMIZE",
+        deletionMode: "SAFE_DELETE",
         reason: params.reason ?? null,
         impactCounts: impact.counts,
       }),
     },
   });
 
-  return impact.canHardDelete
-    ? hardDeleteEmployeeIfSafe({
-        actorUserId: params.actor.id,
-        targetUserId: target.id,
-        reason: params.reason,
-        impact,
-      })
-    : anonymizeDeletedEmployee({
-        actorUserId: params.actor.id,
-        targetUserId: target.id,
-        reason: params.reason,
-        impact,
-      });
+  return anonymizeDeletedEmployee({
+    actorUserId: params.actor.id,
+    targetUserId: target.id,
+    reason: params.reason,
+    impact,
+  });
 }
 
 export async function anonymizeDeletedEmployee(params: {
@@ -321,6 +314,10 @@ export async function anonymizeDeletedEmployee(params: {
   const prisma = getPrisma();
   const now = new Date();
   const impact = params.impact ?? (await analyzeEmployeeDeletionImpact(params.targetUserId));
+  const before = await prisma.user.findUnique({
+    where: { id: params.targetUserId },
+    select: { status: true },
+  });
 
   await prisma.$transaction(async (tx) => {
     await tx.session.updateMany({
@@ -343,7 +340,14 @@ export async function anonymizeDeletedEmployee(params: {
         shortTokenRevokedAt: now,
       },
     });
-    await tx.notification.deleteMany({ where: { userId: params.targetUserId } });
+    await tx.notification.updateMany({
+      where: { userId: params.targetUserId, readAt: null },
+      data: { readAt: now },
+    });
+    await tx.calendarSubscriptionToken.updateMany({
+      where: { userId: params.targetUserId, revokedAt: null },
+      data: { isEnabled: false, revokedAt: now },
+    });
     await tx.identityVerification.deleteMany({ where: { userId: params.targetUserId } });
     await tx.employeeSensitiveProfile.deleteMany({ where: { userId: params.targetUserId } });
     await tx.familyMember.deleteMany({ where: { userId: params.targetUserId } });
@@ -361,6 +365,14 @@ export async function anonymizeDeletedEmployee(params: {
         requestedChanges: Prisma.JsonNull,
         beforeSnapshot: Prisma.JsonNull,
         reviewComment: null,
+      },
+    });
+    await tx.employeeProfileChangeRequest.updateMany({
+      where: { userId: params.targetUserId, status: "PENDING" },
+      data: {
+        status: "CANCELLED",
+        reviewedAt: now,
+        reviewedByUserId: params.actorUserId,
       },
     });
     await tx.employeeProfile.updateMany({
@@ -400,7 +412,7 @@ export async function anonymizeDeletedEmployee(params: {
     await tx.user.update({
       where: { id: params.targetUserId },
       data: {
-        email: deletedEmail(params.targetUserId),
+        email: buildDeletedEmployeeEmail(params.targetUserId),
         phone: null,
         name: DELETED_EMPLOYEE_NAME,
         title: null,
@@ -426,15 +438,54 @@ export async function anonymizeDeletedEmployee(params: {
         targetId: params.targetUserId,
         metadata: sanitizeAuditMetadata({
           targetUserId: params.targetUserId,
-          deletionMode: "ANONYMIZE",
-          impactCounts: impact.counts,
+          deletionMode: "SAFE_DELETE",
+          previousStatus: before?.status ?? null,
+          newStatus: "DELETED",
+          retainedRecordsSummary: {
+            leaveRequests: impact.counts.leaveRequests,
+            leaveLedgers: impact.counts.leaveLedgers,
+            leaveGrants: impact.counts.leaveGrants,
+            attendanceRecords: impact.counts.attendanceRecords,
+            attendanceChangeRequests: impact.counts.attendanceChangeRequests,
+            auditLogsAsActor: impact.counts.auditLogsAsActor,
+            auditLogsAsTarget: impact.counts.auditLogsAsTarget,
+          },
+          anonymizedFields: [
+            "name",
+            "email",
+            "phone",
+            "title",
+            "teamId",
+            "hireDate",
+            "birthDate",
+            "passwordHash",
+            "employeeProfile",
+            "employeeSensitiveProfile",
+            "hrProfiles",
+          ],
           deletedAt: now.toISOString(),
         }),
       },
     });
+    await tx.notification.createMany({
+      data: [
+        {
+          userId: params.actorUserId,
+          type: "SYSTEM",
+          priority: "NORMAL",
+          title: "비활성 직원 계정이 삭제 처리되었습니다.",
+          message: "개인정보는 익명화되었고 휴가, 근태, 감사 로그 등 업무 기록은 보존되었습니다.",
+          linkUrl: "/organization/employees?status=DELETED",
+          metadata: {
+            targetUserId: params.targetUserId,
+            deletionMode: "SAFE_DELETE",
+          },
+        },
+      ],
+    });
   });
 
-  return { mode: "ANONYMIZE" as const, impact };
+  return { mode: "SAFE_DELETE" as const, impact };
 }
 
 export async function hardDeleteEmployeeIfSafe(params: {
@@ -443,53 +494,7 @@ export async function hardDeleteEmployeeIfSafe(params: {
   reason?: string | null;
   impact?: EmployeeDeletionImpact;
 }) {
-  const prisma = getPrisma();
-  const impact = params.impact ?? (await analyzeEmployeeDeletionImpact(params.targetUserId));
-
-  if (!impact.canHardDelete) {
-    return anonymizeDeletedEmployee(params);
-  }
-
-  await prisma.$transaction(async (tx) => {
-    await tx.session.deleteMany({ where: { userId: params.targetUserId } });
-    await tx.notification.deleteMany({ where: { userId: params.targetUserId } });
-    await tx.identityVerification.deleteMany({ where: { userId: params.targetUserId } });
-    await tx.invitation.updateMany({
-      where: {
-        status: "PENDING",
-        OR: [
-          { acceptedUserId: params.targetUserId },
-          { acceptedByUserId: params.targetUserId },
-          { invitedByUserId: params.targetUserId },
-          { createdById: params.targetUserId },
-        ],
-      },
-      data: {
-        status: "REVOKED",
-        verificationCodeRevokedAt: new Date(),
-        shortTokenRevokedAt: new Date(),
-      },
-    });
-    await tx.user.delete({ where: { id: params.targetUserId } });
-    await tx.auditLog.create({
-      data: {
-        actorId: params.actorUserId,
-        actorUserId: params.actorUserId,
-        targetUserId: params.targetUserId,
-        action: "EMPLOYEE_HARD_DELETED",
-        targetType: "USER",
-        targetId: params.targetUserId,
-        metadata: sanitizeAuditMetadata({
-          targetUserId: params.targetUserId,
-          deletionMode: "HARD_DELETE",
-          impactCounts: impact.counts,
-          deletedAt: new Date().toISOString(),
-        }),
-      },
-    });
-  });
-
-  return { mode: "HARD_DELETE" as const, impact };
+  return anonymizeDeletedEmployee(params);
 }
 
 async function recordDeleteBlocked(actorUserId: string, targetUserId: string, reasonCode: string) {
