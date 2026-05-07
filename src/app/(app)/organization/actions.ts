@@ -1,5 +1,6 @@
 "use server";
 
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { Prisma } from "@/generated/prisma/client";
@@ -16,9 +17,8 @@ import {
 } from "@/lib/security/step-up";
 import { deleteDeactivatedEmployeePermanently } from "@/lib/organization/employee-deletion";
 import {
-  buildInvitationUrl,
-  buildShortInvitationUrl,
-  getAppBaseUrl,
+  buildInvitationAcceptUrl,
+  buildInviteUrl,
 } from "@/lib/organization/invitations";
 import {
   assertCanMutateEmployee,
@@ -57,6 +57,19 @@ function metadata(
     after,
     changedFields,
   });
+}
+
+async function getRequestOriginFallback() {
+  const requestHeaders = await headers();
+  const host =
+    requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
+
+  if (!host) {
+    return undefined;
+  }
+
+  const protocol = requestHeaders.get("x-forwarded-proto") ?? "https";
+  return `${protocol}://${host}`;
 }
 
 async function assertTeamLeadCandidate(
@@ -493,11 +506,11 @@ export async function createEmployeeInvitation(formData: FormData) {
     },
   });
 
-  const inviteUrl = buildInvitationUrl(getAppBaseUrl(), rawToken);
-  const shortInviteUrl = buildShortInvitationUrl(
-    getAppBaseUrl(),
-    shortToken.rawShortToken,
-  );
+  const requestOrigin = await getRequestOriginFallback();
+  const inviteUrl = buildInvitationAcceptUrl(rawToken, { requestOrigin });
+  const shortInviteUrl = buildInviteUrl(shortToken.rawShortToken, {
+    requestOrigin,
+  });
 
   if (shouldSendInvitationEmail) {
     await dispatchInvitationEmail({
@@ -704,11 +717,11 @@ export async function reissueInvitation(formData: FormData) {
     },
   });
 
-  const inviteUrl = buildInvitationUrl(getAppBaseUrl(), rawToken);
-  const shortInviteUrl = buildShortInvitationUrl(
-    getAppBaseUrl(),
-    shortToken.rawShortToken,
-  );
+  const requestOrigin = await getRequestOriginFallback();
+  const inviteUrl = buildInvitationAcceptUrl(rawToken, { requestOrigin });
+  const shortInviteUrl = buildInviteUrl(shortToken.rawShortToken, {
+    requestOrigin,
+  });
   redirect(
     `/organization/invitations?success=invitation-reissued&inviteUrl=${encodeURIComponent(shortInviteUrl)}&longInviteUrl=${encodeURIComponent(inviteUrl)}&verificationCode=${encodeURIComponent(verificationCode.rawCode)}`,
   );
