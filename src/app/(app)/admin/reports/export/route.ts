@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 
+import { features } from "@/config/features";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getPrisma } from "@/lib/db/prisma";
+import { isPrismaSchemaPreparationError } from "@/lib/db/schema-errors";
 import { generateCsvReport } from "@/lib/reports/csv";
 import { buildFilterSummary, listReportRows, type ReportFilters } from "@/lib/reports/data";
 import {
@@ -16,6 +18,13 @@ import { assertRecentStepUp } from "@/lib/security/step-up";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
+  if (!features.adminReports) {
+    return NextResponse.json(
+      { ok: false, error: "feature-disabled" },
+      { status: 503 },
+    );
+  }
+
   const actor = await getCurrentUser();
 
   if (!actor) {
@@ -67,10 +76,23 @@ export async function GET(request: Request) {
   delete (filters as Record<string, string | undefined>).reportType;
 
   const definition = getReportDefinition(reportType);
-  const rows = sanitizeReportRows(
-    await listReportRows(reportType, filters, { limit: 5000 }),
-    reportType,
-  );
+  let rows;
+
+  try {
+    rows = sanitizeReportRows(
+      await listReportRows(reportType, filters, { limit: 5000 }),
+      reportType,
+    );
+  } catch (error) {
+    if (isPrismaSchemaPreparationError(error)) {
+      return NextResponse.json(
+        { ok: false, error: "db-not-ready" },
+        { status: 503 },
+      );
+    }
+
+    throw error;
+  }
   const csv = generateCsvReport({ headers: definition.columns, rows });
   const fileName = buildFileName(definition.defaultFileName, filters.year);
 

@@ -272,3 +272,30 @@ pnpm jobs:fix-fiscal-year-leave-expirations -- --apply --year=2026
 - HIGH/CRITICAL 알림은 운영자가 우선 확인한다.
 - 알림 metadata와 외부 payload에는 token, password, 휴가 사유 원문, 반려 사유 원문, 증빙자료 파일명/내용을 넣지 않는다.
 - 알림 복구 작업은 1년 미만 비례연차 계산 로직과 독립되어 있으며, 휴가 잔여 계산 helper를 수정하지 않는다.
+
+## 안정화 feature flag 운영
+
+복구 기능 중 DB migration 상태에 따라 runtime error가 날 수 있는 기능은 feature flag로 격리한다. env가 없을 때의 기본값은 운영 안정성을 우선한다.
+
+- `ATTENDANCE_MONTHLY_CLOSE_ENABLED=false`: 근태 월별 마감 메뉴를 숨기고 직접 URL은 점검 안내를 표시한다. 기본 출퇴근/근태 이력은 유지한다.
+- `ADMIN_REPORTS_ENABLED=true`: 관리자 리포트가 DB schema 준비 오류를 만나면 점검 안내 또는 503으로 graceful fallback 한다.
+- `PROFILE_SELF_SERVICE_ENABLED=true`: 민감정보 변경 요청 저장 schema가 준비되지 않았으면 변경 요청 영역은 점검 안내를 표시한다.
+- `CALENDAR_SUBSCRIPTION_ENABLED=true`: 캘린더 구독 token table이 준비되지 않았으면 설정 화면과 ICS feed가 crash하지 않고 차단된다.
+- `PERMISSION_PREVIEW_ENABLED=true`: 권한 미리보기 기능이 불안정하면 메뉴 숨김과 직접 URL 점검 안내로 격리한다.
+- `EXTERNAL_NOTIFICATIONS_ENABLED=false`: 외부 알림은 기본 비활성이다. 내부 Notification 실패와 외부 발송 실패가 업무 action rollback을 일으키지 않도록 확인한다.
+
+feature flag로 숨긴 기능도 서버 route/action에서 동일하게 차단해야 한다. UI 메뉴 숨김만으로 권한 또는 안정성 처리를 끝내지 않는다.
+
+## migration 불일치 대응 원칙
+
+운영 Neon DB와 로컬 `prisma/migrations` 이력이 불일치하면 배포 전에 반드시 상태를 확인한다.
+
+```powershell
+$env:DATABASE_URL='Neon DATABASE_URL'
+corepack pnpm prisma migrate status
+```
+
+- 운영 DB에는 `prisma migrate deploy`만 사용한다.
+- 운영 DB 대상 `prisma migrate dev`, `prisma migrate reset`은 금지한다.
+- 이미 DB에 적용된 migration이 로컬 이력과 충돌하는 경우 임의 삭제하지 말고 `prisma migrate resolve --applied` 또는 `--rolled-back` 필요 여부를 검토한다.
+- `AttendanceMonthlyClose`, `AttendanceChangeRequest`, notification enum 관련 실패 이력은 기능 flag/fallback으로 먼저 production crash를 막고, migration 이력은 별도 maintenance window에서 정리한다.

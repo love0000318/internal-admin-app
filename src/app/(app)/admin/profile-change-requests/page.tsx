@@ -2,7 +2,9 @@ import {
   approveProfileChangeRequest,
   rejectProfileChangeRequest,
 } from "@/app/(app)/admin/profile-change-requests/actions";
+import type { Prisma } from "@/generated/prisma/client";
 import { getPrisma } from "@/lib/db/prisma";
+import { isPrismaSchemaPreparationError } from "@/lib/db/schema-errors";
 import { requireOwner } from "@/lib/rbac/server-guards";
 
 export const dynamic = "force-dynamic";
@@ -21,20 +23,52 @@ function requestedFieldLabels(value: unknown) {
     .join(", ");
 }
 
+type ProfileChangeRequestRow = Prisma.EmployeeProfileChangeRequestGetPayload<{
+  include: {
+    user: {
+      include: {
+        team: true;
+      };
+    };
+    reviewedBy: true;
+  };
+}>;
+
 export default async function ProfileChangeRequestsPage() {
   await requireOwner();
-  const requests = await getPrisma().employeeProfileChangeRequest.findMany({
-    include: {
-      user: {
-        include: {
-          team: true,
+  let requests: ProfileChangeRequestRow[];
+
+  try {
+    requests = await getPrisma().employeeProfileChangeRequest.findMany({
+      include: {
+        user: {
+          include: {
+            team: true,
+          },
         },
+        reviewedBy: true,
       },
-      reviewedBy: true,
-    },
-    orderBy: { requestedAt: "desc" },
-    take: 100,
-  });
+      orderBy: { requestedAt: "desc" },
+      take: 100,
+    });
+  } catch (error) {
+    if (
+      isPrismaSchemaPreparationError(error, [
+        "EmployeeProfileChangeRequest",
+        "employee_profile_change_request",
+      ])
+    ) {
+      return (
+        <section className="rounded-lg border border-amber-200 bg-amber-50 p-6 text-amber-900">
+          <p className="font-semibold">
+            이 기능은 현재 점검 중입니다. 잠시 후 다시 시도하거나 관리자에게 문의해 주세요.
+          </p>
+        </section>
+      );
+    }
+
+    throw error;
+  }
 
   return (
     <section>

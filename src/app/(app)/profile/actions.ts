@@ -3,8 +3,10 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
+import { features } from "@/config/features";
 import { Prisma } from "@/generated/prisma/client";
 import { getPrisma } from "@/lib/db/prisma";
+import { isPrismaSchemaPreparationError } from "@/lib/db/schema-errors";
 import { encryptSensitiveText } from "@/lib/hr/sensitive";
 import { requireRouteAccess } from "@/lib/rbac/server-guards";
 
@@ -143,6 +145,11 @@ export async function updateMyBasicProfile(formData: FormData) {
 
 export async function createMyProfileChangeRequest(formData: FormData) {
   const actor = await requireRouteAccess("/profile");
+
+  if (!features.profileSelfService) {
+    redirect("/profile/edit?error=feature-disabled");
+  }
+
   const parsed = changeRequestSchema.safeParse({
     section: formData.get("section"),
     residentId: formData.get("residentId"),
@@ -175,19 +182,34 @@ export async function createMyProfileChangeRequest(formData: FormData) {
   }
 
   const prisma = getPrisma();
-  const request = await prisma.employeeProfileChangeRequest.create({
-    data: {
-      userId: actor.id,
-      section: parsed.data.section,
-      requestedChanges: json({
-        ...requestedChanges,
-        sensitiveValuesEncrypted: true,
-      }),
-      beforeSnapshot: json({
-        redacted: true,
-      }),
-    },
-  });
+  let request;
+
+  try {
+    request = await prisma.employeeProfileChangeRequest.create({
+      data: {
+        userId: actor.id,
+        section: parsed.data.section,
+        requestedChanges: json({
+          ...requestedChanges,
+          sensitiveValuesEncrypted: true,
+        }),
+        beforeSnapshot: json({
+          redacted: true,
+        }),
+      },
+    });
+  } catch (error) {
+    if (
+      isPrismaSchemaPreparationError(error, [
+        "EmployeeProfileChangeRequest",
+        "employee_profile_change_request",
+      ])
+    ) {
+      redirect("/profile/edit?error=db-not-ready");
+    }
+
+    throw error;
+  }
 
   const owners = await prisma.user.findMany({
     where: { role: "OWNER", status: "ACTIVE" },

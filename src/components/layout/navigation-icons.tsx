@@ -34,6 +34,17 @@ export const navigationIconMap: Record<NavigationIconKey, LucideIcon> = {
   settings: Settings,
 };
 
-export function getNavigationIcon(iconKey?: NavigationIconKey) {
-  return iconKey ? navigationIconMap[iconKey] : undefined;
+export function NavigationIcon({
+  iconKey,
+  className,
+}: {
+  iconKey?: NavigationIconKey;
+  className?: string;
+}) {
+  if (!iconKey) {
+    return null;
+  }
+
+  const Icon = navigationIconMap[iconKey];
+  return <Icon aria-hidden="true" className={className} />;
 }

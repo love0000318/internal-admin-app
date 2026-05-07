@@ -2,8 +2,10 @@
 
 import { redirect } from "next/navigation";
 
+import { features } from "@/config/features";
 import {
   createCalendarSubscription,
+  isCalendarSubscriptionSchemaError,
   regenerateCalendarSubscription,
   revokeCalendarSubscription,
 } from "@/lib/calendar-subscriptions/service";
@@ -16,26 +18,52 @@ function encodeCreatedUrl(url: string) {
 
 export async function createCalendarSubscriptionAction(formData: FormData) {
   const actor = await requireRouteAccess("/leaves/calendar");
+  if (!features.calendarSubscription) {
+    redirect("/leaves/calendar/settings?error=feature-disabled");
+  }
+
   const provider = formData.get("provider");
 
   if (!isCalendarProvider(provider)) {
     redirect("/leaves/calendar/settings?error=invalid-provider");
   }
 
-  const result = await createCalendarSubscription({
-    actor,
-    scope: "ME",
-    provider,
-  });
+  let result;
+
+  try {
+    result = await createCalendarSubscription({
+      actor,
+      scope: "ME",
+      provider,
+    });
+  } catch (error) {
+    if (isCalendarSubscriptionSchemaError(error)) {
+      redirect("/leaves/calendar/settings?error=db-not-ready");
+    }
+
+    throw error;
+  }
   redirect(`/leaves/calendar/settings?created=${encodeCreatedUrl(result.url)}`);
 }
 
 export async function revokeCalendarSubscriptionAction(formData: FormData) {
   const actor = await requireRouteAccess("/leaves/calendar");
+  if (!features.calendarSubscription) {
+    redirect("/leaves/calendar/settings?error=feature-disabled");
+  }
+
   const subscriptionId = String(formData.get("subscriptionId") ?? "");
 
   if (subscriptionId) {
-    await revokeCalendarSubscription({ actor, subscriptionId });
+    try {
+      await revokeCalendarSubscription({ actor, subscriptionId });
+    } catch (error) {
+      if (isCalendarSubscriptionSchemaError(error)) {
+        redirect("/leaves/calendar/settings?error=db-not-ready");
+      }
+
+      throw error;
+    }
   }
 
   redirect("/leaves/calendar/settings");
@@ -43,12 +71,26 @@ export async function revokeCalendarSubscriptionAction(formData: FormData) {
 
 export async function regenerateCalendarSubscriptionAction(formData: FormData) {
   const actor = await requireRouteAccess("/leaves/calendar");
+  if (!features.calendarSubscription) {
+    redirect("/leaves/calendar/settings?error=feature-disabled");
+  }
+
   const subscriptionId = String(formData.get("subscriptionId") ?? "");
 
   if (!subscriptionId) {
     redirect("/leaves/calendar/settings?error=missing-subscription");
   }
 
-  const result = await regenerateCalendarSubscription({ actor, subscriptionId });
+  let result;
+
+  try {
+    result = await regenerateCalendarSubscription({ actor, subscriptionId });
+  } catch (error) {
+    if (isCalendarSubscriptionSchemaError(error)) {
+      redirect("/leaves/calendar/settings?error=db-not-ready");
+    }
+
+    throw error;
+  }
   redirect(`/leaves/calendar/settings?created=${encodeCreatedUrl(result.url)}`);
 }

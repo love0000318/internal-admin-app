@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { features, featureUnavailableMessage } from "@/config/features";
 import { roleLabel } from "@/lib/display/labels";
 import { getPrisma } from "@/lib/db/prisma";
 import {
@@ -27,6 +28,16 @@ export default async function PermissionsPreviewPage({
   searchParams,
 }: PermissionsPreviewPageProps) {
   await requireOwner();
+
+  if (!features.permissionPreview) {
+    return (
+      <section className="min-w-0 rounded-lg border border-amber-200 bg-amber-50 p-6 text-sm text-amber-900">
+        <p className="font-semibold">권한 미리보기 점검 중</p>
+        <p className="mt-2 break-keep">{featureUnavailableMessage()}</p>
+      </section>
+    );
+  }
+
   const params = await searchParams;
   const prisma = getPrisma();
   const [users, teams] = await Promise.all([

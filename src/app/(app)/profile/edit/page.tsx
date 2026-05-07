@@ -1,11 +1,17 @@
 import { createMyProfileChangeRequest, updateMyBasicProfile } from "@/app/(app)/profile/actions";
+import { features, featureUnavailableMessage } from "@/config/features";
 import { getPrisma } from "@/lib/db/prisma";
 import { requireRouteAccess } from "@/lib/rbac/server-guards";
 
 export const dynamic = "force-dynamic";
 
-export default async function ProfileEditPage() {
+type ProfileEditPageProps = {
+  searchParams: Promise<{ error?: string }>;
+};
+
+export default async function ProfileEditPage({ searchParams }: ProfileEditPageProps) {
   const actor = await requireRouteAccess("/profile/edit");
+  const params = await searchParams;
   const user = await getPrisma().user.findUnique({
     where: { id: actor.id },
     include: { profile: true, sensitiveProfile: true },
@@ -21,6 +27,18 @@ export default async function ProfileEditPage() {
 
   return (
     <section className="max-w-4xl space-y-6">
+      {params.error === "db-not-ready" ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          민감정보 변경 요청 기능은 데이터베이스 준비가 필요합니다. 관리자에게
+          문의해 주세요.
+        </div>
+      ) : null}
+      {params.error === "feature-disabled" ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          {featureUnavailableMessage()}
+        </div>
+      ) : null}
+
       <div>
         <p className="text-sm font-medium text-neutral-500">내 정보 수정</p>
         <h1 className="mt-2 text-2xl font-semibold tracking-normal">
@@ -92,58 +110,65 @@ export default async function ProfileEditPage() {
         </div>
       </form>
 
-      <form
-        action={createMyProfileChangeRequest}
-        className="grid gap-3 rounded-lg border border-neutral-200 bg-white p-4 md:grid-cols-2"
-      >
-        <div className="md:col-span-2">
-          <h2 className="text-lg font-semibold">민감정보 변경 요청</h2>
-          <p className="mt-1 text-sm text-neutral-600">
-            이 정보는 회사 확인이 필요한 항목입니다. 수정 요청을 제출하면
-            관리자가 검토합니다.
-          </p>
-        </div>
-        <label className="grid gap-1 text-sm">
-          요청 구분
-          <select
-            name="section"
-            className="h-10 rounded-md border border-neutral-300 px-3"
-            required
-          >
-            <option value="BANK">급여계좌</option>
-            <option value="PRIVATE">개인 민감정보</option>
-          </select>
-        </label>
-        <label className="grid gap-1 text-sm">
-          주민등록번호/외국인등록번호
-          <input name="residentId" className="h-10 rounded-md border border-neutral-300 px-3" />
-        </label>
-        <label className="grid gap-1 text-sm">
-          은행명
-          <input name="bankName" className="h-10 rounded-md border border-neutral-300 px-3" />
-        </label>
-        <label className="grid gap-1 text-sm">
-          급여계좌
-          <input name="bankAccount" className="h-10 rounded-md border border-neutral-300 px-3" />
-        </label>
-        <label className="grid gap-1 text-sm">
-          예금주
-          <input name="bankAccountHolder" className="h-10 rounded-md border border-neutral-300 px-3" />
-        </label>
-        <label className="grid gap-1 text-sm md:col-span-2">
-          요청 사유
-          <textarea
-            name="reason"
-            rows={3}
-            className="rounded-md border border-neutral-300 px-3 py-2"
-          />
-        </label>
-        <div className="md:col-span-2">
-          <button className="h-10 rounded-md bg-neutral-950 px-4 text-sm font-medium text-white">
-            변경 요청 제출
-          </button>
-        </div>
-      </form>
+      {features.profileSelfService ? (
+        <form
+          action={createMyProfileChangeRequest}
+          className="grid gap-3 rounded-lg border border-neutral-200 bg-white p-4 md:grid-cols-2"
+        >
+          <div className="md:col-span-2">
+            <h2 className="text-lg font-semibold">민감정보 변경 요청</h2>
+            <p className="mt-1 text-sm text-neutral-600">
+              이 정보는 회사 확인이 필요한 항목입니다. 수정 요청을 제출하면
+              관리자가 검토합니다.
+            </p>
+          </div>
+          <label className="grid gap-1 text-sm">
+            요청 구분
+            <select
+              name="section"
+              className="h-10 rounded-md border border-neutral-300 px-3"
+              required
+            >
+              <option value="BANK">급여계좌</option>
+              <option value="PRIVATE">개인 민감정보</option>
+            </select>
+          </label>
+          <label className="grid gap-1 text-sm">
+            주민등록번호/외국인등록번호
+            <input name="residentId" className="h-10 rounded-md border border-neutral-300 px-3" />
+          </label>
+          <label className="grid gap-1 text-sm">
+            은행명
+            <input name="bankName" className="h-10 rounded-md border border-neutral-300 px-3" />
+          </label>
+          <label className="grid gap-1 text-sm">
+            급여계좌
+            <input name="bankAccount" className="h-10 rounded-md border border-neutral-300 px-3" />
+          </label>
+          <label className="grid gap-1 text-sm">
+            예금주
+            <input name="bankAccountHolder" className="h-10 rounded-md border border-neutral-300 px-3" />
+          </label>
+          <label className="grid gap-1 text-sm md:col-span-2">
+            요청 사유
+            <textarea
+              name="reason"
+              rows={3}
+              className="rounded-md border border-neutral-300 px-3 py-2"
+            />
+          </label>
+          <div className="md:col-span-2">
+            <button className="h-10 rounded-md bg-neutral-950 px-4 text-sm font-medium text-white">
+              변경 요청 제출
+            </button>
+          </div>
+        </form>
+      ) : (
+        <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <p className="font-semibold">민감정보 변경 요청 점검 중</p>
+          <p className="mt-2 break-keep">{featureUnavailableMessage()}</p>
+        </section>
+      )}
     </section>
   );
 }

@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { confirmMyProfile } from "@/app/(app)/profile/actions";
 import { getPrisma } from "@/lib/db/prisma";
+import { isPrismaSchemaPreparationError } from "@/lib/db/schema-errors";
 import { decryptForMasking } from "@/lib/hr/profile-provisioning";
 import { maskBankAccount, maskResidentId } from "@/lib/hr/sensitive";
 import { requireRouteAccess } from "@/lib/rbac/server-guards";
@@ -48,10 +49,6 @@ export default async function ProfilePage() {
       certificateRecords: true,
       projectSkillRecords: true,
       trainingRecords: true,
-      profileChangeRequests: {
-        orderBy: { requestedAt: "desc" },
-        take: 5,
-      },
     },
   });
 
@@ -66,6 +63,10 @@ export default async function ProfilePage() {
   const residentId = decryptForMasking(user.sensitiveProfile?.residentIdEncrypted);
   const bankAccount = decryptForMasking(
     user.sensitiveProfile?.bankAccountEncrypted,
+  );
+  const profileChangeRequests = await getRecentProfileChangeRequestsSafe(
+    actor.id,
+    prisma,
   );
 
   return (
@@ -199,10 +200,10 @@ export default async function ProfilePage() {
       <section className="rounded-lg border border-neutral-200 bg-white p-4">
         <h2 className="text-lg font-semibold">최근 수정 요청</h2>
         <ul className="mt-3 space-y-2 text-sm">
-          {user.profileChangeRequests.length === 0 ? (
+          {profileChangeRequests.length === 0 ? (
             <li className="text-neutral-500">등록된 수정 요청이 없습니다.</li>
           ) : (
-            user.profileChangeRequests.map((request) => (
+            profileChangeRequests.map((request) => (
               <li key={request.id} className="flex justify-between gap-4">
                 <span>
                   {request.section} / {request.status}
@@ -217,4 +218,28 @@ export default async function ProfilePage() {
       </section>
     </section>
   );
+}
+
+async function getRecentProfileChangeRequestsSafe(
+  userId: string,
+  prisma: ReturnType<typeof getPrisma>,
+) {
+  try {
+    return await prisma.employeeProfileChangeRequest.findMany({
+      where: { userId },
+      orderBy: { requestedAt: "desc" },
+      take: 5,
+    });
+  } catch (error) {
+    if (
+      isPrismaSchemaPreparationError(error, [
+        "EmployeeProfileChangeRequest",
+        "employee_profile_change_request",
+      ])
+    ) {
+      return [];
+    }
+
+    throw error;
+  }
 }

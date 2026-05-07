@@ -3,7 +3,7 @@
 import Link from "next/link";
 
 import type { NavigationItem } from "@/config/navigation";
-import { getNavigationIcon } from "@/components/layout/navigation-icons";
+import { NavigationIcon } from "@/components/layout/navigation-icons";
 
 export function NavItem({
   item,
@@ -14,8 +14,6 @@ export function NavItem({
   active: boolean;
   onNavigate?: () => void;
 }) {
-  const Icon = getNavigationIcon(item.iconKey);
-
   return (
     <Link
       href={item.href}
@@ -27,12 +25,10 @@ export function NavItem({
           : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
       }`}
     >
-      {Icon ? (
-        <Icon
-          aria-hidden="true"
-          className={`h-5 w-5 shrink-0 ${active ? "text-blue-600" : "text-slate-400 group-hover:text-slate-600"}`}
-        />
-      ) : null}
+      <NavigationIcon
+        iconKey={item.iconKey}
+        className={`h-5 w-5 shrink-0 ${active ? "text-blue-600" : "text-slate-400 group-hover:text-slate-600"}`}
+      />
       <span className="min-w-0 truncate break-keep">{item.label}</span>
     </Link>
   );

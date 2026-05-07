@@ -6,7 +6,7 @@ import { useState } from "react";
 import type { NavigationSection } from "@/config/navigation";
 import { isNavItemActive } from "@/config/navigation";
 import { NavItem } from "@/components/layout/NavItem";
-import { getNavigationIcon } from "@/components/layout/navigation-icons";
+import { NavigationIcon } from "@/components/layout/navigation-icons";
 
 export function NavSection({
   section,
@@ -22,7 +22,6 @@ export function NavSection({
   onNavigate?: () => void;
 }) {
   const [open, setOpen] = useState(defaultOpen);
-  const SectionIcon = getNavigationIcon(section.iconKey);
 
   if (!accordion) {
     return (
@@ -31,9 +30,7 @@ export function NavSection({
           id={`nav-${section.id}`}
           className="flex items-center gap-2 px-3 pb-1 pt-3 text-xs font-bold uppercase tracking-wide text-slate-400"
         >
-          {SectionIcon ? (
-            <SectionIcon aria-hidden="true" className="h-4 w-4" />
-          ) : null}
+          <NavigationIcon iconKey={section.iconKey} className="h-4 w-4" />
           <span>{section.label}</span>
         </div>
         {section.items.map((item) => (
@@ -57,12 +54,10 @@ export function NavSection({
         className="flex min-h-12 w-full items-center justify-between gap-3 rounded-2xl px-4 py-3 text-left text-sm font-bold text-slate-800 transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
       >
         <span className="flex min-w-0 items-center gap-2">
-          {SectionIcon ? (
-            <SectionIcon
-              aria-hidden="true"
-              className="h-5 w-5 shrink-0 text-slate-400"
-            />
-          ) : null}
+          <NavigationIcon
+            iconKey={section.iconKey}
+            className="h-5 w-5 shrink-0 text-slate-400"
+          />
           <span className="truncate break-keep">{section.label}</span>
         </span>
         <ChevronDown

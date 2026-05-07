@@ -3,6 +3,7 @@ import Link from "next/link";
 import { CopyButton } from "@/components/copy-button";
 import { Badge, buttonClassName, Card, EmptyState } from "@/components/design-system/primitives";
 import { PageHeader } from "@/components/ui/page-header";
+import { featureUnavailableMessage, features } from "@/config/features";
 import {
   CALENDAR_PROVIDERS,
   getCalendarProviderFromName,
@@ -11,7 +12,7 @@ import {
 import {
   type CalendarSubscriptionWithTeam,
   getCalendarSubscriptionStatus,
-  listCalendarSubscriptions,
+  listCalendarSubscriptionsSafe,
 } from "@/lib/calendar-subscriptions/service";
 import { requireRouteAccess } from "@/lib/rbac/server-guards";
 
@@ -161,7 +162,12 @@ export default async function CalendarSubscriptionSettingsPage({
 }: PageProps) {
   const actor = await requireRouteAccess("/leaves/calendar");
   const params = await searchParams;
-  const subscriptions = await listCalendarSubscriptions(actor.id);
+
+  if (!features.calendarSubscription) {
+    return <CalendarSubscriptionUnavailableNotice />;
+  }
+
+  const subscriptions = await listCalendarSubscriptionsSafe(actor.id);
   const createdUrl = params.created ? decodeURIComponent(params.created) : null;
   const webcalUrl = createdUrl ? toWebcalUrl(createdUrl) : null;
 
@@ -323,6 +329,22 @@ export default async function CalendarSubscriptionSettingsPage({
           ))
         )}
       </div>
+    </section>
+  );
+}
+
+function CalendarSubscriptionUnavailableNotice() {
+  return (
+    <section className="min-w-0 space-y-6">
+      <PageHeader
+        eyebrow="외부 캘린더 연동"
+        title="iCal/ICS 구독 설정"
+        description="캘린더 구독 기능은 데이터베이스 준비 상태를 확인한 뒤 다시 사용할 수 있습니다."
+        actions={[{ href: "/leaves/calendar", label: "휴가 캘린더로 돌아가기" }]}
+      />
+      <Card className="border-amber-200 bg-amber-50 text-amber-900">
+        <p className="font-semibold">{featureUnavailableMessage()}</p>
+      </Card>
     </section>
   );
 }

@@ -15,6 +15,7 @@ import {
   hashCalendarSubscriptionToken,
 } from "@/lib/calendar-subscriptions/tokens";
 import { getPrisma } from "@/lib/db/prisma";
+import { isPrismaSchemaPreparationError } from "@/lib/db/schema-errors";
 import { listCalendarLeaveEvents } from "@/lib/leave/calendar";
 import { todayInSeoul } from "@/lib/leave/calculate-business-days";
 import { hydrateReviewScope } from "@/lib/leave/review";
@@ -34,6 +35,12 @@ type VerifiedCalendarSubscription = CalendarSubscriptionToken & {
     teamId: string | null;
   };
 };
+
+const CALENDAR_SUBSCRIPTION_SCHEMA_MARKERS = [
+  "CalendarSubscriptionToken",
+  "calendar_subscription_token",
+  "calendarSubscriptionToken",
+];
 
 function addMonthsDateOnly(dateOnly: string, months: number) {
   const date = new Date(`${dateOnly}T00:00:00.000Z`);
@@ -84,6 +91,25 @@ export async function listCalendarSubscriptions(userId: string) {
     include: { team: { select: { id: true, name: true } } },
     orderBy: { createdAt: "desc" },
   });
+}
+
+export function isCalendarSubscriptionSchemaError(error: unknown) {
+  return isPrismaSchemaPreparationError(
+    error,
+    CALENDAR_SUBSCRIPTION_SCHEMA_MARKERS,
+  );
+}
+
+export async function listCalendarSubscriptionsSafe(userId: string) {
+  try {
+    return await listCalendarSubscriptions(userId);
+  } catch (error) {
+    if (isCalendarSubscriptionSchemaError(error)) {
+      return [];
+    }
+
+    throw error;
+  }
 }
 
 export function getCalendarSubscriptionStatus(
@@ -285,7 +311,17 @@ function shouldUpdateLastUsedAt(lastUsedAt: Date | null) {
 }
 
 export async function buildCalendarSubscriptionIcs(rawToken: string) {
-  const subscription = await verifyCalendarSubscriptionToken(rawToken);
+  let subscription;
+
+  try {
+    subscription = await verifyCalendarSubscriptionToken(rawToken);
+  } catch (error) {
+    if (isCalendarSubscriptionSchemaError(error)) {
+      return null;
+    }
+
+    throw error;
+  }
 
   if (!subscription) {
     return null;

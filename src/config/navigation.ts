@@ -1,4 +1,5 @@
 import type { Role } from "@/lib/rbac/roles";
+import { features } from "@/config/features";
 
 export type NavigationIconKey =
   | "dashboard"
@@ -35,9 +36,6 @@ export type NavigationSection = {
 const INTERNAL_ROLES: Role[] = ["OWNER", "LEAD", "MANAGER"];
 const OWNER_ONLY: Role[] = ["OWNER"];
 const OWNER_LEAD: Role[] = ["OWNER", "LEAD"];
-const ATTENDANCE_MONTHLY_CLOSE_ENABLED =
-  process.env.ATTENDANCE_MONTHLY_CLOSE_ENABLED === "true";
-
 export const navigationSections: NavigationSection[] = [
   {
     id: "home",
@@ -147,7 +145,7 @@ export const navigationSections: NavigationSection[] = [
         href: "/admin/attendance/monthly",
         iconKey: "approval",
         allowedRoles: OWNER_LEAD,
-        enabled: ATTENDANCE_MONTHLY_CLOSE_ENABLED,
+        enabled: features.attendanceMonthlyClose,
       },
     ],
   },
@@ -170,6 +168,7 @@ export const navigationSections: NavigationSection[] = [
         href: "/admin/organization/permissions-preview",
         iconKey: "security",
         allowedRoles: OWNER_ONLY,
+        enabled: features.permissionPreview,
       },
     ],
   },
@@ -184,6 +183,7 @@ export const navigationSections: NavigationSection[] = [
         href: "/admin/reports",
         iconKey: "reports",
         allowedRoles: OWNER_LEAD,
+        enabled: features.adminReports,
       },
       {
         id: "audit-logs",

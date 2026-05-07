@@ -121,6 +121,41 @@
 - Cron endpoint는 현재 없으며, 운영 Job은 CLI 또는 서버 scheduler로 실행해야 한다.
 - 실제 운영 HR 엑셀과 브라우저 smoke test는 운영 전 수동 검증이 필요하다.
 
+## 2026-05 안정화 릴리즈 추가 점검
+
+복구 기능 확장 후 production에서 특정 메뉴 클릭 시 generic error가 발생할 수 있는 위험을 줄이기 위해, DB 준비가 덜 된 기능은 feature flag와 graceful fallback으로 격리한다.
+
+### feature flag 기준
+
+- `ATTENDANCE_MONTHLY_CLOSE_ENABLED=false`: 기본값. 근태 월별 마감 메뉴는 숨기고 직접 URL은 점검 안내를 표시한다.
+- `EXTERNAL_NOTIFICATIONS_ENABLED=false`: 기본값. 외부 이메일/Slack 발송은 provider 설정과 별도 smoke test 후 활성화한다.
+- `ADMIN_REPORTS_ENABLED`, `PROFILE_SELF_SERVICE_ENABLED`, `CALENDAR_SUBSCRIPTION_ENABLED`, `PERMISSION_PREVIEW_ENABLED`: true로 운영할 수 있으나 DB schema 준비 오류가 발생하면 점검 안내 또는 503으로 fallback 해야 한다.
+
+### runtime crash 방지 기준
+
+- navigation config에는 React component/function을 넣지 않고 `iconKey` 문자열만 둔다.
+- lucide icon component는 client component 내부의 고정 `NavigationIcon`에서만 매핑한다.
+- `AttendanceMonthlyClose`, `EmployeeProfileChangeRequest`, `CalendarSubscriptionToken` 관련 table/column이 미적용이어도 주요 page가 error boundary로 떨어지지 않아야 한다.
+- 준비되지 않은 기능은 메뉴에서 숨기고 직접 URL에서도 "이 기능은 현재 점검 중입니다. 잠시 후 다시 시도하거나 관리자에게 문의해 주세요." 안내를 표시한다.
+
+### migration 운영 기준
+
+- 로컬 migration 폴더에는 migration이 39개 존재한다.
+- 운영 Neon DB의 `_prisma_migrations`와 로컬 이력은 배포 전 `prisma migrate status`로 비교해야 한다.
+- 운영 DB에는 `prisma migrate deploy`만 사용한다.
+- production DB 대상 `prisma migrate reset`, `prisma migrate dev`는 금지한다.
+- failed migration이 있다면 임의 삭제하지 말고 `prisma migrate resolve --applied` 또는 `--rolled-back` 필요 여부를 검토한다.
+
+### 휴가 회귀 보호 기준
+
+- `calculateUnderOneYearFiscalProratedLeave`, `roundUpToHalfDay`, `calculateCanonicalLeaveBalanceForUserYear`는 안정화 작업 중 수정하지 않는다.
+- 양태식 케이스는 월차 8일, 회계연도 비례 연차 5.5일, 사용 완료 3일, 잔여 10.5일을 유지한다.
+- 2019/2023 입사자에게 1년 미만 월차 11일 또는 입사 1년차 연차 15일이 현재 기준연도에 반복 표시되면 배포 불가다.
+
+### 문서 TODO
+
+- `docs/guides/quick-checklist.md`는 기존 invalid UTF-8 구간이 있어 별도 문서 인코딩 정리 작업에서 갱신한다.
+
 ## 다음 단계 제안
 
 1. 운영 `.env`와 `private/uploads`를 준비한다.

@@ -1,3 +1,6 @@
+import { features } from "@/config/features";
+import { isPrismaSchemaPreparationError } from "@/lib/db/schema-errors";
+
 const MISSING_MONTHLY_CLOSE_ERROR_MARKERS = [
   "AttendanceMonthlyClose",
   "AttendanceChangeRequest",
@@ -16,7 +19,7 @@ const MISSING_MONTHLY_CLOSE_ERROR_MARKERS = [
 ];
 
 export function isAttendanceMonthlyCloseEnabled() {
-  return process.env.ATTENDANCE_MONTHLY_CLOSE_ENABLED === "true";
+  return features.attendanceMonthlyClose;
 }
 
 export function isAttendanceMonthlyCloseSchemaError(error: unknown) {
@@ -24,14 +27,8 @@ export function isAttendanceMonthlyCloseSchemaError(error: unknown) {
 }
 
 export function isAttendanceSchemaPreparationError(error: unknown) {
-  const message =
-    error instanceof Error
-      ? `${error.name} ${error.message}`
-      : typeof error === "string"
-        ? error
-        : JSON.stringify(error);
-
-  return MISSING_MONTHLY_CLOSE_ERROR_MARKERS.some((marker) =>
-    message.toLowerCase().includes(marker.toLowerCase()),
+  return isPrismaSchemaPreparationError(
+    error,
+    MISSING_MONTHLY_CLOSE_ERROR_MARKERS,
   );
 }

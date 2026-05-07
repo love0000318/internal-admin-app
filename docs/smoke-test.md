@@ -9,6 +9,10 @@
   - 기대 결과: `pnpm install`이 완료된다.
   - 실패 시 확인할 것: Node.js, Corepack, pnpm 버전, 네트워크 접근.
 
+- [ ] 안정화 feature flag 기본값을 확인한다.
+  - 기대 결과: `ATTENDANCE_MONTHLY_CLOSE_ENABLED`가 명시적으로 켜져 있지 않으면 근태 마감 메뉴가 숨겨지고 기본 출퇴근/근태 화면은 유지된다.
+  - 실패 시 확인할 것: `src/config/features.ts`, Vercel production env, navigation 메뉴 노출.
+
 - [ ] Prisma schema를 검증하고 client를 생성한다.
   - 기대 결과: `pnpm db:validate`, `pnpm db:generate`가 통과한다.
   - 실패 시 확인할 것: `prisma/schema.prisma`, migration 상태.
@@ -16,6 +20,11 @@
 - [ ] DB migration과 seed를 실행한다.
   - 기대 결과: migration이 최신이고 OWNER 초대 또는 ACTIVE OWNER가 존재한다.
   - 실패 시 확인할 것: `DATABASE_URL`, PostgreSQL 실행 상태, seed idempotency.
+
+- [ ] 운영 DB migration 상태를 확인한다.
+  - 기대 결과: Neon DB 기준 failed migration이 없고 pending migration은 `prisma migrate deploy`로 적용 가능하다.
+  - 실패 시 확인할 것: `_prisma_migrations`, `attendance_monthly_close` 계열 중복/실패 이력, `prisma migrate resolve` 필요 여부.
+  - 금지: production DB 대상 `prisma migrate reset`, `prisma migrate dev`.
 
 - [ ] preflight를 실행한다.
   - 기대 결과: 필수 env, seed, 보안 설정, 주요 table 접근이 PASS/WARN/FAIL로 표시된다.

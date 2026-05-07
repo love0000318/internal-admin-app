@@ -2,6 +2,8 @@ import Link from "next/link";
 
 import { Badge, Card } from "@/components/design-system/primitives";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { featureUnavailableMessage, features } from "@/config/features";
+import { isPrismaSchemaPreparationError } from "@/lib/db/schema-errors";
 import type { ReportFilters } from "@/lib/reports/data";
 import { REPORT_DEFINITIONS } from "@/lib/reports/definitions";
 import { getReportScope } from "@/lib/reports/permissions";
@@ -28,8 +30,24 @@ type AdminReportsPageProps = {
 export default async function AdminReportsPage({ searchParams }: AdminReportsPageProps) {
   const actor = await requireOwnerOrLead();
   const filters = await searchParams;
+
+  if (!features.adminReports) {
+    return <ReportsUnavailableNotice />;
+  }
+
   const scope = await getReportScope(actor);
-  const summary = await getAdminReportSummary({ filters, scope });
+  let summary: Awaited<ReturnType<typeof getAdminReportSummary>>;
+
+  try {
+    summary = await getAdminReportSummary({ filters, scope });
+  } catch (error) {
+    if (isPrismaSchemaPreparationError(error)) {
+      return <ReportsUnavailableNotice />;
+    }
+
+    throw error;
+  }
+
   const visibleReportTypes =
     scope.scope === "ALL"
       ? reportOrder
@@ -197,6 +215,21 @@ export default async function AdminReportsPage({ searchParams }: AdminReportsPag
           </p>
         </Card>
       ) : null}
+    </section>
+  );
+}
+
+function ReportsUnavailableNotice() {
+  return (
+    <section className="min-w-0 space-y-6">
+      <PageHeader
+        description="리포트에 필요한 데이터베이스 준비 상태를 확인한 뒤 다시 사용할 수 있습니다."
+        eyebrow="관리자"
+        title="운영 리포트"
+      />
+      <Card className="border-amber-200 bg-amber-50 text-amber-900">
+        <p className="font-semibold">{featureUnavailableMessage()}</p>
+      </Card>
     </section>
   );
 }
