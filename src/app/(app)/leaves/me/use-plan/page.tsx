@@ -10,9 +10,10 @@ import {
   halfDayPeriodToUsageType,
   type AnnualUsePlanUsageType,
 } from "@/lib/leave/annual-use-plan-calculator";
+import { getPrisma } from "@/lib/db/prisma";
 import { getUsePlanContext } from "@/lib/leave/annual-promotion";
 import { dateToDateOnly, todayInSeoul } from "@/lib/leave/calculate-business-days";
-import { listEnabledCompanyHolidayDateOnlys } from "@/lib/leave/queries";
+import { getUserLeaveBalance, listEnabledCompanyHolidayDateOnlys } from "@/lib/leave/queries";
 import type { DateOnly } from "@/lib/leave/types";
 import { requireRouteAccess } from "@/lib/rbac/server-guards";
 
@@ -83,11 +84,17 @@ export default async function AnnualLeaveUsePlanPage({
   const params = await searchParams;
   const today = todayInSeoul();
   const year = Number(today.slice(0, 4));
-  const context = await getUsePlanContext({ userId: actor.id, year });
-  const companyHolidays = await listEnabledCompanyHolidayDateOnlys(
-    `${year}-01-01` as DateOnly,
-    `${year + 1}-12-31` as DateOnly,
-  );
+  const prisma = getPrisma();
+  const [context, balance, companyHolidays] = await Promise.all([
+    getUsePlanContext({ userId: actor.id, year, prisma }),
+    getUserLeaveBalance({ userId: actor.id, year, prisma }),
+    listEnabledCompanyHolidayDateOnlys(
+      `${year}-01-01` as DateOnly,
+      `${year + 1}-12-31` as DateOnly,
+      prisma,
+    ),
+  ]);
+  const planAvailableAmount = Math.max(0, balance.remainingDays);
   const plan = context.plan;
   const isSubmitted = plan?.status === "SUBMITTED";
   const error = errorMessage(params.error);
@@ -135,7 +142,7 @@ export default async function AnnualLeaveUsePlanPage({
         <div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm">
           <p className="text-sm break-keep text-neutral-500">소멸 예정 연차</p>
           <p className="mt-2 text-2xl font-semibold">
-            {formatAmount(context.expiringAmount)}
+            {formatAmount(planAvailableAmount)}
           </p>
         </div>
         <div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm">
@@ -280,7 +287,7 @@ export default async function AnnualLeaveUsePlanPage({
         <AnnualUsePlanForm
           action={submitAnnualLeaveUsePlan}
           referenceYear={context.year}
-          expiringAmount={context.expiringAmount}
+          expiringAmount={planAvailableAmount}
           today={today}
           companyHolidays={companyHolidays}
         />
