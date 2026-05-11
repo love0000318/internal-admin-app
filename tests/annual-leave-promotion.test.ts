@@ -8,6 +8,7 @@ import {
   validateAnnualUsePlanItems,
   validateUsePlanItems,
 } from "@/lib/leave/annual-promotion";
+import { parseAnnualUsePlanFormItems } from "@/lib/leave/annual-use-plan-form-data";
 import { calculateAnnualUsePlanItemAmount } from "@/lib/leave/annual-use-plan-calculator";
 
 describe("annual leave promotion operations", () => {
@@ -234,6 +235,36 @@ describe("annual leave promotion operations", () => {
           {
             plannedStartDate: "2026-07-01",
             plannedEndDate: "2026-07-03",
+            usageType: "FULL_DAY",
+          },
+        ],
+      }),
+    ).toThrow();
+  });
+
+  it("parses annual use plan form rows beyond the original five-row draft", () => {
+    const formData = new FormData();
+
+    for (let index = 0; index < 6; index += 1) {
+      formData.append("itemIndex", String(index));
+      formData.set(`plannedStartDate_${index}`, `2026-07-${String(index + 1).padStart(2, "0")}`);
+      formData.set(`plannedEndDate_${index}`, `2026-07-${String(index + 1).padStart(2, "0")}`);
+      formData.set(`usageType_${index}`, "FULL_DAY");
+      formData.set(`memo_${index}`, `plan-${index + 1}`);
+    }
+
+    expect(parseAnnualUsePlanFormItems(formData)).toHaveLength(6);
+  });
+
+  it("keeps annual use plan validation capped by the provided remaining balance", () => {
+    expect(() =>
+      validateAnnualUsePlanItems({
+        today: "2026-05-01",
+        maxAmount: 17,
+        items: [
+          {
+            plannedStartDate: "2026-07-01",
+            plannedEndDate: "2026-07-24",
             usageType: "FULL_DAY",
           },
         ],

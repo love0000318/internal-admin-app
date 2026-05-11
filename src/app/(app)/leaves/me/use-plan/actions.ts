@@ -10,13 +10,9 @@ import {
   scheduleUsePlanReminderNotices,
   validateAnnualUsePlanItems,
 } from "@/lib/leave/annual-promotion";
-import {
-  ANNUAL_USE_PLAN_USAGE_TYPES,
-  type AnnualUsePlanUsageType,
-} from "@/lib/leave/annual-use-plan-calculator";
-import { listEnabledCompanyHolidayDateOnlys } from "@/lib/leave/queries";
+import { parseAnnualUsePlanFormItems } from "@/lib/leave/annual-use-plan-form-data";
+import { getUserLeaveBalance, listEnabledCompanyHolidayDateOnlys } from "@/lib/leave/queries";
 import { requireRouteAccess } from "@/lib/rbac/server-guards";
-import type { DateOnly } from "@/lib/leave/types";
 
 function stringValue(formData: FormData, name: string) {
   const value = formData.get(name);
@@ -31,43 +27,6 @@ function redirectToUsePlan(error: string): never {
   redirect(`/leaves/me/use-plan?error=${error}`);
 }
 
-function parseItems(formData: FormData) {
-  const items: Array<{
-    plannedStartDate: DateOnly;
-    plannedEndDate: DateOnly;
-    usageType: AnnualUsePlanUsageType;
-    memo: string | null;
-  }> = [];
-
-  for (let index = 0; index < 5; index += 1) {
-    const plannedStartDate = stringValue(formData, `plannedStartDate_${index}`);
-    const plannedEndDate = stringValue(formData, `plannedEndDate_${index}`);
-    const usageType = stringValue(formData, `usageType_${index}`);
-    const memo = stringValue(formData, `memo_${index}`);
-
-    if (!plannedStartDate && !plannedEndDate && !memo) {
-      continue;
-    }
-
-    if (
-      !plannedStartDate ||
-      !plannedEndDate ||
-      !ANNUAL_USE_PLAN_USAGE_TYPES.includes(usageType as AnnualUsePlanUsageType)
-    ) {
-      redirectToUsePlan("invalid-item");
-    }
-
-    items.push({
-      plannedStartDate: plannedStartDate as DateOnly,
-      plannedEndDate: plannedEndDate as DateOnly,
-      usageType: usageType as AnnualUsePlanUsageType,
-      memo: memo || null,
-    });
-  }
-
-  return items;
-}
-
 export async function submitAnnualLeaveUsePlan(formData: FormData) {
   const actor = await requireRouteAccess("/leaves/me/use-plan");
   const year = Number(stringValue(formData, "referenceYear"));
@@ -79,8 +38,10 @@ export async function submitAnnualLeaveUsePlan(formData: FormData) {
 
   const prisma = getPrisma();
   const context = await getUsePlanContext({ userId: actor.id, year, prisma });
+  const balance = await getUserLeaveBalance({ userId: actor.id, year, prisma });
+  const planAvailableAmount = Math.max(0, balance.remainingDays);
 
-  if (context.expiringAmount <= 0) {
+  if (planAvailableAmount <= 0) {
     redirectToUsePlan("no-expiring-balance");
   }
 
@@ -88,7 +49,12 @@ export async function submitAnnualLeaveUsePlan(formData: FormData) {
     redirectToUsePlan("already-submitted");
   }
 
-  const items = parseItems(formData);
+  let items: ReturnType<typeof parseAnnualUsePlanFormItems>;
+  try {
+    items = parseAnnualUsePlanFormItems(formData);
+  } catch {
+    redirectToUsePlan("invalid-item");
+  }
   const holidayDates =
     items.length > 0
       ? await listEnabledCompanyHolidayDateOnlys(
@@ -109,7 +75,7 @@ export async function submitAnnualLeaveUsePlan(formData: FormData) {
   try {
     validated = validateAnnualUsePlanItems({
       items,
-      maxAmount: context.expiringAmount,
+      maxAmount: planAvailableAmount,
       companyHolidays: holidayDates,
     });
   } catch {

@@ -12,18 +12,22 @@ import {
 import type { DateOnly } from "@/lib/leave/types";
 
 type ItemState = {
+  id: number;
   plannedStartDate: string;
   plannedEndDate: string;
   usageType: AnnualUsePlanUsageType;
   memo: string;
 };
 
-const EMPTY_ITEM: ItemState = {
-  plannedStartDate: "",
-  plannedEndDate: "",
-  usageType: "FULL_DAY",
-  memo: "",
-};
+function createEmptyItem(id: number): ItemState {
+  return {
+    id,
+    plannedStartDate: "",
+    plannedEndDate: "",
+    usageType: "FULL_DAY",
+    memo: "",
+  };
+}
 
 function formatAmount(value: number) {
   return Number.isInteger(value) ? `${value}일` : `${value.toFixed(1)}일`;
@@ -47,7 +51,7 @@ export function AnnualUsePlanForm({
   companyHolidays: DateOnly[];
 }) {
   const [items, setItems] = useState<ItemState[]>(
-    Array.from({ length: 5 }, () => ({ ...EMPTY_ITEM })),
+    Array.from({ length: 5 }, (_, index) => createEmptyItem(index)),
   );
 
   const calculations = useMemo(
@@ -92,11 +96,23 @@ export function AnnualUsePlanForm({
   );
   const remainingAmount = Math.max(0, expiringAmount - totalAmount);
 
-  function updateItem(index: number, next: Partial<ItemState>) {
+  function updateItem(id: number, next: Partial<Omit<ItemState, "id">>) {
     setItems((current) =>
-      current.map((item, itemIndex) =>
-        itemIndex === index ? { ...item, ...next } : item,
-      ),
+      current.map((item) => (item.id === id ? { ...item, ...next } : item)),
+    );
+  }
+
+  function addItem() {
+    setItems((current) => {
+      const nextId =
+        current.reduce((maxId, item) => Math.max(maxId, item.id), -1) + 1;
+      return [...current, createEmptyItem(nextId)];
+    });
+  }
+
+  function removeItem(id: number) {
+    setItems((current) =>
+      current.length <= 1 ? current : current.filter((item) => item.id !== id),
     );
   }
 
@@ -139,30 +155,43 @@ export function AnnualUsePlanForm({
         <div className="grid gap-4">
           {items.map((item, index) => {
             const calculation = calculations[index];
+            const canRemove = items.length > 1;
 
             return (
               <section
-                key={index}
+                key={item.id}
                 className="grid min-w-0 gap-4 rounded-2xl border border-slate-200 bg-white p-4"
               >
+                <input name="itemIndex" type="hidden" value={item.id} />
                 <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <h3 className="text-sm font-semibold break-keep text-slate-950">
                     사용계획 {index + 1}
                   </h3>
-                  <Badge tone="primary">
-                    자동 계산: {formatAmount(calculation.amount)}
-                  </Badge>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge tone="primary">
+                      자동 계산: {formatAmount(calculation.amount)}
+                    </Badge>
+                    {canRemove ? (
+                      <button
+                        type="button"
+                        onClick={() => removeItem(item.id)}
+                        className="inline-flex min-h-9 items-center justify-center whitespace-nowrap rounded-md border border-slate-300 px-3 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                      >
+                        삭제
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
                   <label className="text-sm font-medium break-keep text-slate-800">
                     시작일
                     <input
-                      name={`plannedStartDate_${index}`}
+                      name={`plannedStartDate_${item.id}`}
                       type="date"
                       min={today}
                       value={item.plannedStartDate}
                       onChange={(event) =>
-                        updateItem(index, {
+                        updateItem(item.id, {
                           plannedStartDate: event.target.value,
                         })
                       }
@@ -172,12 +201,12 @@ export function AnnualUsePlanForm({
                   <label className="text-sm font-medium break-keep text-slate-800">
                     종료일
                     <input
-                      name={`plannedEndDate_${index}`}
+                      name={`plannedEndDate_${item.id}`}
                       type="date"
                       min={today}
                       value={item.plannedEndDate}
                       onChange={(event) =>
-                        updateItem(index, {
+                        updateItem(item.id, {
                           plannedEndDate: event.target.value,
                         })
                       }
@@ -187,10 +216,10 @@ export function AnnualUsePlanForm({
                   <label className="text-sm font-medium break-keep text-slate-800">
                     사용 형태
                     <select
-                      name={`usageType_${index}`}
+                      name={`usageType_${item.id}`}
                       value={item.usageType}
                       onChange={(event) =>
-                        updateItem(index, {
+                        updateItem(item.id, {
                           usageType: event.target.value as AnnualUsePlanUsageType,
                         })
                       }
@@ -206,10 +235,10 @@ export function AnnualUsePlanForm({
                   <label className="text-sm font-medium break-keep text-slate-800">
                     메모
                     <input
-                      name={`memo_${index}`}
+                      name={`memo_${item.id}`}
                       value={item.memo}
                       onChange={(event) =>
-                        updateItem(index, { memo: event.target.value })
+                        updateItem(item.id, { memo: event.target.value })
                       }
                       className="mt-1 h-11 w-full min-w-0 rounded-lg border border-slate-300 px-3"
                       placeholder="선택"
@@ -230,6 +259,14 @@ export function AnnualUsePlanForm({
             );
           })}
         </div>
+
+        <button
+          type="button"
+          onClick={addItem}
+          className="inline-flex min-h-10 w-full items-center justify-center whitespace-nowrap rounded-md border border-slate-300 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50 sm:w-auto"
+        >
+          사용계획 추가
+        </button>
 
         <label className="text-sm font-medium break-keep text-slate-800">
           전체 메모
