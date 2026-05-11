@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 
 import {
   calculateAnnualPromotionNoticeDate,
@@ -245,7 +246,7 @@ describe("annual leave promotion operations", () => {
   it("parses annual use plan form rows beyond the original five-row draft", () => {
     const formData = new FormData();
 
-    for (let index = 0; index < 6; index += 1) {
+    for (let index = 0; index < 7; index += 1) {
       formData.append("itemIndex", String(index));
       formData.set(`plannedStartDate_${index}`, `2026-07-${String(index + 1).padStart(2, "0")}`);
       formData.set(`plannedEndDate_${index}`, `2026-07-${String(index + 1).padStart(2, "0")}`);
@@ -253,7 +254,22 @@ describe("annual leave promotion operations", () => {
       formData.set(`memo_${index}`, `plan-${index + 1}`);
     }
 
-    expect(parseAnnualUsePlanFormItems(formData)).toHaveLength(6);
+    expect(parseAnnualUsePlanFormItems(formData)).toHaveLength(7);
+  });
+
+  it("ignores empty rows and rejects partially filled annual use plan rows", () => {
+    const formData = new FormData();
+    formData.append("itemIndex", "0");
+    formData.append("itemIndex", "1");
+    formData.set("plannedStartDate_0", "2026-07-01");
+    formData.set("plannedEndDate_0", "2026-07-01");
+    formData.set("usageType_0", "FULL_DAY");
+    formData.set("memo_1", "missing dates");
+
+    expect(() => parseAnnualUsePlanFormItems(formData)).toThrow();
+
+    formData.set("memo_1", "");
+    expect(parseAnnualUsePlanFormItems(formData)).toHaveLength(1);
   });
 
   it("keeps annual use plan validation capped by the provided remaining balance", () => {
@@ -270,5 +286,43 @@ describe("annual leave promotion operations", () => {
         ],
       }),
     ).toThrow();
+  });
+
+  it("derives use plan availability from canonical remaining balance", () => {
+    const canonicalRemainingDays = 17;
+    const planAvailableAmount = Math.max(0, canonicalRemainingDays);
+
+    expect(planAvailableAmount).toBe(17);
+
+    expect(
+      validateAnnualUsePlanItems({
+        today: "2026-05-01",
+        maxAmount: planAvailableAmount,
+        items: [
+          {
+            plannedStartDate: "2026-07-01",
+            plannedEndDate: "2026-07-23",
+            usageType: "FULL_DAY",
+          },
+        ],
+      }).totalPlannedAmount,
+    ).toBe(17);
+  });
+
+  it("keeps use-plan page and submit action wired to getUserLeaveBalance remainingDays", () => {
+    const pageSource = readFileSync(
+      "src/app/(app)/leaves/me/use-plan/page.tsx",
+      "utf8",
+    );
+    const actionSource = readFileSync(
+      "src/app/(app)/leaves/me/use-plan/actions.ts",
+      "utf8",
+    );
+
+    expect(pageSource).toContain("getUserLeaveBalance");
+    expect(actionSource).toContain("getUserLeaveBalance");
+    expect(pageSource).toContain("Math.max(0, balance.remainingDays)");
+    expect(actionSource).toContain("Math.max(0, balance.remainingDays)");
+    expect(actionSource).not.toContain("maxAmount: context.expiringAmount");
   });
 });

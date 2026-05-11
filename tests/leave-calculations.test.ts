@@ -114,6 +114,17 @@ describe("leave calculations", () => {
         asOfDate: "2026-05-01",
       }).roundedDays,
     ).toBe(0);
+
+    const serviceDaysAtLeast365 = calculateUnderOneYearFiscalProratedLeave({
+      hireDate: "2025-05-01",
+      fiscalYear: 2026,
+      asOfDate: "2026-05-01",
+    });
+    expect(serviceDaysAtLeast365).toMatchObject({
+      isEligible: false,
+      roundedDays: 0,
+      reason: "SERVICE_DAYS_AT_LEAST_365",
+    });
   });
 
   it("excludes weekends and company holidays from business leave days", () => {
@@ -310,6 +321,72 @@ describe("leave calculations", () => {
       expect(after.manualGranted).toBe(before.manualGranted);
       expect(after.remainingDays).toBe(before.remainingDays);
     }
+  });
+
+  it("does not mix under-one-year prorated leave into one-year-or-more balances", () => {
+    const policies = {
+      ANNUAL: annualPolicy,
+      HALF_DAY: { ...annualPolicy, type: "HALF_DAY" as const },
+      RESERVE_FORCES: { ...nonDeductingSickPolicy, type: "RESERVE_FORCES" as const },
+      SICK: nonDeductingSickPolicy,
+      BEREAVEMENT: { ...nonDeductingSickPolicy, type: "BEREAVEMENT" as const },
+    };
+    const balance = calculateLeaveBalanceForUser({
+      hireDate: "2025-05-01",
+      asOfDate: "2026-05-01",
+      fiscalYear: 2026,
+      includeUnderOneYearFiscalProratedLeave: true,
+      adjustments: [],
+      leaveRequests: [],
+      policies,
+    });
+
+    expect(balance.annualEntitled).toBe(15);
+    expect(balance.monthlyAccruedDays).toBe(0);
+    expect(balance.underOneYearProratedAnnualDays).toBe(0);
+    expect(balance.grantedDays).toBe(15);
+    expect(balance.remainingDays).toBe(15);
+  });
+
+  it("keeps annual entitlement monotonic as tenure increases", () => {
+    const entitlements = [2026, 2028, 2030].map((year) =>
+      calculateAnnualEntitlement({
+        hireDate: "2025-01-01",
+        asOfDate: `${year}-12-31`,
+      }),
+    );
+
+    expect(entitlements).toEqual([15, 16, 17]);
+    expect(entitlements[1]).toBeGreaterThanOrEqual(entitlements[0]);
+    expect(entitlements[2]).toBeGreaterThanOrEqual(entitlements[1]);
+  });
+
+  it("keeps used leave and manual adjustments separated in balance totals", () => {
+    const policies = {
+      ANNUAL: annualPolicy,
+      HALF_DAY: { ...annualPolicy, type: "HALF_DAY" as const },
+      RESERVE_FORCES: { ...nonDeductingSickPolicy, type: "RESERVE_FORCES" as const },
+      SICK: nonDeductingSickPolicy,
+      BEREAVEMENT: { ...nonDeductingSickPolicy, type: "BEREAVEMENT" as const },
+    };
+    const balance = calculateLeaveBalanceForUser({
+      hireDate: "2024-01-01",
+      asOfDate: "2026-05-01",
+      fiscalYear: 2026,
+      adjustments: [{ days: 2 }],
+      leaveRequests: [
+        { type: "ANNUAL", status: "APPROVED", dayCount: 3 },
+        { type: "HALF_DAY", status: "PENDING", dayCount: 0.5 },
+      ],
+      policies,
+    });
+
+    expect(balance.annualEntitled).toBe(15);
+    expect(balance.manualGranted).toBe(2);
+    expect(balance.grantedDays).toBe(17);
+    expect(balance.usedDays).toBe(3);
+    expect(balance.pendingDays).toBe(0.5);
+    expect(balance.remainingDays).toBe(13.5);
   });
 
   it("keeps balance consistent after approve, reject, and cancel statuses", () => {
