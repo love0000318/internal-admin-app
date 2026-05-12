@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Bell } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 
 type NotificationBellProps = {
   unreadCount: number;
@@ -14,9 +15,11 @@ type LatestNotification = {
   message: string;
   linkUrl: string | null;
   createdAt: string;
+  readAt: string | null;
 };
 
 export function NotificationBell({ unreadCount }: NotificationBellProps) {
+  const router = useRouter();
   const [currentUnreadCount, setCurrentUnreadCount] = useState(unreadCount);
   const [toast, setToast] = useState<LatestNotification | null>(null);
   const lastSeenCreatedAt = useRef(new Date().toISOString());
@@ -56,7 +59,7 @@ export function NotificationBell({ unreadCount }: NotificationBellProps) {
           const newest = latest[0];
           lastSeenCreatedAt.current = newest.createdAt;
 
-          if (document.visibilityState === "visible") {
+          if (document.visibilityState === "visible" && !newest.readAt) {
             setToast(newest);
             if (toastTimer.current) {
               clearTimeout(toastTimer.current);
@@ -69,19 +72,54 @@ export function NotificationBell({ unreadCount }: NotificationBellProps) {
       }
     }
 
-    const interval = window.setInterval(
-      pollLatestNotifications,
-      document.visibilityState === "visible" ? 20000 : 60000,
-    );
+    const interval = window.setInterval(pollLatestNotifications, 15000);
+    const pollWhenVisible = () => {
+      if (document.visibilityState === "visible") {
+        void pollLatestNotifications();
+      }
+    };
+
+    void pollLatestNotifications();
+    window.addEventListener("focus", pollWhenVisible);
+    document.addEventListener("visibilitychange", pollWhenVisible);
 
     return () => {
       cancelled = true;
       window.clearInterval(interval);
+      window.removeEventListener("focus", pollWhenVisible);
+      document.removeEventListener("visibilitychange", pollWhenVisible);
       if (toastTimer.current) {
         clearTimeout(toastTimer.current);
       }
     };
   }, []);
+
+  async function openNotification(
+    event: MouseEvent<HTMLAnchorElement>,
+    notification: LatestNotification,
+  ) {
+    if (!notification.linkUrl) {
+      return;
+    }
+
+    event.preventDefault();
+
+    try {
+      const response = await fetch(`/api/notifications/${notification.id}/read`, {
+        method: "POST",
+        cache: "no-store",
+      });
+
+      if (response.ok) {
+        setCurrentUnreadCount((count) => Math.max(0, count - 1));
+      }
+    } catch {
+      // Navigation still works if read evidence recording has to retry from the center.
+    }
+
+    setToast(null);
+    router.push(notification.linkUrl);
+  }
 
   return (
     <>
@@ -120,7 +158,7 @@ export function NotificationBell({ unreadCount }: NotificationBellProps) {
             {toast.linkUrl ? (
               <Link
                 href={toast.linkUrl}
-                onClick={() => setToast(null)}
+                onClick={(event) => openNotification(event, toast)}
                 className="inline-flex min-h-10 items-center justify-center rounded-lg bg-blue-700 px-3 text-sm font-bold text-white"
               >
                 확인

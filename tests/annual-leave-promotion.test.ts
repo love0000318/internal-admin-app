@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 
 import {
   calculateAnnualPromotionNoticeDate,
+  calculateAnnualSecondPromotionNoticeDate,
   calculateMonthlyFirstPromotionNoticeDate,
   calculateMonthlySecondPromotionNoticeDate,
   calculateUsePlanReminderDate,
@@ -11,6 +12,10 @@ import {
 } from "@/lib/leave/annual-promotion";
 import { parseAnnualUsePlanFormItems } from "@/lib/leave/annual-use-plan-form-data";
 import { calculateAnnualUsePlanItemAmount } from "@/lib/leave/annual-use-plan-calculator";
+import {
+  ANNUAL_LEAVE_PROMOTION_LEGAL_REVIEW_NOTE,
+  buildAnnualUsePlanNoticeContent,
+} from "@/lib/notifications/annual-use-plan-notifications";
 
 describe("annual leave promotion operations", () => {
   it("calculates annual and monthly promotion notice dates", () => {
@@ -20,6 +25,11 @@ describe("annual leave promotion operations", () => {
         monthsBefore: 6,
       }),
     ).toBe("2027-06-30");
+    expect(
+      calculateAnnualSecondPromotionNoticeDate({
+        expirationDate: "2027-12-31",
+      }),
+    ).toBe("2027-10-31");
     expect(
       calculateMonthlyFirstPromotionNoticeDate({
         expirationDate: "2027-12-31",
@@ -32,6 +42,32 @@ describe("annual leave promotion operations", () => {
         monthsBefore: 1,
       }),
     ).toBe("2027-11-30");
+  });
+
+  it("builds legal-evidence content without asserting web notice is statutory written notice", () => {
+    const content = buildAnnualUsePlanNoticeContent({
+      id: "notice-1",
+      userId: "user-1",
+      referenceYear: 2027,
+      noticeType: "ANNUAL_USE_PLAN_REQUEST",
+      scheduledDate: new Date("2027-06-30T00:00:00.000Z"),
+      expirationDate: new Date("2027-12-31T00:00:00.000Z"),
+      remainingAmount: 3.5,
+      unit: "DAY",
+      availableFrom: new Date("2027-01-01T00:00:00.000Z"),
+      availableUntil: new Date("2027-12-31T00:00:00.000Z"),
+      submissionDeadline: new Date("2027-07-10T00:00:00.000Z"),
+      policyVersion: "KR-LSA-60-61-2025-10-23",
+      legalBasis: "근로기준법 제60조 및 제61조",
+      isRenotice: false,
+    }) as Record<string, unknown>;
+
+    expect(content).toMatchObject({
+      noticeType: "ANNUAL_USE_PLAN_REQUEST",
+      remainingAmount: 3.5,
+      submissionDeadline: "2027-07-10",
+      legalReviewNote: ANNUAL_LEAVE_PROMOTION_LEGAL_REVIEW_NOTE,
+    });
   });
 
   it("calculates use-plan reminder dates", () => {

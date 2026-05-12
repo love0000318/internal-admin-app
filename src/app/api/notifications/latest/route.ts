@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getCurrentUser } from "@/lib/auth/session";
 import { getPrisma } from "@/lib/db/prisma";
+import { canAccessRoute } from "@/lib/rbac/server-guards";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,10 @@ export async function GET(request: NextRequest) {
 
   if (!user) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+  }
+
+  if (!canAccessRoute(user, "/notifications")) {
+    return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
   }
 
   const after = parseAfter(request.nextUrl.searchParams.get("after"));
@@ -41,6 +46,7 @@ export async function GET(request: NextRequest) {
       message: true,
       linkUrl: true,
       createdAt: true,
+      readAt: true,
     },
     orderBy: { createdAt: "desc" },
     take: 10,
@@ -52,6 +58,7 @@ export async function GET(request: NextRequest) {
     latest: latest.map((notification) => ({
       ...notification,
       createdAt: notification.createdAt.toISOString(),
+      readAt: notification.readAt?.toISOString() ?? null,
     })),
   });
 }

@@ -346,6 +346,7 @@ enum FirstFiscalYearGrantRule {
 
 enum AnnualLeavePromotionNoticeType {
   ANNUAL_USE_PLAN_REQUEST
+  ANNUAL_SECOND_NOTICE
   MONTHLY_FIRST_NOTICE
   MONTHLY_SECOND_NOTICE
   USE_PLAN_REMINDER
@@ -1251,6 +1252,19 @@ model AnnualLeavePromotionNotice {
   remainingAmount      Float?
   unit                 LeaveGrantUnit                   @default(DAY)
   annualLeaveUsePlanId String?
+  policyVersion        String?
+  legalBasis           String?
+  noticeContent        Json?
+  availableFrom        DateTime?                        @db.Date
+  availableUntil       DateTime?                        @db.Date
+  submissionDeadline   DateTime?                        @db.Date
+  displayedAt          DateTime?
+  readAt               DateTime?
+  submittedAt          DateTime?
+  isRenotice           Boolean                          @default(false)
+  adminConfirmedAt     DateTime?
+  adminConfirmedByUserId String?
+  notificationId       String?                          @unique
   createdAt            DateTime                         @default(now())
   updatedAt            DateTime                         @updatedAt
 
@@ -1263,6 +1277,9 @@ model AnnualLeavePromotionNotice {
   @@index([status])
   @@index([scheduledDate])
   @@index([annualLeaveUsePlanId])
+  @@index([readAt])
+  @@index([submittedAt])
+  @@index([adminConfirmedAt])
   @@unique([userId, referenceYear, noticeType, scheduledDate], map: "AnnualLeavePromotionNotice_userId_referenceYear_noticeType_sche")
 }
 

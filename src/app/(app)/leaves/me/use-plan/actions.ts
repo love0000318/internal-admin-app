@@ -12,6 +12,7 @@ import {
 } from "@/lib/leave/annual-promotion";
 import { parseAnnualUsePlanFormItems } from "@/lib/leave/annual-use-plan-form-data";
 import { getUserLeaveBalance, listEnabledCompanyHolidayDateOnlys } from "@/lib/leave/queries";
+import { markAnnualUsePlanNoticesSubmitted } from "@/lib/notifications/annual-use-plan-notifications";
 import { requireRouteAccess } from "@/lib/rbac/server-guards";
 
 function stringValue(formData: FormData, name: string) {
@@ -55,6 +56,7 @@ export async function submitAnnualLeaveUsePlan(formData: FormData) {
   } catch {
     redirectToUsePlan("invalid-item");
   }
+
   const holidayDates =
     items.length > 0
       ? await listEnabledCompanyHolidayDateOnlys(
@@ -64,12 +66,14 @@ export async function submitAnnualLeaveUsePlan(formData: FormData) {
             items[0].plannedStartDate,
           ),
           items.reduce(
-            (max, item) => (item.plannedEndDate > max ? item.plannedEndDate : max),
+            (max, item) =>
+              item.plannedEndDate > max ? item.plannedEndDate : max,
             items[0].plannedEndDate,
           ),
           prisma,
         )
       : [];
+
   let validated: ReturnType<typeof validateAnnualUsePlanItems>;
 
   try {
@@ -81,6 +85,7 @@ export async function submitAnnualLeaveUsePlan(formData: FormData) {
   } catch {
     redirectToUsePlan("invalid-item");
   }
+
   const totalPlannedAmount = validated.totalPlannedAmount;
 
   const plan = await prisma.$transaction(async (tx) => {
@@ -113,6 +118,7 @@ export async function submitAnnualLeaveUsePlan(formData: FormData) {
     await tx.annualLeaveUsePlanItem.deleteMany({
       where: { usePlanId: savedPlan.id },
     });
+
     await tx.annualLeaveUsePlanItem.createMany({
       data: validated.items.map((item) => ({
         usePlanId: savedPlan.id,
@@ -127,6 +133,7 @@ export async function submitAnnualLeaveUsePlan(formData: FormData) {
         memo: item.memo,
       })),
     });
+
     await tx.auditLog.create({
       data: {
         actorId: actor.id,
@@ -144,12 +151,21 @@ export async function submitAnnualLeaveUsePlan(formData: FormData) {
       },
     });
 
+    await markAnnualUsePlanNoticesSubmitted({
+      userId: actor.id,
+      referenceYear: year,
+      usePlan: savedPlan,
+      prisma: tx,
+    });
+
     return savedPlan;
   });
 
   await scheduleUsePlanReminderNotices({ usePlanId: plan.id, prisma });
+
   revalidatePath("/leaves/me/use-plan");
   revalidatePath("/admin/leaves/promotions");
+
   redirect("/leaves/me/use-plan?success=submitted");
 }
 
@@ -188,6 +204,7 @@ export async function cancelAnnualLeaveUsePlan(formData: FormData) {
       cancelledAt: new Date(),
     },
   });
+
   await prisma.auditLog.create({
     data: {
       actorId: actor.id,
@@ -196,11 +213,12 @@ export async function cancelAnnualLeaveUsePlan(formData: FormData) {
       action: "ANNUAL_LEAVE_USE_PLAN_CANCELLED",
       targetType: "ANNUAL_LEAVE_USE_PLAN",
       targetId: planId,
-      metadata: { userId: actor.id },
+      metadata: toJsonValue({ userId: actor.id }),
     },
   });
 
   revalidatePath("/leaves/me/use-plan");
   revalidatePath("/admin/leaves/promotions");
+
   redirect("/leaves/me/use-plan?success=cancelled");
 }

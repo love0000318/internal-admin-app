@@ -1,6 +1,5 @@
 import { Prisma, type PrismaClient } from "@/generated/prisma/client";
 import { getPrisma } from "@/lib/db/prisma";
-import { dispatchExternalNotification } from "@/lib/external-notifications/dispatch-external-notification";
 import {
   calculateAnnualLeaveExpirationDate,
   calculateAnnualLeavePromotionSchedule,
@@ -26,6 +25,14 @@ import {
   type AnnualUsePlanUsageType,
 } from "@/lib/leave/annual-use-plan-calculator";
 import type { DateOnly } from "@/lib/leave/types";
+import {
+  ANNUAL_LEAVE_PROMOTION_LEGAL_BASIS,
+  ANNUAL_LEAVE_PROMOTION_LEGAL_REVIEW_NOTE,
+  ANNUAL_LEAVE_PROMOTION_POLICY_VERSION,
+  buildAnnualUsePlanNoticeContent,
+  createAnnualUsePlanRequestNotification,
+  skipAnnualUsePlanNoticeBecauseSubmitted,
+} from "@/lib/notifications/annual-use-plan-notifications";
 
 type PromotionDb = PrismaClient | Prisma.TransactionClient;
 
@@ -37,10 +44,17 @@ export type AnnualPromotionCandidate = {
   title: string | null;
   hireDate: Date | null;
   referenceYear: number;
-  noticeType: "ANNUAL_USE_PLAN_REQUEST" | "MONTHLY_FIRST_NOTICE" | "MONTHLY_SECOND_NOTICE";
+  noticeType:
+    | "ANNUAL_USE_PLAN_REQUEST"
+    | "ANNUAL_SECOND_NOTICE"
+    | "MONTHLY_FIRST_NOTICE"
+    | "MONTHLY_SECOND_NOTICE";
   scheduledDate: DateOnly;
+  availableFrom: DateOnly;
   expirationDate: DateOnly;
+  submissionDeadline: DateOnly;
   remainingAmount: number;
+  isRenotice: boolean;
 };
 
 function addDays(value: DateOnly, days: number): DateOnly {
@@ -82,6 +96,38 @@ export function calculateAnnualPromotionNoticeDate({
       monthlyPromotionSecondMonthsBeforeExpiration: 0,
     },
   })[0].scheduledDate;
+}
+
+export function calculateAnnualSecondPromotionNoticeDate({
+  expirationDate,
+}: {
+  expirationDate: DateOnly;
+}) {
+  return calculateAnnualLeavePromotionSchedule({
+    expirationDate,
+    policy: {
+      promotionEnabled: true,
+      annualPromotionMonthsBeforeExpiration: 2,
+      monthlyPromotionFirstMonthsBeforeExpiration: 0,
+      monthlyPromotionSecondMonthsBeforeExpiration: 0,
+    },
+  })[0].scheduledDate;
+}
+
+function submissionDeadlineForNotice({
+  noticeType,
+  scheduledDate,
+  expirationDate,
+}: {
+  noticeType: AnnualPromotionCandidate["noticeType"];
+  scheduledDate: DateOnly;
+  expirationDate: DateOnly;
+}) {
+  if (noticeType === "ANNUAL_USE_PLAN_REQUEST" || noticeType === "MONTHLY_FIRST_NOTICE") {
+    return addDays(scheduledDate, 10);
+  }
+
+  return expirationDate;
 }
 
 export function calculateMonthlyFirstPromotionNoticeDate({
@@ -227,33 +273,76 @@ export async function findAnnualPromotionCandidates({
     };
 
     if (completedYears(hireDate, fiscalRange.end) >= 1) {
+      const firstScheduledDate = calculateAnnualPromotionNoticeDate({
+        expirationDate: annualExpiration,
+        monthsBefore: policy.annualPromotionMonthsBeforeExpiration,
+      });
+      const secondScheduledDate = calculateAnnualSecondPromotionNoticeDate({
+        expirationDate: annualExpiration,
+      });
+
       candidates.push({
         ...base,
         noticeType: "ANNUAL_USE_PLAN_REQUEST",
-        scheduledDate: calculateAnnualPromotionNoticeDate({
-          expirationDate: annualExpiration,
-          monthsBefore: policy.annualPromotionMonthsBeforeExpiration,
-        }),
+        scheduledDate: firstScheduledDate,
+        availableFrom: fiscalRange.start,
         expirationDate: annualExpiration,
+        submissionDeadline: submissionDeadlineForNotice({
+          noticeType: "ANNUAL_USE_PLAN_REQUEST",
+          scheduledDate: firstScheduledDate,
+          expirationDate: annualExpiration,
+        }),
+        isRenotice: false,
+      });
+      candidates.push({
+        ...base,
+        noticeType: "ANNUAL_SECOND_NOTICE",
+        scheduledDate: secondScheduledDate,
+        availableFrom: fiscalRange.start,
+        expirationDate: annualExpiration,
+        submissionDeadline: submissionDeadlineForNotice({
+          noticeType: "ANNUAL_SECOND_NOTICE",
+          scheduledDate: secondScheduledDate,
+          expirationDate: annualExpiration,
+        }),
+        isRenotice: true,
       });
     } else {
+      const availableFrom = dateToDateOnly(hireDate);
+      const firstScheduledDate = calculateMonthlyFirstPromotionNoticeDate({
+        expirationDate: monthlyExpiration,
+        monthsBefore: policy.monthlyPromotionFirstMonthsBeforeExpiration,
+      });
+      const secondScheduledDate = calculateMonthlySecondPromotionNoticeDate({
+        expirationDate: monthlyExpiration,
+        monthsBefore: policy.monthlyPromotionSecondMonthsBeforeExpiration,
+      });
+
       candidates.push({
         ...base,
         noticeType: "MONTHLY_FIRST_NOTICE",
-        scheduledDate: calculateMonthlyFirstPromotionNoticeDate({
-          expirationDate: monthlyExpiration,
-          monthsBefore: policy.monthlyPromotionFirstMonthsBeforeExpiration,
-        }),
+        scheduledDate: firstScheduledDate,
+        availableFrom,
         expirationDate: monthlyExpiration,
+        submissionDeadline: submissionDeadlineForNotice({
+          noticeType: "MONTHLY_FIRST_NOTICE",
+          scheduledDate: firstScheduledDate,
+          expirationDate: monthlyExpiration,
+        }),
+        isRenotice: false,
       });
       candidates.push({
         ...base,
         noticeType: "MONTHLY_SECOND_NOTICE",
-        scheduledDate: calculateMonthlySecondPromotionNoticeDate({
-          expirationDate: monthlyExpiration,
-          monthsBefore: policy.monthlyPromotionSecondMonthsBeforeExpiration,
-        }),
+        scheduledDate: secondScheduledDate,
+        availableFrom,
         expirationDate: monthlyExpiration,
+        submissionDeadline: submissionDeadlineForNotice({
+          noticeType: "MONTHLY_SECOND_NOTICE",
+          scheduledDate: secondScheduledDate,
+          expirationDate: monthlyExpiration,
+        }),
+        isRenotice: true,
       });
     }
   }
@@ -304,6 +393,28 @@ export async function scheduleAnnualLeavePromotionNotices({
         expirationDate: dateOnlyToDate(candidate.expirationDate),
         remainingAmount: candidate.remainingAmount,
         unit: "DAY",
+        policyVersion: ANNUAL_LEAVE_PROMOTION_POLICY_VERSION,
+        legalBasis: ANNUAL_LEAVE_PROMOTION_LEGAL_BASIS,
+        availableFrom: dateOnlyToDate(candidate.availableFrom),
+        availableUntil: dateOnlyToDate(candidate.expirationDate),
+        submissionDeadline: dateOnlyToDate(candidate.submissionDeadline),
+        isRenotice: candidate.isRenotice,
+        noticeContent: buildAnnualUsePlanNoticeContent({
+          id: "__scheduled__",
+          userId: candidate.userId,
+          referenceYear: candidate.referenceYear,
+          noticeType: candidate.noticeType,
+          scheduledDate: dateOnlyToDate(candidate.scheduledDate),
+          expirationDate: dateOnlyToDate(candidate.expirationDate),
+          remainingAmount: candidate.remainingAmount,
+          unit: "DAY",
+          availableFrom: dateOnlyToDate(candidate.availableFrom),
+          availableUntil: dateOnlyToDate(candidate.expirationDate),
+          submissionDeadline: dateOnlyToDate(candidate.submissionDeadline),
+          policyVersion: ANNUAL_LEAVE_PROMOTION_POLICY_VERSION,
+          legalBasis: ANNUAL_LEAVE_PROMOTION_LEGAL_BASIS,
+          isRenotice: candidate.isRenotice,
+        }),
       },
     });
 
@@ -320,6 +431,13 @@ export async function scheduleAnnualLeavePromotionNotices({
           scheduledDate: candidate.scheduledDate,
           expirationDate: candidate.expirationDate,
           remainingAmount: candidate.remainingAmount,
+          availableFrom: candidate.availableFrom,
+          availableUntil: candidate.expirationDate,
+          submissionDeadline: candidate.submissionDeadline,
+          policyVersion: ANNUAL_LEAVE_PROMOTION_POLICY_VERSION,
+          legalBasis: ANNUAL_LEAVE_PROMOTION_LEGAL_BASIS,
+          legalReviewNote: ANNUAL_LEAVE_PROMOTION_LEGAL_REVIEW_NOTE,
+          isRenotice: candidate.isRenotice,
         }),
       },
     });
@@ -327,32 +445,6 @@ export async function scheduleAnnualLeavePromotionNotices({
   }
 
   return { year, candidates, created, skipped };
-}
-
-function notificationMessage(noticeType: string) {
-  switch (noticeType) {
-    case "MONTHLY_FIRST_NOTICE":
-      return {
-        title: "월차 사용계획을 확인해 주세요.",
-        message: "소멸 예정 월차가 있습니다. 사용계획을 확인해 주세요.",
-      };
-    case "MONTHLY_SECOND_NOTICE":
-      return {
-        title: "월차 소멸 예정일이 가까워졌습니다.",
-        message: "소멸 예정 월차가 있습니다. 사용 여부를 확인해 주세요.",
-      };
-    case "USE_PLAN_REMINDER":
-      return {
-        title: "예정된 연차 사용일이 다가옵니다.",
-        message: "제출한 연차 사용계획일이 10일 앞으로 다가왔습니다.",
-      };
-    default:
-      return {
-        title: "연차 사용계획을 제출해 주세요.",
-        message:
-          "소멸 예정 연차가 있습니다. 남은 연차 사용계획을 확인하고 제출해 주세요.",
-      };
-  }
 }
 
 export async function sendDueAnnualLeavePromotionNotices({
@@ -373,57 +465,44 @@ export async function sendDueAnnualLeavePromotionNotices({
   let sent = 0;
 
   for (const notice of dueNotices) {
-    const content = notificationMessage(notice.noticeType);
-    const notificationType =
-      notice.noticeType === "USE_PLAN_REMINDER"
-        ? "ANNUAL_LEAVE_USE_PLAN_REMINDER"
-        : "ANNUAL_LEAVE_PROMOTION";
-    await prisma.notification.create({
-      data: {
+    if (notice.noticeType !== "USE_PLAN_REMINDER") {
+      const existingPlan = await prisma.annualLeaveUsePlan.findUnique({
+        where: {
+          userId_referenceYear: {
+            userId: notice.userId,
+            referenceYear: notice.referenceYear,
+          },
+        },
+      });
+
+      if (existingPlan?.status === "SUBMITTED") {
+        await skipAnnualUsePlanNoticeBecauseSubmitted({
+          notice,
+          usePlan: existingPlan,
+          prisma,
+        });
+        continue;
+      }
+    }
+
+    await createAnnualUsePlanRequestNotification({
+      notice: {
+        id: notice.id,
         userId: notice.userId,
-        type: notificationType,
-        title: content.title,
-        message: content.message,
-        linkUrl: "/leaves/me/use-plan",
-        metadata: {
-          annualLeavePromotionNoticeId: notice.id,
-          noticeType: notice.noticeType,
-          referenceYear: notice.referenceYear,
-        },
-      },
-    });
-    await prisma.annualLeavePromotionNotice.update({
-      where: { id: notice.id },
-      data: {
-        status: "SENT",
-        sentAt: new Date(),
-      },
-    });
-    await prisma.auditLog.create({
-      data: {
-        action: "ANNUAL_LEAVE_PROMOTION_NOTICE_SENT",
-        targetType: "ANNUAL_LEAVE_PROMOTION_NOTICE",
-        targetId: notice.id,
-        targetUserId: notice.userId,
-        metadata: {
-          userId: notice.userId,
-          referenceYear: notice.referenceYear,
-          noticeType: notice.noticeType,
-          scheduledDate: dateToDateOnly(notice.scheduledDate),
-        },
-      },
-    });
-    await dispatchExternalNotification({
-      type: notificationType,
-      recipientUserId: notice.userId,
-      title: content.title,
-      message: content.message,
-      linkUrl: "/leaves/me/use-plan",
-      context: {
-        annualLeavePromotionNoticeId: notice.id,
-        noticeType: notice.noticeType,
         referenceYear: notice.referenceYear,
+        noticeType: notice.noticeType,
+        scheduledDate: notice.scheduledDate,
+        expirationDate: notice.expirationDate,
+        remainingAmount: notice.remainingAmount,
+        unit: notice.unit,
+        availableFrom: notice.availableFrom,
+        availableUntil: notice.availableUntil,
+        submissionDeadline: notice.submissionDeadline,
+        policyVersion: notice.policyVersion,
+        legalBasis: notice.legalBasis,
+        isRenotice: notice.isRenotice,
       },
+      prisma,
     });
     sent += 1;
   }
@@ -677,6 +756,28 @@ export async function scheduleUsePlanReminderNotices({
         annualLeaveUsePlanId: plan.id,
         remainingAmount: item.calculatedAmount ?? item.amount,
         unit: item.unit,
+        policyVersion: ANNUAL_LEAVE_PROMOTION_POLICY_VERSION,
+        legalBasis: ANNUAL_LEAVE_PROMOTION_LEGAL_BASIS,
+        availableFrom: dateOnlyToDate(plannedDate),
+        availableUntil: dateOnlyToDate(plannedDate),
+        submissionDeadline: dateOnlyToDate(plannedDate),
+        isRenotice: false,
+        noticeContent: buildAnnualUsePlanNoticeContent({
+          id: "__scheduled_reminder__",
+          userId: plan.userId,
+          referenceYear: plan.referenceYear,
+          noticeType: "USE_PLAN_REMINDER",
+          scheduledDate: dateOnlyToDate(scheduledDate),
+          expirationDate: null,
+          remainingAmount: item.calculatedAmount ?? item.amount,
+          unit: item.unit,
+          availableFrom: dateOnlyToDate(plannedDate),
+          availableUntil: dateOnlyToDate(plannedDate),
+          submissionDeadline: dateOnlyToDate(plannedDate),
+          policyVersion: ANNUAL_LEAVE_PROMOTION_POLICY_VERSION,
+          legalBasis: ANNUAL_LEAVE_PROMOTION_LEGAL_BASIS,
+          isRenotice: false,
+        }),
       },
     });
     created += 1;

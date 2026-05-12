@@ -3,6 +3,7 @@ import {
   type Notification,
   type NotificationPriority,
   type NotificationType,
+  type PrismaClient,
 } from "@/generated/prisma/client";
 import { getPrisma } from "@/lib/db/prisma";
 import { dispatchExternalNotification } from "@/lib/external-notifications/dispatch-external-notification";
@@ -117,6 +118,8 @@ export type NotifyUsersParams = Omit<CreateNotificationParams, "userId"> & {
   recipientUserIds: string[];
 };
 
+type NotificationPrisma = PrismaClient | Prisma.TransactionClient;
+
 export const NOTIFICATION_PRIORITIES = ["LOW", "NORMAL", "HIGH", "CRITICAL"] as const;
 
 export function normalizeNotificationPriority(
@@ -129,6 +132,18 @@ export function normalizeNotificationPriority(
 
 export function sanitizeNotificationMetadata(value: unknown): Prisma.InputJsonValue {
   return sanitizeNotificationMetadataValue(value);
+}
+
+function getDeduplicationKey(metadata: Prisma.InputJsonValue | undefined) {
+  return metadata && typeof metadata === "object"
+    ? (metadata as Record<string, unknown>).deduplicationKey
+    : null;
+}
+
+function getAnnualLeavePromotionNoticeId(metadata: unknown) {
+  return metadata && typeof metadata === "object"
+    ? (metadata as Record<string, unknown>).annualLeavePromotionNoticeId
+    : null;
 }
 
 export function dedupeRecipientUserIds(userIds: string[]) {
@@ -205,6 +220,53 @@ export async function createNotifications(params: CreateNotificationParams[]) {
   return result;
 }
 
+export async function createInAppNotification(
+  params: CreateNotificationParams & { prisma?: NotificationPrisma },
+) {
+  const { prisma = getPrisma(), ...notification } = params;
+
+  return prisma.notification.create({
+    data: {
+      userId: notification.userId,
+      type: notification.type,
+      priority: normalizeNotificationPriority(notification.priority),
+      title: notification.title,
+      message: notification.message,
+      linkUrl: notification.linkUrl ?? null,
+      metadata: notification.metadata
+        ? sanitizeNotificationMetadata(notification.metadata)
+        : Prisma.JsonNull,
+    },
+  });
+}
+
+export async function createInAppNotificationOnce(
+  params: CreateNotificationParams & { prisma?: NotificationPrisma },
+) {
+  const { prisma = getPrisma(), ...notification } = params;
+  const deduplicationKey = getDeduplicationKey(notification.metadata);
+
+  if (typeof deduplicationKey === "string") {
+    const existing = await prisma.notification.findFirst({
+      where: {
+        userId: notification.userId,
+        type: notification.type,
+        linkUrl: notification.linkUrl ?? null,
+        metadata: {
+          path: ["deduplicationKey"],
+          equals: deduplicationKey,
+        },
+      },
+    });
+
+    if (existing) {
+      return existing;
+    }
+  }
+
+  return createInAppNotification({ ...notification, prisma });
+}
+
 export async function notifyUsers(params: NotifyUsersParams) {
   const recipientUserIds = dedupeRecipientUserIds(params.recipientUserIds);
 
@@ -247,10 +309,7 @@ export async function dispatchNotificationAndExternal(params: NotifyUsersParams)
 }
 
 export async function createNotificationOnce(params: CreateNotificationParams) {
-  const deduplicationKey =
-    params.metadata && typeof params.metadata === "object"
-      ? (params.metadata as Record<string, unknown>).deduplicationKey
-      : null;
+  const deduplicationKey = getDeduplicationKey(params.metadata);
 
   if (typeof deduplicationKey === "string") {
     const existing = await getPrisma().notification.findFirst({
@@ -318,26 +377,101 @@ export function assertCanViewNotification(actor: RbacUser, notification: Notific
 }
 
 export async function markNotificationAsRead(userId: string, notificationId: string) {
-  return getPrisma().notification.updateMany({
+  const prisma = getPrisma();
+  const readAt = new Date();
+  const result = await prisma.notification.updateMany({
     where: {
       id: notificationId,
       userId,
       readAt: null,
     },
     data: {
-      readAt: new Date(),
+      readAt,
     },
   });
+
+  if (result.count > 0) {
+    await markAnnualPromotionNoticeReadFromNotification({
+      userId,
+      notificationId,
+      readAt,
+      prisma,
+    });
+  }
+
+  return result;
 }
 
 export async function markAllNotificationsAsRead(userId: string) {
-  return getPrisma().notification.updateMany({
+  const prisma = getPrisma();
+  const unreadNotifications = await prisma.notification.findMany({
+    where: {
+      userId,
+      readAt: null,
+    },
+    select: {
+      id: true,
+      metadata: true,
+    },
+  });
+  const readAt = new Date();
+  const result = await prisma.notification.updateMany({
     where: {
       userId,
       readAt: null,
     },
     data: {
-      readAt: new Date(),
+      readAt,
     },
+  });
+
+  const annualPromotionNoticeIds = unreadNotifications
+    .map((notification) => getAnnualLeavePromotionNoticeId(notification.metadata))
+    .filter((value): value is string => typeof value === "string" && value.length > 0);
+
+  if (annualPromotionNoticeIds.length > 0 && result.count > 0) {
+    await prisma.annualLeavePromotionNotice.updateMany({
+      where: {
+        id: { in: annualPromotionNoticeIds },
+        userId,
+        readAt: null,
+      },
+      data: { readAt },
+    });
+  }
+
+  return result;
+}
+
+export async function markAnnualPromotionNoticeReadFromNotification({
+  userId,
+  notificationId,
+  readAt = new Date(),
+  prisma = getPrisma(),
+}: {
+  userId: string;
+  notificationId: string;
+  readAt?: Date;
+  prisma?: NotificationPrisma;
+}) {
+  const notification = await prisma.notification.findFirst({
+    where: { id: notificationId, userId },
+    select: { metadata: true },
+  });
+  const annualLeavePromotionNoticeId = getAnnualLeavePromotionNoticeId(
+    notification?.metadata,
+  );
+
+  if (typeof annualLeavePromotionNoticeId !== "string") {
+    return { count: 0 };
+  }
+
+  return prisma.annualLeavePromotionNotice.updateMany({
+    where: {
+      id: annualLeavePromotionNoticeId,
+      userId,
+      readAt: null,
+    },
+    data: { readAt },
   });
 }
