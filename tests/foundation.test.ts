@@ -49,6 +49,7 @@ describe("foundation contracts", () => {
       "/admin/audit-logs",
       "/admin/security",
       "/admin/reports",
+      "/admin/work-management",
       "/admin/jobs",
       "/forbidden",
       "/leaves/my",
@@ -80,6 +81,7 @@ describe("foundation contracts", () => {
       "/admin/audit-logs",
       "/admin/security",
       "/admin/reports",
+      "/admin/work-management",
       "/admin/jobs",
     ]);
     expect(getVisibleNavItems("LEAD").map((route) => route.href)).toEqual([

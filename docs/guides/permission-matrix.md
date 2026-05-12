@@ -27,6 +27,7 @@ UI 메뉴 숨김은 보조 수단입니다. 모든 protected page, server action
 | AuditLog CSV export | 가능 | 불가 | 불가 | 불가 | 필요 |
 | 보안 대시보드 | 가능 | 불가 | 불가 | 불가 |
 | JobRun 조회/실행 | 가능 | 불가 | 불가 | 불가 |
+| 업무 관리 `/admin/work-management` | 가능 | 불가 | 불가 | 불가 |
 | 정책 변경 | 가능 | 불가 | 불가 | 불가 | 권장/부분 적용 |
 
 ## 보안 원칙

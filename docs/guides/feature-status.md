@@ -29,6 +29,7 @@
 | 관리자 리포트 | COMPLETE | `/admin/reports` 이하 | 여러 모델 | 없음 | OWNER | export route 존재 |
 | CSV export 보안 | COMPLETE | `/admin/reports/export` | `AuditLog` | 없음 | OWNER | allowlist/BOM/injection 방어 |
 | 알림센터 | COMPLETE | `/notifications` | `Notification` | 없음 | 내부 사용자 | 자기 알림만 |
+| 업무 관리 MVP | PARTIAL | `/admin/work-management` | `ClickUpTaskMirror`, `WorkTaskLocalState`, `ClickUpDocMirror`, `WorkTaskChangeRequest`, `WorkTaskActivity` | 없음 | OWNER | ClickUp Task read-only sync 기반, Docs sync는 service skeleton/준비 상태 |
 | JobRun | COMPLETE | `/admin/jobs`, `/admin/jobs/[jobRunId]` | `JobRun` | 주요 jobs | OWNER | 위험 Job UI 제한 |
 | Cron endpoint 보안 | PARTIAL | 현재 `/api/cron/*` route 없음 | `JobRun` | CLI jobs | 운영자 | helper는 있으나 endpoint는 3차/TODO |
 | 보안/권한 | COMPLETE | protected routes/actions | RBAC/security helpers | `preflight` | 전체 | 서버 guard 중심 |

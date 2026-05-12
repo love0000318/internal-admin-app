@@ -121,15 +121,18 @@ describe("rbac guards", () => {
 
   it("enforces route access by MVP route policy", () => {
     expect(canAccessRoute(owner, "/organization")).toBe(true);
+    expect(canAccessRoute(owner, "/admin/work-management")).toBe(true);
     expect(canAccessRoute(owner, "/admin/leaves/grants")).toBe(true);
     expect(canAccessRoute(owner, "/admin/leaves/birthday-policy")).toBe(true);
     expect(canAccessRoute(managerInLeadTeam, "/notifications")).toBe(true);
     expect(canAccessRoute(lead, "/organization")).toBe(false);
+    expect(canAccessRoute(lead, "/admin/work-management")).toBe(false);
     expect(canAccessRoute(lead, "/admin/leaves/grants")).toBe(false);
     expect(canAccessRoute(lead, "/admin/leaves/birthday-policy")).toBe(false);
     expect(canAccessRoute(lead, "/admin/leaves/balances")).toBe(true);
     expect(canAccessRoute(lead, "/leaves/approvals")).toBe(true);
     expect(canAccessRoute(managerInLeadTeam, "/leaves/approvals")).toBe(false);
+    expect(canAccessRoute(managerInLeadTeam, "/admin/work-management")).toBe(false);
     expect(canAccessRoute(managerInLeadTeam, "/tasks")).toBe(false);
   });
 

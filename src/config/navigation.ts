@@ -9,6 +9,7 @@ export type NavigationIconKey =
   | "calendar"
   | "approval"
   | "attendance"
+  | "work"
   | "organization"
   | "reports"
   | "audit"
@@ -146,6 +147,20 @@ export const navigationSections: NavigationSection[] = [
         iconKey: "approval",
         allowedRoles: OWNER_LEAD,
         enabled: features.attendanceMonthlyClose,
+      },
+    ],
+  },
+  {
+    id: "work",
+    label: "업무",
+    iconKey: "work",
+    items: [
+      {
+        id: "work-management",
+        label: "업무 관리",
+        href: "/admin/work-management",
+        iconKey: "work",
+        allowedRoles: OWNER_ONLY,
       },
     ],
   },

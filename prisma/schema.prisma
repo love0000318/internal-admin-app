@@ -642,6 +642,11 @@ enum AuditAction {
   CRON_JOB_TRIGGERED
   NOTIFICATION_MARKED_READ
   ALL_NOTIFICATIONS_MARKED_READ
+  WORK_TASK_SYNC_RUN
+  CLICKUP_DOC_SYNC_RUN
+  WORK_TASK_LOCAL_STATE_UPDATED
+  WORK_TASK_CHANGE_REQUEST_CREATED
+  WORK_TASK_CHANGE_REQUEST_CHECKED
   EMPLOYEE_MASTER_IMPORTED
   EMPLOYEE_PREJOIN_PROFILE_CREATED
   EMPLOYEE_PREJOIN_PROFILE_UPDATED
@@ -691,6 +696,24 @@ enum AuditTargetType {
   ATTENDANCE_RECORD
   ATTENDANCE_CHANGE_REQUEST
   ATTENDANCE_MONTHLY_CLOSE
+  CLICKUP_TASK_MIRROR
+  CLICKUP_DOC_MIRROR
+  WORK_TASK_LOCAL_STATE
+  WORK_TASK_CHANGE_REQUEST
+}
+
+enum WorkTaskInternalStatus {
+  PLANNED
+  IN_PROGRESS
+  HOTFIX
+  DEPLOYED
+}
+
+enum WorkTaskChangeRequestStatus {
+  OPEN
+  ACKNOWLEDGED
+  RESOLVED
+  ARCHIVED
 }
 
 model User {
@@ -768,6 +791,10 @@ model User {
   trainingRecords       TrainingRecord[]
   profileChangeRequests EmployeeProfileChangeRequest[] @relation("ProfileChangeRequestUser")
   reviewedProfileChangeRequests EmployeeProfileChangeRequest[] @relation("ProfileChangeRequestReviewer")
+  updatedWorkTaskLocalStates WorkTaskLocalState[] @relation("WorkTaskLocalStateUpdatedBy")
+  linkedWorkTaskDocuments WorkTaskDocumentLink[] @relation("WorkTaskDocumentLinkLinkedBy")
+  checkedWorkTaskChangeRequests WorkTaskChangeRequest[] @relation("WorkTaskChangeRequestCheckedBy")
+  workTaskActivities WorkTaskActivity[] @relation("WorkTaskActivityActor")
 
   @@index([status])
   @@index([role])
@@ -794,6 +821,7 @@ model Team {
   profiles    EmployeeProfile[]
   invitations Invitation[]
   calendarSubscriptionTokens CalendarSubscriptionToken[]
+  workTaskLocalStates WorkTaskLocalState[] @relation("WorkTaskLocalStateTeam")
 
   @@index([parentTeamId])
   @@index([leadUserId])
@@ -2074,6 +2102,142 @@ model CompanyHoliday {
   updatedAt     DateTime @updatedAt
 
   @@index([isEnabled])
+}
+
+model ClickUpTaskMirror {
+  id                 String   @id @default(cuid())
+  clickUpTaskId      String   @unique
+  name               String
+  descriptionSummary String?
+  clickUpStatus      String?
+  clickUpAssignees   Json?
+  dueDate            DateTime? @db.Date
+  clickUpUrl         String?
+  sourceListId       String?
+  sourceListName     String?
+  sourceFolderId     String?
+  sourceFolderName   String?
+  sourceSpaceId      String?
+  sourceSpaceName    String?
+  lastSyncedAt       DateTime?
+  rawJson            Json?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  localState    WorkTaskLocalState?
+  documentLinks WorkTaskDocumentLink[]
+  changeRequests WorkTaskChangeRequest[]
+  activities    WorkTaskActivity[]
+
+  @@index([clickUpStatus])
+  @@index([dueDate])
+  @@index([lastSyncedAt])
+  @@index([sourceListId])
+}
+
+model WorkTaskLocalState {
+  id                  String                 @id @default(cuid())
+  clickUpTaskMirrorId String                 @unique
+  internalStatus      WorkTaskInternalStatus @default(PLANNED)
+  teamId              String?
+  workDate            DateTime?              @db.Date
+  memo                String?
+  updatedByUserId     String?
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+
+  task          ClickUpTaskMirror @relation(fields: [clickUpTaskMirrorId], references: [id], onDelete: Cascade)
+  team          Team?             @relation("WorkTaskLocalStateTeam", fields: [teamId], references: [id], onDelete: SetNull)
+  updatedByUser User?             @relation("WorkTaskLocalStateUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([internalStatus])
+  @@index([teamId])
+  @@index([workDate])
+  @@index([updatedByUserId])
+}
+
+model ClickUpDocMirror {
+  id               String   @id @default(cuid())
+  clickUpDocId     String?  @unique
+  title            String
+  documentUrl      String?
+  plainTextSummary String?
+  sourceSpaceId    String?
+  sourceSpaceName  String?
+  sourceFolderId   String?
+  sourceFolderName String?
+  lastSyncedAt     DateTime?
+  rawJson          Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  relatedTasks   WorkTaskDocumentLink[]
+  changeRequests WorkTaskChangeRequest[]
+
+  @@index([lastSyncedAt])
+  @@index([sourceSpaceId])
+  @@index([sourceFolderId])
+}
+
+model WorkTaskDocumentLink {
+  id                  String   @id @default(cuid())
+  clickUpTaskMirrorId String
+  clickUpDocMirrorId  String
+  linkedByUserId      String?
+  source              String   @default("MANUAL")
+  createdAt           DateTime @default(now())
+
+  task         ClickUpTaskMirror @relation(fields: [clickUpTaskMirrorId], references: [id], onDelete: Cascade)
+  document     ClickUpDocMirror  @relation(fields: [clickUpDocMirrorId], references: [id], onDelete: Cascade)
+  linkedByUser User?             @relation("WorkTaskDocumentLinkLinkedBy", fields: [linkedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([clickUpTaskMirrorId, clickUpDocMirrorId])
+  @@index([clickUpTaskMirrorId])
+  @@index([clickUpDocMirrorId])
+  @@index([linkedByUserId])
+}
+
+model WorkTaskChangeRequest {
+  id                  String                      @id @default(cuid())
+  clickUpTaskMirrorId String
+  clickUpDocMirrorId  String?
+  title               String
+  content             String
+  sourceDocumentUrl   String?
+  authorOrSource      String?
+  status              WorkTaskChangeRequestStatus @default(OPEN)
+  checkedAt           DateTime?
+  checkedByUserId     String?
+  createdAt           DateTime                    @default(now())
+  updatedAt           DateTime                    @updatedAt
+
+  task          ClickUpTaskMirror @relation(fields: [clickUpTaskMirrorId], references: [id], onDelete: Cascade)
+  document      ClickUpDocMirror? @relation(fields: [clickUpDocMirrorId], references: [id], onDelete: SetNull)
+  checkedByUser User?             @relation("WorkTaskChangeRequestCheckedBy", fields: [checkedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([clickUpTaskMirrorId])
+  @@index([clickUpDocMirrorId])
+  @@index([status])
+  @@index([checkedByUserId])
+  @@index([createdAt])
+}
+
+model WorkTaskActivity {
+  id                  String   @id @default(cuid())
+  clickUpTaskMirrorId String
+  actorUserId         String?
+  type                String
+  message             String
+  metadata            Json?
+  createdAt           DateTime @default(now())
+
+  task  ClickUpTaskMirror @relation(fields: [clickUpTaskMirrorId], references: [id], onDelete: Cascade)
+  actor User?             @relation("WorkTaskActivityActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([clickUpTaskMirrorId])
+  @@index([actorUserId])
+  @@index([type])
+  @@index([createdAt])
 }
 
 model AuditLog {

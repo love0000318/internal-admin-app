@@ -213,6 +213,12 @@ export const IMPLEMENTED_ROUTE_POLICIES: RoutePolicy[] = [
     mvpStatus: "included",
   },
   {
+    href: "/admin/work-management",
+    label: "업무 관리",
+    roles: ["OWNER"],
+    mvpStatus: "included",
+  },
+  {
     href: "/admin/jobs",
     label: "자동 작업",
     roles: ["OWNER"],
