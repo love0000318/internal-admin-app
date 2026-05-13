@@ -69,6 +69,16 @@ const syncScopeLabels: Record<(typeof CLICKUP_SYNC_SCOPE_OPTIONS)[number], strin
   TASKS_ONLY: "업무만",
   DOCS_ONLY: "Docs만",
 };
+const teamSyncFieldClassName =
+  "h-10 w-full min-w-0 rounded-lg border border-slate-300 px-3 text-sm font-normal text-slate-900";
+const teamSyncLabelClassName =
+  "grid min-w-0 gap-1 text-xs font-semibold text-slate-600";
+const teamSyncTextareaClassName =
+  "min-h-20 w-full min-w-0 resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal text-slate-900";
+const responsiveTeamSyncGridClassName =
+  "grid min-w-0 gap-2 grid-cols-[repeat(auto-fit,minmax(min(100%,11.5rem),1fr))]";
+const responsiveTeamSyncActionGridClassName =
+  "grid min-w-0 gap-2 grid-cols-[repeat(auto-fit,minmax(min(100%,10rem),1fr))]";
 
 function dateInputValue(value: Date | null | undefined) {
   return value ? value.toISOString().slice(0, 10) : "";
@@ -198,23 +208,23 @@ export function WorkManagementDashboard({
   const visibleNotice = noticeText(notice);
 
   return (
-    <section className="min-w-0 space-y-5">
+    <section className="min-w-0 space-y-6">
       {visibleNotice ? (
         <p className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700">
           {visibleNotice}
         </p>
       ) : null}
 
-      <div className="grid gap-3 lg:grid-cols-4">
+      <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
         <Card className="lg:col-span-2">
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
               <p className="text-sm font-semibold text-slate-500">ClickUp 연결</p>
               <p className="mt-2 break-keep text-lg font-bold text-slate-950">
                 {taskConnectionMessage}
               </p>
             </div>
-            <div className="flex shrink-0 flex-col gap-2">
+            <div className="flex shrink-0 flex-wrap gap-2 sm:flex-col">
               <Badge tone={apiTokenConfigured ? "success" : "warning"}>
                 token {apiTokenConfigured ? "설정됨" : "필요"}
               </Badge>
@@ -223,15 +233,15 @@ export function WorkManagementDashboard({
               </Badge>
             </div>
           </div>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <form action={runClickUpTaskSyncAction}>
-              <button className={buttonClassName({ tone: "primary", className: "gap-2" })}>
+          <div className="mt-4 grid gap-2 sm:flex sm:flex-wrap">
+            <form action={runClickUpTaskSyncAction} className="min-w-0">
+              <button className={buttonClassName({ tone: "primary", className: "w-full gap-2 sm:w-auto" })}>
                 <RefreshCcw aria-hidden="true" className="h-4 w-4" />
                 전체 팀 업무 동기화
               </button>
             </form>
-            <form action={runClickUpDocsSyncAction}>
-              <button className={buttonClassName({ tone: "neutral", className: "gap-2" })}>
+            <form action={runClickUpDocsSyncAction} className="min-w-0">
+              <button className={buttonClassName({ tone: "neutral", className: "w-full gap-2 sm:w-auto" })}>
                 <FileText aria-hidden="true" className="h-4 w-4" />
                 Docs 상태 확인
               </button>
@@ -258,7 +268,7 @@ export function WorkManagementDashboard({
         </Card>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(min(100%,22rem),1fr))]">
         {data.teamSyncSettings.targets.map((target) => {
           const config = target.config;
           const canSync = Boolean(config?.id && config.isEnabled && config.clickUpListId);
@@ -266,9 +276,9 @@ export function WorkManagementDashboard({
           return (
             <article
               key={target.targetName}
-              className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
+              className="flex h-full min-w-0 flex-col rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
             >
-              <div className="flex items-start justify-between gap-2">
+              <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0">
                   <h2 className="break-keep text-base font-bold text-slate-950">
                     {target.targetName}
@@ -300,65 +310,65 @@ export function WorkManagementDashboard({
                 </p>
               ) : (
                 <>
-                  <form action={updateClickUpTeamSyncConfigAction} className="mt-4 grid gap-2">
+                  <form action={updateClickUpTeamSyncConfigAction} className="mt-4 grid min-w-0 gap-3">
                     <input name="teamId" type="hidden" value={target.team.id} />
-                    <label className="grid gap-1 text-xs font-semibold text-slate-600">
+                    <label className={teamSyncLabelClassName}>
                       표시명
                       <input
                         name="displayName"
                         defaultValue={config?.displayName ?? target.team.name}
-                        className="h-9 rounded-lg border border-slate-300 px-3 text-sm font-normal text-slate-900"
+                        className={teamSyncFieldClassName}
                       />
                     </label>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <label className="grid gap-1 text-xs font-semibold text-slate-600">
+                    <div className={responsiveTeamSyncGridClassName}>
+                      <label className={teamSyncLabelClassName}>
                         Workspace ID
                         <input
                           name="clickUpWorkspaceId"
                           defaultValue={config?.clickUpWorkspaceId ?? ""}
-                          className="h-9 rounded-lg border border-slate-300 px-3 text-sm font-normal text-slate-900"
+                          className={teamSyncFieldClassName}
                         />
                       </label>
-                      <label className="grid gap-1 text-xs font-semibold text-slate-600">
+                      <label className={teamSyncLabelClassName}>
                         Space ID
                         <input
                           name="clickUpSpaceId"
                           defaultValue={config?.clickUpSpaceId ?? ""}
-                          className="h-9 rounded-lg border border-slate-300 px-3 text-sm font-normal text-slate-900"
+                          className={teamSyncFieldClassName}
                         />
                       </label>
-                      <label className="grid gap-1 text-xs font-semibold text-slate-600">
+                      <label className={teamSyncLabelClassName}>
                         Folder ID
                         <input
                           name="clickUpFolderId"
                           defaultValue={config?.clickUpFolderId ?? ""}
-                          className="h-9 rounded-lg border border-slate-300 px-3 text-sm font-normal text-slate-900"
+                          className={teamSyncFieldClassName}
                         />
                       </label>
-                      <label className="grid gap-1 text-xs font-semibold text-slate-600">
+                      <label className={teamSyncLabelClassName}>
                         List ID
                         <input
                           name="clickUpListId"
                           defaultValue={config?.clickUpListId ?? ""}
-                          className="h-9 rounded-lg border border-slate-300 px-3 text-sm font-normal text-slate-900"
+                          className={teamSyncFieldClassName}
                         />
                       </label>
                     </div>
-                    <label className="grid gap-1 text-xs font-semibold text-slate-600">
+                    <label className={teamSyncLabelClassName}>
                       List 표시명
                       <input
                         name="clickUpListName"
                         defaultValue={config?.clickUpListName ?? ""}
-                        className="h-9 rounded-lg border border-slate-300 px-3 text-sm font-normal text-slate-900"
+                        className={teamSyncFieldClassName}
                       />
                     </label>
-                    <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-                      <label className="grid gap-1 text-xs font-semibold text-slate-600">
+                    <div className="grid min-w-0 gap-2">
+                      <label className={teamSyncLabelClassName}>
                         동기화 범위
                         <select
                           name="syncScope"
                           defaultValue={config?.syncScope ?? "TASKS_AND_DOCS"}
-                          className="h-9 rounded-lg border border-slate-300 px-3 text-sm font-normal text-slate-900"
+                          className={teamSyncFieldClassName}
                         >
                           {CLICKUP_SYNC_SCOPE_OPTIONS.map((scope) => (
                             <option key={scope} value={scope}>
@@ -367,7 +377,7 @@ export function WorkManagementDashboard({
                           ))}
                         </select>
                       </label>
-                      <label className="flex items-end gap-2 pb-2 text-sm font-semibold text-slate-700">
+                      <label className="flex min-h-10 min-w-0 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-700">
                         <input
                           name="isEnabled"
                           type="checkbox"
@@ -377,53 +387,59 @@ export function WorkManagementDashboard({
                         활성
                       </label>
                     </div>
-                    <label className="grid gap-1 text-xs font-semibold text-slate-600">
+                    <label className={teamSyncLabelClassName}>
                       메모
                       <textarea
                         name="note"
                         defaultValue={config?.note ?? ""}
                         rows={2}
-                        className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal text-slate-900"
+                        className={teamSyncTextareaClassName}
                       />
                     </label>
-                    <div className="grid gap-2 text-xs text-slate-500 sm:grid-cols-2">
-                      <span>마지막 동기화: {formatDateTime(config?.lastTaskSyncedAt)}</span>
-                      <span>Docs 확인: {formatDateTime(config?.lastDocsSyncedAt)}</span>
-                      <span className="flex items-center gap-2">
+                    <div className="grid min-w-0 gap-2 text-xs text-slate-500 grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))]">
+                      <span className="min-w-0 break-keep">
+                        마지막 동기화: {formatDateTime(config?.lastTaskSyncedAt)}
+                      </span>
+                      <span className="min-w-0 break-keep">
+                        Docs 확인: {formatDateTime(config?.lastDocsSyncedAt)}
+                      </span>
+                      <span className="flex min-w-0 items-center gap-2">
                         결과
                         <Badge tone={syncStatusTone(config?.lastSyncStatus)}>
                           {config?.lastSyncStatus ?? "-"}
                         </Badge>
                       </span>
-                      <span className="break-keep">메시지: {config?.lastSyncMessage ?? "-"}</span>
+                      <span className="min-w-0 break-words">
+                        메시지: {config?.lastSyncMessage ?? "-"}
+                      </span>
                     </div>
-                    <button className={buttonClassName({ tone: "primary", className: "gap-2" })}>
+                    <button className={buttonClassName({ tone: "primary", className: "w-full gap-2" })}>
                       <Save aria-hidden="true" className="h-4 w-4" />
                       설정 저장
                     </button>
                   </form>
 
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <form action={runClickUpTaskSyncAction}>
+                  <div className={`mt-3 ${responsiveTeamSyncActionGridClassName}`}>
+                    <form action={runClickUpTaskSyncAction} className="min-w-0">
                       <input name="sourceConfigId" type="hidden" value={config?.id ?? ""} />
                       <button
                         disabled={!canSync}
                         className={buttonClassName({
                           tone: "neutral",
-                          className: `gap-2 ${canSync ? "" : "cursor-not-allowed opacity-50"}`,
+                          className: `w-full gap-2 ${canSync ? "" : "cursor-not-allowed opacity-50"}`,
                         })}
                       >
                         <RefreshCcw aria-hidden="true" className="h-4 w-4" />
                         이 팀 동기화
                       </button>
                     </form>
-                    <form action={runClickUpDocsSyncAction}>
+                    <form action={runClickUpDocsSyncAction} className="min-w-0">
                       <input name="sourceConfigId" type="hidden" value={config?.id ?? ""} />
                       <button
                         disabled={!config?.id}
                         className={buttonClassName({
                           tone: "neutral",
-                          className: `gap-2 ${config?.id ? "" : "cursor-not-allowed opacity-50"}`,
+                          className: `w-full gap-2 ${config?.id ? "" : "cursor-not-allowed opacity-50"}`,
                         })}
                       >
                         <FileText aria-hidden="true" className="h-4 w-4" />

@@ -108,7 +108,7 @@ export default async function WorkManagementPage({
       <PageHeader
         eyebrow="OWNER 전용"
         title="업무 관리"
-        description="팀별 ClickUp 읽기 동기화 설정, 업무 mirror 검토, 내부 상태와 연계 정보를 관리합니다."
+        description="ClickUp 업무와 문서를 팀별로 읽기 동기화하고, 내부 상태와 연계 정보를 관리합니다."
       />
       <WorkManagementDashboard
         data={data}
