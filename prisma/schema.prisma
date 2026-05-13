@@ -601,10 +601,10 @@ enum AuditAction {
   EXTERNAL_SLACK_FAILED
   INVITATION_EMAIL_SENT
   INVITATION_EMAIL_FAILED
-    CALENDAR_SUBSCRIPTION_CREATED
-    CALENDAR_SUBSCRIPTION_REVOKED
-    CALENDAR_SUBSCRIPTION_REGENERATED
-    CALENDAR_SUBSCRIPTION_ACCESSED
+  CALENDAR_SUBSCRIPTION_CREATED
+  CALENDAR_SUBSCRIPTION_REVOKED
+  CALENDAR_SUBSCRIPTION_REGENERATED
+  CALENDAR_SUBSCRIPTION_ACCESSED
   STEP_UP_VERIFICATION_SUCCEEDED
   STEP_UP_VERIFICATION_FAILED
   STEP_UP_VERIFICATION_CONSUMED
@@ -632,10 +632,10 @@ enum AuditAction {
   ATTENDANCE_CHANGE_REQUEST_BLOCKED_BY_MONTH_CLOSE
   POLICY_CHANGE_WITH_STEP_UP
   SECURITY_SETTING_CHANGED
-    SUSPICIOUS_LOGIN_DETECTED
-    CSRF_BLOCKED
-    UNAUTHORIZED_ACCESS_BLOCKED
-    JOB_RUN_STARTED
+  SUSPICIOUS_LOGIN_DETECTED
+  CSRF_BLOCKED
+  UNAUTHORIZED_ACCESS_BLOCKED
+  JOB_RUN_STARTED
   JOB_RUN_COMPLETED
   JOB_RUN_FAILED
   JOB_RUN_MANUALLY_TRIGGERED
@@ -644,9 +644,13 @@ enum AuditAction {
   ALL_NOTIFICATIONS_MARKED_READ
   WORK_TASK_SYNC_RUN
   CLICKUP_DOC_SYNC_RUN
+  CLICKUP_TEAM_SYNC_CONFIG_CREATED
+  CLICKUP_TEAM_SYNC_CONFIG_UPDATED
   WORK_TASK_LOCAL_STATE_UPDATED
   WORK_TASK_CHANGE_REQUEST_CREATED
   WORK_TASK_CHANGE_REQUEST_CHECKED
+  WORK_TASK_RELATION_CREATED
+  WORK_TASK_RELATION_DELETED
   EMPLOYEE_MASTER_IMPORTED
   EMPLOYEE_PREJOIN_PROFILE_CREATED
   EMPLOYEE_PREJOIN_PROFILE_UPDATED
@@ -698,8 +702,10 @@ enum AuditTargetType {
   ATTENDANCE_MONTHLY_CLOSE
   CLICKUP_TASK_MIRROR
   CLICKUP_DOC_MIRROR
+  CLICKUP_TEAM_SYNC_CONFIG
   WORK_TASK_LOCAL_STATE
   WORK_TASK_CHANGE_REQUEST
+  WORK_TASK_RELATION
 }
 
 enum WorkTaskInternalStatus {
@@ -716,85 +722,95 @@ enum WorkTaskChangeRequestStatus {
   ARCHIVED
 }
 
-model User {
-  id           String     @id @default(cuid())
-  email        String     @unique
-  phone        String?    @unique
-  name         String
-  title        String?
-  teamId       String?
-  hireDate     DateTime?  @db.Date
-  birthDate    DateTime?  @db.Date
-  role         Role       @default(MANAGER)
-  status       UserStatus @default(INVITED)
-  passwordHash String?
-  lastLoginAt  DateTime?
-  deactivatedAt DateTime?
-  deletedAt    DateTime?
-  deletedByUserId String?
-  deletionReason String?
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+enum WorkTaskRelationType {
+  RELATED
+  BLOCKED_BY
+  FOLLOW_UP
+  DUPLICATE
+  REFERENCE
+}
 
-  profile               EmployeeProfile?
-  deletedBy             User?                 @relation("UserDeletedBy", fields: [deletedByUserId], references: [id], onDelete: SetNull)
-  deletedUsers          User[]                @relation("UserDeletedBy")
-  team                  Team?                  @relation("UserTeam", fields: [teamId], references: [id], onDelete: SetNull)
-  leadTeams             Team[]                 @relation("TeamLead")
-  sentInvitations       Invitation[]           @relation("InvitationsSent")
-  acceptedInvitation    Invitation?            @relation("InvitationAccepted")
-  identityVerifications IdentityVerification[]
-  sessions              Session[]
-  leaveBalances         LeaveBalance[]
-  leaveRequests         LeaveRequest[]         @relation("UserLeaveRequests")
-  reviewedLeaveRequests LeaveRequest[]         @relation("LeaveReviews")
-  uploadedLeaveAttachments LeaveAttachment[]    @relation("LeaveAttachmentUploadedBy")
-  reviewedLeaveAttachments LeaveAttachment[]    @relation("LeaveAttachmentReviewedBy")
-  deletedLeaveAttachments  LeaveAttachment[]    @relation("LeaveAttachmentDeletedBy")
-  customApprovalPolicies   ApprovalPolicy[]     @relation("ApprovalPolicyCustomApprover")
-  leaveAdjustments      LeaveAdjustment[]      @relation("AdjustedUser")
-  createdAdjustments    LeaveAdjustment[]      @relation("AdjustmentCreator")
-  leaveGrants           LeaveGrant[]           @relation("LeaveGrantUser")
-  leaveGrantsCreated    LeaveGrant[]           @relation("LeaveGrantGrantedBy")
-  leaveGrantsRevoked    LeaveGrant[]           @relation("LeaveGrantRevokedBy")
-  leaveLedgers          LeaveLedger[]          @relation("LeaveLedgerUser")
-  createdLeaveLedgers   LeaveLedger[]          @relation("LeaveLedgerCreatedBy")
-  uploadedLeaveImportBatches LeaveImportBatch[] @relation("LeaveImportUploadedBy")
-  appliedLeaveImportBatches  LeaveImportBatch[] @relation("LeaveImportAppliedBy")
-  reversedLeaveImportBatches LeaveImportBatch[] @relation("LeaveImportReversedBy")
-  matchedLeaveImportRows     LeaveImportRow[]   @relation("LeaveImportRowMatchedUser")
-  annualLeavePoliciesApproved AnnualLeavePolicy[] @relation("AnnualLeavePolicyPromotionApprover")
-  annualLeavePromotionNotices AnnualLeavePromotionNotice[]
-  annualLeaveUsePlans AnnualLeaveUsePlan[]
-  notifications         Notification[]
-  calendarSubscriptionTokens CalendarSubscriptionToken[]
-  stepUpVerifications   StepUpVerification[]
-  attendanceRecords      AttendanceRecord[]       @relation("AttendanceRecordUser")
-  attendanceChangeRequests AttendanceChangeRequest[] @relation("AttendanceChangeRequestUser")
-  reviewedAttendanceChangeRequests AttendanceChangeRequest[] @relation("AttendanceChangeRequestReviewer")
-  attendanceMonthsClosed AttendanceMonthlyClose[] @relation("AttendanceMonthlyClosedBy")
-  attendanceMonthsReopened AttendanceMonthlyClose[] @relation("AttendanceMonthlyReopenedBy")
-  triggeredJobRuns      JobRun[]                @relation("JobRunTriggeredByUser")
-  auditLogs             AuditLog[]
-  importedEmployeeBatches EmployeeImportBatch[] @relation("EmployeeImportImportedBy")
-  linkedPrejoinProfiles EmployeePrejoinProfile[] @relation("PrejoinLinkedUser")
-  sensitiveProfile      EmployeeSensitiveProfile?
-  employmentProfile     EmploymentProfile?
-  employmentContracts   EmploymentContractProfile[]
-  compensationProfiles  CompensationProfile[]
-  familyMembers         FamilyMember[]
-  careerRecords         CareerRecord[]
-  educationRecords      EducationRecord[]
-  languageSkills        LanguageSkill[]
-  certificateRecords    CertificateRecord[]
-  projectSkillRecords   ProjectSkillRecord[]
-  trainingRecords       TrainingRecord[]
-  profileChangeRequests EmployeeProfileChangeRequest[] @relation("ProfileChangeRequestUser")
-  reviewedProfileChangeRequests EmployeeProfileChangeRequest[] @relation("ProfileChangeRequestReviewer")
-  updatedWorkTaskLocalStates WorkTaskLocalState[] @relation("WorkTaskLocalStateUpdatedBy")
-  linkedWorkTaskDocuments WorkTaskDocumentLink[] @relation("WorkTaskDocumentLinkLinkedBy")
-  checkedWorkTaskChangeRequests WorkTaskChangeRequest[] @relation("WorkTaskChangeRequestCheckedBy")
-  workTaskActivities WorkTaskActivity[] @relation("WorkTaskActivityActor")
+model User {
+  id              String     @id @default(cuid())
+  email           String     @unique
+  phone           String?    @unique
+  name            String
+  title           String?
+  teamId          String?
+  hireDate        DateTime?  @db.Date
+  birthDate       DateTime?  @db.Date
+  role            Role       @default(MANAGER)
+  status          UserStatus @default(INVITED)
+  passwordHash    String?
+  lastLoginAt     DateTime?
+  deactivatedAt   DateTime?
+  deletedAt       DateTime?
+  deletedByUserId String?
+  deletionReason  String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  profile                          EmployeeProfile?
+  deletedBy                        User?                          @relation("UserDeletedBy", fields: [deletedByUserId], references: [id], onDelete: SetNull)
+  deletedUsers                     User[]                         @relation("UserDeletedBy")
+  team                             Team?                          @relation("UserTeam", fields: [teamId], references: [id], onDelete: SetNull)
+  leadTeams                        Team[]                         @relation("TeamLead")
+  sentInvitations                  Invitation[]                   @relation("InvitationsSent")
+  acceptedInvitation               Invitation?                    @relation("InvitationAccepted")
+  identityVerifications            IdentityVerification[]
+  sessions                         Session[]
+  leaveBalances                    LeaveBalance[]
+  leaveRequests                    LeaveRequest[]                 @relation("UserLeaveRequests")
+  reviewedLeaveRequests            LeaveRequest[]                 @relation("LeaveReviews")
+  uploadedLeaveAttachments         LeaveAttachment[]              @relation("LeaveAttachmentUploadedBy")
+  reviewedLeaveAttachments         LeaveAttachment[]              @relation("LeaveAttachmentReviewedBy")
+  deletedLeaveAttachments          LeaveAttachment[]              @relation("LeaveAttachmentDeletedBy")
+  customApprovalPolicies           ApprovalPolicy[]               @relation("ApprovalPolicyCustomApprover")
+  leaveAdjustments                 LeaveAdjustment[]              @relation("AdjustedUser")
+  createdAdjustments               LeaveAdjustment[]              @relation("AdjustmentCreator")
+  leaveGrants                      LeaveGrant[]                   @relation("LeaveGrantUser")
+  leaveGrantsCreated               LeaveGrant[]                   @relation("LeaveGrantGrantedBy")
+  leaveGrantsRevoked               LeaveGrant[]                   @relation("LeaveGrantRevokedBy")
+  leaveLedgers                     LeaveLedger[]                  @relation("LeaveLedgerUser")
+  createdLeaveLedgers              LeaveLedger[]                  @relation("LeaveLedgerCreatedBy")
+  uploadedLeaveImportBatches       LeaveImportBatch[]             @relation("LeaveImportUploadedBy")
+  appliedLeaveImportBatches        LeaveImportBatch[]             @relation("LeaveImportAppliedBy")
+  reversedLeaveImportBatches       LeaveImportBatch[]             @relation("LeaveImportReversedBy")
+  matchedLeaveImportRows           LeaveImportRow[]               @relation("LeaveImportRowMatchedUser")
+  annualLeavePoliciesApproved      AnnualLeavePolicy[]            @relation("AnnualLeavePolicyPromotionApprover")
+  annualLeavePromotionNotices      AnnualLeavePromotionNotice[]
+  annualLeaveUsePlans              AnnualLeaveUsePlan[]
+  notifications                    Notification[]
+  calendarSubscriptionTokens       CalendarSubscriptionToken[]
+  stepUpVerifications              StepUpVerification[]
+  attendanceRecords                AttendanceRecord[]             @relation("AttendanceRecordUser")
+  attendanceChangeRequests         AttendanceChangeRequest[]      @relation("AttendanceChangeRequestUser")
+  reviewedAttendanceChangeRequests AttendanceChangeRequest[]      @relation("AttendanceChangeRequestReviewer")
+  attendanceMonthsClosed           AttendanceMonthlyClose[]       @relation("AttendanceMonthlyClosedBy")
+  attendanceMonthsReopened         AttendanceMonthlyClose[]       @relation("AttendanceMonthlyReopenedBy")
+  triggeredJobRuns                 JobRun[]                       @relation("JobRunTriggeredByUser")
+  auditLogs                        AuditLog[]
+  importedEmployeeBatches          EmployeeImportBatch[]          @relation("EmployeeImportImportedBy")
+  linkedPrejoinProfiles            EmployeePrejoinProfile[]       @relation("PrejoinLinkedUser")
+  sensitiveProfile                 EmployeeSensitiveProfile?
+  employmentProfile                EmploymentProfile?
+  employmentContracts              EmploymentContractProfile[]
+  compensationProfiles             CompensationProfile[]
+  familyMembers                    FamilyMember[]
+  careerRecords                    CareerRecord[]
+  educationRecords                 EducationRecord[]
+  languageSkills                   LanguageSkill[]
+  certificateRecords               CertificateRecord[]
+  projectSkillRecords              ProjectSkillRecord[]
+  trainingRecords                  TrainingRecord[]
+  profileChangeRequests            EmployeeProfileChangeRequest[] @relation("ProfileChangeRequestUser")
+  reviewedProfileChangeRequests    EmployeeProfileChangeRequest[] @relation("ProfileChangeRequestReviewer")
+  updatedWorkTaskLocalStates       WorkTaskLocalState[]           @relation("WorkTaskLocalStateUpdatedBy")
+  linkedWorkTaskDocuments          WorkTaskDocumentLink[]         @relation("WorkTaskDocumentLinkLinkedBy")
+  checkedWorkTaskChangeRequests    WorkTaskChangeRequest[]        @relation("WorkTaskChangeRequestCheckedBy")
+  workTaskActivities               WorkTaskActivity[]             @relation("WorkTaskActivityActor")
+  updatedClickUpTeamSyncConfigs    ClickUpTeamSyncConfig[]        @relation("ClickUpTeamSyncConfigUpdatedBy")
+  createdWorkTaskRelations         WorkTaskRelation[]             @relation("WorkTaskRelationCreatedBy")
 
   @@index([status])
   @@index([role])
@@ -814,37 +830,40 @@ model Team {
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
-  parent      Team?             @relation("TeamHierarchy", fields: [parentTeamId], references: [id], onDelete: SetNull)
-  children    Team[]            @relation("TeamHierarchy")
-  lead        User?             @relation("TeamLead", fields: [leadUserId], references: [id], onDelete: SetNull)
-  members     User[]            @relation("UserTeam")
-  profiles    EmployeeProfile[]
-  invitations Invitation[]
+  parent                     Team?                       @relation("TeamHierarchy", fields: [parentTeamId], references: [id], onDelete: SetNull)
+  children                   Team[]                      @relation("TeamHierarchy")
+  lead                       User?                       @relation("TeamLead", fields: [leadUserId], references: [id], onDelete: SetNull)
+  members                    User[]                      @relation("UserTeam")
+  profiles                   EmployeeProfile[]
+  invitations                Invitation[]
   calendarSubscriptionTokens CalendarSubscriptionToken[]
-  workTaskLocalStates WorkTaskLocalState[] @relation("WorkTaskLocalStateTeam")
+  workTaskLocalStates        WorkTaskLocalState[]        @relation("WorkTaskLocalStateTeam")
+  clickUpTeamSyncConfigs     ClickUpTeamSyncConfig[]     @relation("ClickUpTeamSyncConfigTeam")
+  sourcedClickUpTasks        ClickUpTaskMirror[]         @relation("ClickUpTaskSourceTeam")
+  sourcedClickUpDocs         ClickUpDocMirror[]          @relation("ClickUpDocSourceTeam")
 
+  @@unique([parentTeamId, name])
   @@index([parentTeamId])
   @@index([leadUserId])
   @@index([status])
-  @@unique([parentTeamId, name])
 }
 
 model CalendarSubscriptionToken {
-  id              String   @id @default(cuid())
-  userId          String
-  tokenHash       String   @unique
-  scope           CalendarSubscriptionScope
-  teamId          String?
-  name            String?
-  isEnabled       Boolean  @default(true)
-  lastUsedAt      DateTime?
-  revokedAt       DateTime?
-  expiresAt       DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id         String                    @id @default(cuid())
+  userId     String
+  tokenHash  String                    @unique
+  scope      CalendarSubscriptionScope
+  teamId     String?
+  name       String?
+  isEnabled  Boolean                   @default(true)
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+  expiresAt  DateTime?
+  createdAt  DateTime                  @default(now())
+  updatedAt  DateTime                  @updatedAt
 
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  team            Team?    @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team Team? @relation(fields: [teamId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([scope])
@@ -862,7 +881,7 @@ model StepUpVerification {
   revokedAt  DateTime?
   createdAt  DateTime      @default(now())
 
-  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([purpose])
@@ -872,31 +891,31 @@ model StepUpVerification {
 }
 
 model EmployeeProfile {
-  id            String    @id @default(cuid())
-  userId        String    @unique
-  teamId        String?
-  jobTitle      String?
-  hireDate      DateTime? @db.Date
-  birthday      DateTime? @db.Date
-  employeeNumber String?
-  legalName      String?
-  displayName    String?
-  englishName    String?
-  birthDate      DateTime? @db.Date
-  legalGender    String?
-  personalEmail  String?
-  phoneCountryCode String?
-  phoneNumber    String?
-  nationalityCode String?
-  residenceCountry String?
-  visaStatus     String?
-  address        String?
-  postalCode     String?
+  id                 String    @id @default(cuid())
+  userId             String    @unique
+  teamId             String?
+  jobTitle           String?
+  hireDate           DateTime? @db.Date
+  birthday           DateTime? @db.Date
+  employeeNumber     String?
+  legalName          String?
+  displayName        String?
+  englishName        String?
+  birthDate          DateTime? @db.Date
+  legalGender        String?
+  personalEmail      String?
+  phoneCountryCode   String?
+  phoneNumber        String?
+  nationalityCode    String?
+  residenceCountry   String?
+  visaStatus         String?
+  address            String?
+  postalCode         String?
   profileCompletedAt DateTime?
-  lastConfirmedAt DateTime?
-  deactivatedAt DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  lastConfirmedAt    DateTime?
+  deactivatedAt      DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
   team Team? @relation(fields: [teamId], references: [id], onDelete: SetNull)
@@ -916,7 +935,7 @@ model EmployeeImportBatch {
   errorSummary     String?
   createdAt        DateTime                  @default(now())
 
-  importedByUser User? @relation("EmployeeImportImportedBy", fields: [importedByUserId], references: [id], onDelete: SetNull)
+  importedByUser User?                    @relation("EmployeeImportImportedBy", fields: [importedByUserId], references: [id], onDelete: SetNull)
   profiles       EmployeePrejoinProfile[]
 
   @@index([status])
@@ -924,56 +943,56 @@ model EmployeeImportBatch {
 }
 
 model EmployeePrejoinProfile {
-  id             String                       @id @default(cuid())
-  importBatchId  String?
-  employeeNumber String?
-  legalName      String
-  displayName    String?
-  companyEmail   String
-  personalEmail  String?
-  phoneNumber    String?
-  employmentStatus String?
-  title          String?
-  position       String?
-  jobGrade       String?
-  roleSuggestion Role?
-  teamName       String?
-  teamCode       String?
-  hireDate       DateTime?                    @db.Date
-  groupHireDate  DateTime?                    @db.Date
-  birthDate      DateTime?                    @db.Date
-  englishName    String?
-  legalGender    String?
-  phoneCountryCode String?
-  nationalityCode String?
-  residenceCountry String?
-  visaStatus     String?
-  address        String?
-  postalCode     String?
-  residentIdEncrypted String?
-  bankCode       String?
-  bankName       String?
-  bankAccountEncrypted String?
-  bankAccountHolder String?
-  swiftCode      String?
+  id                      String                       @id @default(cuid())
+  importBatchId           String?
+  employeeNumber          String?
+  legalName               String
+  displayName             String?
+  companyEmail            String
+  personalEmail           String?
+  phoneNumber             String?
+  employmentStatus        String?
+  title                   String?
+  position                String?
+  jobGrade                String?
+  roleSuggestion          Role?
+  teamName                String?
+  teamCode                String?
+  hireDate                DateTime?                    @db.Date
+  groupHireDate           DateTime?                    @db.Date
+  birthDate               DateTime?                    @db.Date
+  englishName             String?
+  legalGender             String?
+  phoneCountryCode        String?
+  nationalityCode         String?
+  residenceCountry        String?
+  visaStatus              String?
+  address                 String?
+  postalCode              String?
+  residentIdEncrypted     String?
+  bankCode                String?
+  bankName                String?
+  bankAccountEncrypted    String?
+  bankAccountHolder       String?
+  swiftCode               String?
   veteranOrDisabledStatus String?
-  disabilityGrade String?
-  sourceStatus   EmployeePrejoinProfileStatus @default(IMPORTED)
-  linkedUserId   String?
-  linkedInvitationId String?
-  createdAt      DateTime                     @default(now())
-  updatedAt      DateTime                     @updatedAt
+  disabilityGrade         String?
+  sourceStatus            EmployeePrejoinProfileStatus @default(IMPORTED)
+  linkedUserId            String?
+  linkedInvitationId      String?
+  createdAt               DateTime                     @default(now())
+  updatedAt               DateTime                     @updatedAt
 
-  importBatch    EmployeeImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
-  linkedUser     User?                @relation("PrejoinLinkedUser", fields: [linkedUserId], references: [id], onDelete: SetNull)
-  invitations    Invitation[]         @relation("InvitationPrejoin")
-  families       FamilyMemberDraft[]
-  careers        CareerRecordDraft[]
-  educations     EducationRecordDraft[]
-  languages      LanguageSkillDraft[]
-  certificates   CertificateRecordDraft[]
-  projectSkills  ProjectSkillRecordDraft[]
-  trainings      TrainingRecordDraft[]
+  importBatch   EmployeeImportBatch?      @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
+  linkedUser    User?                     @relation("PrejoinLinkedUser", fields: [linkedUserId], references: [id], onDelete: SetNull)
+  invitations   Invitation[]              @relation("InvitationPrejoin")
+  families      FamilyMemberDraft[]
+  careers       CareerRecordDraft[]
+  educations    EducationRecordDraft[]
+  languages     LanguageSkillDraft[]
+  certificates  CertificateRecordDraft[]
+  projectSkills ProjectSkillRecordDraft[]
+  trainings     TrainingRecordDraft[]
 
   @@unique([companyEmail])
   @@index([employeeNumber])
@@ -982,46 +1001,46 @@ model EmployeePrejoinProfile {
 }
 
 model Invitation {
-  id             String           @id @default(cuid())
-  email          String
-  name           String?
-  expectedName   String
-  role           Role             @default(MANAGER)
-  teamId         String?
-  title          String?
-  jobTitle       String?
-  hireDate       DateTime?        @db.Date
-  birthDate      DateTime?        @db.Date
-  birthday       DateTime?        @db.Date
-  tokenHash      String           @unique
-  shortTokenHash String?          @unique
-  shortTokenExpiresAt DateTime?
-  shortTokenConsumedAt DateTime?
-  shortTokenRevokedAt DateTime?
-  status         InvitationStatus @default(PENDING)
-  expiresAt      DateTime
-  usedAt         DateTime?
-  acceptedAt     DateTime?
-  cancelledAt    DateTime?
-  invitedByUserId String?
-  acceptedByUserId String?
-  createdById    String?
-  acceptedUserId String?          @unique
-  employeePrejoinProfileId String?
-  verificationCodeHash String?
-  verificationCodeExpiresAt DateTime?
-  verificationCodeConsumedAt DateTime?
-  verificationCodeRevokedAt DateTime?
-  verificationCodeAttemptCount Int @default(0)
-  verificationCodeMaxAttempts Int @default(5)
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  id                           String           @id @default(cuid())
+  email                        String
+  name                         String?
+  expectedName                 String
+  role                         Role             @default(MANAGER)
+  teamId                       String?
+  title                        String?
+  jobTitle                     String?
+  hireDate                     DateTime?        @db.Date
+  birthDate                    DateTime?        @db.Date
+  birthday                     DateTime?        @db.Date
+  tokenHash                    String           @unique
+  shortTokenHash               String?          @unique
+  shortTokenExpiresAt          DateTime?
+  shortTokenConsumedAt         DateTime?
+  shortTokenRevokedAt          DateTime?
+  status                       InvitationStatus @default(PENDING)
+  expiresAt                    DateTime
+  usedAt                       DateTime?
+  acceptedAt                   DateTime?
+  cancelledAt                  DateTime?
+  invitedByUserId              String?
+  acceptedByUserId             String?
+  createdById                  String?
+  acceptedUserId               String?          @unique
+  employeePrejoinProfileId     String?
+  verificationCodeHash         String?
+  verificationCodeExpiresAt    DateTime?
+  verificationCodeConsumedAt   DateTime?
+  verificationCodeRevokedAt    DateTime?
+  verificationCodeAttemptCount Int              @default(0)
+  verificationCodeMaxAttempts  Int              @default(5)
+  createdAt                    DateTime         @default(now())
+  updatedAt                    DateTime         @updatedAt
 
-  team                  Team?                  @relation(fields: [teamId], references: [id], onDelete: SetNull)
-  createdBy             User?                  @relation("InvitationsSent", fields: [createdById], references: [id], onDelete: SetNull)
-  acceptedUser          User?                  @relation("InvitationAccepted", fields: [acceptedUserId], references: [id], onDelete: SetNull)
+  team                   Team?                   @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  createdBy              User?                   @relation("InvitationsSent", fields: [createdById], references: [id], onDelete: SetNull)
+  acceptedUser           User?                   @relation("InvitationAccepted", fields: [acceptedUserId], references: [id], onDelete: SetNull)
   employeePrejoinProfile EmployeePrejoinProfile? @relation("InvitationPrejoin", fields: [employeePrejoinProfileId], references: [id], onDelete: SetNull)
-  identityVerifications IdentityVerification[]
+  identityVerifications  IdentityVerification[]
 
   @@index([email])
   @@index([status])
@@ -1031,15 +1050,15 @@ model Invitation {
 }
 
 model IdentityVerification {
-  id             String   @id @default(cuid())
-  userId         String?
-  invitationId   String?
-  provider       String
-  verifiedName   String
-  verifiedPhone  String
-  providerRef    String?
-  verifiedAt     DateTime
-  createdAt      DateTime @default(now())
+  id            String   @id @default(cuid())
+  userId        String?
+  invitationId  String?
+  provider      String
+  verifiedName  String
+  verifiedPhone String
+  providerRef   String?
+  verifiedAt    DateTime
+  createdAt     DateTime @default(now())
 
   user       User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
   invitation Invitation? @relation(fields: [invitationId], references: [id], onDelete: SetNull)
@@ -1050,16 +1069,16 @@ model IdentityVerification {
 }
 
 model Session {
-  id        String    @id @default(cuid())
-  userId    String
-  tokenHash String    @unique
-  expiresAt DateTime
-  rememberMe Boolean  @default(false)
-  revokedAt DateTime?
+  id            String    @id @default(cuid())
+  userId        String
+  tokenHash     String    @unique
+  expiresAt     DateTime
+  rememberMe    Boolean   @default(false)
+  revokedAt     DateTime?
   revokedReason String?
-  createdAt DateTime  @default(now())
-  lastSeenAt DateTime?
-  lastUsedAt DateTime?
+  createdAt     DateTime  @default(now())
+  lastSeenAt    DateTime?
+  lastUsedAt    DateTime?
   ipAddressHash String?
   userAgentHash String?
 
@@ -1103,36 +1122,36 @@ model LeavePolicy {
 }
 
 model LeaveTypeDefinition {
-  id                        String                    @id @default(cuid())
-  code                      String                    @unique
+  id                        String                  @id @default(cuid())
+  code                      String                  @unique
   name                      String
   description               String?
   category                  LeaveCategory
-  isSystemRequired          Boolean                   @default(false)
-  isEnabled                 Boolean                   @default(true)
-  isPaid                    Boolean                   @default(true)
-  paidRate                  Float                     @default(1.0)
-  grantMethod               LeaveGrantMethod          @default(MANUAL)
+  isSystemRequired          Boolean                 @default(false)
+  isEnabled                 Boolean                 @default(true)
+  isPaid                    Boolean                 @default(true)
+  paidRate                  Float                   @default(1.0)
+  grantMethod               LeaveGrantMethod        @default(MANUAL)
   grantAmount               Float?
-  grantUnit                 LeaveGrantUnit            @default(DAY)
-  usageMode                 LeaveUsageMode            @default(SPLIT_ALLOWED)
+  grantUnit                 LeaveGrantUnit          @default(DAY)
+  usageMode                 LeaveUsageMode          @default(SPLIT_ALLOWED)
   allowedUnits              String
-  unusedRemainderHandling   UnusedRemainderHandling   @default(KEEP_REMAINING)
-  deductsAnnualBalance      Boolean                   @default(false)
-  attachmentPolicy          AttachmentPolicy          @default(NOT_REQUIRED)
+  unusedRemainderHandling   UnusedRemainderHandling @default(KEEP_REMAINING)
+  deductsAnnualBalance      Boolean                 @default(false)
+  attachmentPolicy          AttachmentPolicy        @default(NOT_REQUIRED)
   attachmentDescription     String?
-  includeHolidayInDeduction Boolean                   @default(false)
-  visibility                LeaveVisibility           @default(PUBLIC_WITH_TYPE)
+  includeHolidayInDeduction Boolean                 @default(false)
+  visibility                LeaveVisibility         @default(PUBLIC_WITH_TYPE)
   approvalPolicyId          String?
-  createdAt                 DateTime                  @default(now())
-  updatedAt                 DateTime                  @updatedAt
+  createdAt                 DateTime                @default(now())
+  updatedAt                 DateTime                @updatedAt
 
-  grants                    LeaveGrant[]
-  birthdayLeavePolicies     BirthdayLeavePolicy[]
-  leaveRequests             LeaveRequest[]           @relation("CustomLeaveTypeRequests")
-  leaveLedgers              LeaveLedger[]
-  approvalPolicy            ApprovalPolicy?          @relation("LeaveTypeAssignedApprovalPolicy", fields: [approvalPolicyId], references: [id], onDelete: SetNull)
-  appliedApprovalPolicies   ApprovalPolicy[]         @relation("ApprovalPolicyAppliesToLeaveType")
+  grants                  LeaveGrant[]
+  birthdayLeavePolicies   BirthdayLeavePolicy[]
+  leaveRequests           LeaveRequest[]        @relation("CustomLeaveTypeRequests")
+  leaveLedgers            LeaveLedger[]
+  approvalPolicy          ApprovalPolicy?       @relation("LeaveTypeAssignedApprovalPolicy", fields: [approvalPolicyId], references: [id], onDelete: SetNull)
+  appliedApprovalPolicies ApprovalPolicy[]      @relation("ApprovalPolicyAppliesToLeaveType")
 
   @@index([category])
   @@index([isEnabled])
@@ -1141,28 +1160,28 @@ model LeaveTypeDefinition {
 }
 
 model ApprovalPolicy {
-  id                       String             @id @default(cuid())
-  code                     String             @unique
-  name                     String
-  description              String?
-  appliesTo                ApprovalAppliesTo  @default(LEAVE_REQUEST)
-  leaveTypeId              String?
-  approvalMode             ApprovalMode       @default(SINGLE)
-  approverRule             ApproverRule       @default(TEAM_LEAD_OR_OWNER)
-  customApproverUserId     String?
-  requireCommentOnReject   Boolean            @default(true)
-  requireCommentOnCancel   Boolean            @default(true)
-  requireAttachmentAcceptedBeforeApproval Boolean @default(false)
-  autoApproveIfNoApprover  Boolean            @default(false)
-  autoConfirmWhenStartDatePassed Boolean      @default(true)
-  autoConfirmTiming        AutoConfirmTiming   @default(AFTER_START_DATE)
-  isEnabled                Boolean            @default(true)
-  createdAt                DateTime           @default(now())
-  updatedAt                DateTime           @updatedAt
+  id                                      String            @id @default(cuid())
+  code                                    String            @unique
+  name                                    String
+  description                             String?
+  appliesTo                               ApprovalAppliesTo @default(LEAVE_REQUEST)
+  leaveTypeId                             String?
+  approvalMode                            ApprovalMode      @default(SINGLE)
+  approverRule                            ApproverRule      @default(TEAM_LEAD_OR_OWNER)
+  customApproverUserId                    String?
+  requireCommentOnReject                  Boolean           @default(true)
+  requireCommentOnCancel                  Boolean           @default(true)
+  requireAttachmentAcceptedBeforeApproval Boolean           @default(false)
+  autoApproveIfNoApprover                 Boolean           @default(false)
+  autoConfirmWhenStartDatePassed          Boolean           @default(true)
+  autoConfirmTiming                       AutoConfirmTiming @default(AFTER_START_DATE)
+  isEnabled                               Boolean           @default(true)
+  createdAt                               DateTime          @default(now())
+  updatedAt                               DateTime          @updatedAt
 
-  leaveType                LeaveTypeDefinition?  @relation("ApprovalPolicyAppliesToLeaveType", fields: [leaveTypeId], references: [id], onDelete: SetNull)
-  customApprover           User?                 @relation("ApprovalPolicyCustomApprover", fields: [customApproverUserId], references: [id], onDelete: SetNull)
-  assignedLeaveTypes       LeaveTypeDefinition[] @relation("LeaveTypeAssignedApprovalPolicy")
+  leaveType          LeaveTypeDefinition?  @relation("ApprovalPolicyAppliesToLeaveType", fields: [leaveTypeId], references: [id], onDelete: SetNull)
+  customApprover     User?                 @relation("ApprovalPolicyCustomApprover", fields: [customApproverUserId], references: [id], onDelete: SetNull)
+  assignedLeaveTypes LeaveTypeDefinition[] @relation("LeaveTypeAssignedApprovalPolicy")
 
   @@index([leaveTypeId])
   @@index([customApproverUserId])
@@ -1193,112 +1212,113 @@ model LeaveGrant {
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 
-  user            User                @relation("LeaveGrantUser", fields: [userId], references: [id], onDelete: Cascade)
-  leaveType       LeaveTypeDefinition @relation(fields: [leaveTypeId], references: [id])
-  grantedByUser   User                @relation("LeaveGrantGrantedBy", fields: [grantedByUserId], references: [id])
-  revokedByUser   User?               @relation("LeaveGrantRevokedBy", fields: [revokedByUserId], references: [id])
-  requestUsages   LeaveRequestGrantUsage[]
-  leaveLedgers    LeaveLedger[]
+  user          User                     @relation("LeaveGrantUser", fields: [userId], references: [id], onDelete: Cascade)
+  leaveType     LeaveTypeDefinition      @relation(fields: [leaveTypeId], references: [id])
+  grantedByUser User                     @relation("LeaveGrantGrantedBy", fields: [grantedByUserId], references: [id])
+  revokedByUser User?                    @relation("LeaveGrantRevokedBy", fields: [revokedByUserId], references: [id])
+  requestUsages LeaveRequestGrantUsage[]
+  leaveLedgers  LeaveLedger[]
 
+  @@unique([userId, leaveTypeId, referenceYear, source])
   @@index([userId])
   @@index([leaveTypeId])
   @@index([status])
   @@index([effectiveFrom])
   @@index([expiresAt])
   @@index([referenceYear])
-  @@unique([userId, leaveTypeId, referenceYear, source])
 }
 
 model BirthdayLeavePolicy {
-  id                   String         @id @default(cuid())
-  isEnabled            Boolean        @default(true)
-  leaveTypeId          String
-  grantAmount          Float          @default(0.5)
-  grantUnit            LeaveGrantUnit @default(DAY)
-  grantDaysBefore      Int            @default(1)
-  usableDaysFromBirthday Int          @default(7)
-  adjustGrantDateToPreviousBusinessDay Boolean @default(true)
-  notifyEmployee       Boolean        @default(true)
-  createdAt            DateTime       @default(now())
-  updatedAt            DateTime       @updatedAt
+  id                                   String         @id @default(cuid())
+  isEnabled                            Boolean        @default(true)
+  leaveTypeId                          String
+  grantAmount                          Float          @default(0.5)
+  grantUnit                            LeaveGrantUnit @default(DAY)
+  grantDaysBefore                      Int            @default(1)
+  usableDaysFromBirthday               Int            @default(7)
+  adjustGrantDateToPreviousBusinessDay Boolean        @default(true)
+  notifyEmployee                       Boolean        @default(true)
+  createdAt                            DateTime       @default(now())
+  updatedAt                            DateTime       @updatedAt
 
-  leaveType            LeaveTypeDefinition @relation(fields: [leaveTypeId], references: [id])
+  leaveType LeaveTypeDefinition @relation(fields: [leaveTypeId], references: [id])
 
   @@index([leaveTypeId])
 }
 
 model AnnualLeavePolicy {
-  id                    String                     @id @default(cuid())
-  isEnabled             Boolean                    @default(true)
-  grantBasis            AnnualGrantBasis           @default(FISCAL_YEAR)
-  fiscalYearStartMonth  Int                        @default(1)
-  fiscalYearStartDay    Int                        @default(1)
-  usageUnit             AnnualLeaveUsageUnit       @default(HALF_DAY)
-  allowAdvanceUse       Boolean                    @default(false)
-  approvalOnRequest     Boolean                    @default(true)
-  approvalOnCancel      Boolean                    @default(false)
-  monthlyLeaveEnabled   Boolean                    @default(true)
-  monthlyLeaveAmount    Float                      @default(1)
-  monthlyLeaveGrantRule MonthlyLeaveGrantRule      @default(MONTHLY_FULL_ATTENDANCE)
-  firstFiscalYearGrantRule FirstFiscalYearGrantRule @default(NEEDS_CONFIRMATION)
-  annualLeaveEnabled    Boolean                    @default(true)
-  baseAnnualDays        Float                      @default(15)
-  maxAnnualDays         Float                      @default(25)
-  additionalGrantEnabled Boolean                   @default(true)
-  expirationEnabled     Boolean                    @default(true)
-  annualExpirationMonths Int                       @default(12)
-  monthlyExpirationMonths Int                      @default(12)
-  carryOverAllowed      Boolean                    @default(false)
-  promotionEnabled      Boolean                    @default(true)
-  promotionApproverUserId String?
-  memberReminderEnabled Boolean                    @default(true)
-  managerReminderEnabled Boolean                   @default(false)
-  usePlanReminderDaysBefore Int                    @default(10)
-  annualPromotionMonthsBeforeExpiration Int        @default(6)
-  monthlyPromotionFirstMonthsBeforeExpiration Int  @default(3)
-  monthlyPromotionSecondMonthsBeforeExpiration Int @default(1)
-  memo                  String?
-  createdAt             DateTime                   @default(now())
-  updatedAt             DateTime                   @updatedAt
+  id                                           String                   @id @default(cuid())
+  isEnabled                                    Boolean                  @default(true)
+  grantBasis                                   AnnualGrantBasis         @default(FISCAL_YEAR)
+  fiscalYearStartMonth                         Int                      @default(1)
+  fiscalYearStartDay                           Int                      @default(1)
+  usageUnit                                    AnnualLeaveUsageUnit     @default(HALF_DAY)
+  allowAdvanceUse                              Boolean                  @default(false)
+  approvalOnRequest                            Boolean                  @default(true)
+  approvalOnCancel                             Boolean                  @default(false)
+  monthlyLeaveEnabled                          Boolean                  @default(true)
+  monthlyLeaveAmount                           Float                    @default(1)
+  monthlyLeaveGrantRule                        MonthlyLeaveGrantRule    @default(MONTHLY_FULL_ATTENDANCE)
+  firstFiscalYearGrantRule                     FirstFiscalYearGrantRule @default(NEEDS_CONFIRMATION)
+  annualLeaveEnabled                           Boolean                  @default(true)
+  baseAnnualDays                               Float                    @default(15)
+  maxAnnualDays                                Float                    @default(25)
+  additionalGrantEnabled                       Boolean                  @default(true)
+  expirationEnabled                            Boolean                  @default(true)
+  annualExpirationMonths                       Int                      @default(12)
+  monthlyExpirationMonths                      Int                      @default(12)
+  carryOverAllowed                             Boolean                  @default(false)
+  promotionEnabled                             Boolean                  @default(true)
+  promotionApproverUserId                      String?
+  memberReminderEnabled                        Boolean                  @default(true)
+  managerReminderEnabled                       Boolean                  @default(false)
+  usePlanReminderDaysBefore                    Int                      @default(10)
+  annualPromotionMonthsBeforeExpiration        Int                      @default(6)
+  monthlyPromotionFirstMonthsBeforeExpiration  Int                      @default(3)
+  monthlyPromotionSecondMonthsBeforeExpiration Int                      @default(1)
+  memo                                         String?
+  createdAt                                    DateTime                 @default(now())
+  updatedAt                                    DateTime                 @updatedAt
 
-  promotionApprover     User?                      @relation("AnnualLeavePolicyPromotionApprover", fields: [promotionApproverUserId], references: [id], onDelete: SetNull)
+  promotionApprover User? @relation("AnnualLeavePolicyPromotionApprover", fields: [promotionApproverUserId], references: [id], onDelete: SetNull)
 
   @@index([isEnabled])
   @@index([promotionApproverUserId])
 }
 
 model AnnualLeavePromotionNotice {
-  id                   String                           @id @default(cuid())
-  userId               String
-  referenceYear        Int
-  noticeType           AnnualLeavePromotionNoticeType
-  status               AnnualLeavePromotionNoticeStatus @default(SCHEDULED)
-  scheduledDate        DateTime                         @db.Date
-  sentAt               DateTime?
-  cancelledAt          DateTime?
-  expirationDate       DateTime?                        @db.Date
-  remainingAmount      Float?
-  unit                 LeaveGrantUnit                   @default(DAY)
-  annualLeaveUsePlanId String?
-  policyVersion        String?
-  legalBasis           String?
-  noticeContent        Json?
-  availableFrom        DateTime?                        @db.Date
-  availableUntil       DateTime?                        @db.Date
-  submissionDeadline   DateTime?                        @db.Date
-  displayedAt          DateTime?
-  readAt               DateTime?
-  submittedAt          DateTime?
-  isRenotice           Boolean                          @default(false)
-  adminConfirmedAt     DateTime?
+  id                     String                           @id @default(cuid())
+  userId                 String
+  referenceYear          Int
+  noticeType             AnnualLeavePromotionNoticeType
+  status                 AnnualLeavePromotionNoticeStatus @default(SCHEDULED)
+  scheduledDate          DateTime                         @db.Date
+  sentAt                 DateTime?
+  cancelledAt            DateTime?
+  expirationDate         DateTime?                        @db.Date
+  remainingAmount        Float?
+  unit                   LeaveGrantUnit                   @default(DAY)
+  annualLeaveUsePlanId   String?
+  policyVersion          String?
+  legalBasis             String?
+  noticeContent          Json?
+  availableFrom          DateTime?                        @db.Date
+  availableUntil         DateTime?                        @db.Date
+  submissionDeadline     DateTime?                        @db.Date
+  displayedAt            DateTime?
+  readAt                 DateTime?
+  submittedAt            DateTime?
+  isRenotice             Boolean                          @default(false)
+  adminConfirmedAt       DateTime?
   adminConfirmedByUserId String?
-  notificationId       String?                          @unique
-  createdAt            DateTime                         @default(now())
-  updatedAt            DateTime                         @updatedAt
+  notificationId         String?                          @unique
+  createdAt              DateTime                         @default(now())
+  updatedAt              DateTime                         @updatedAt
 
-  user                 User                             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  annualLeaveUsePlan   AnnualLeaveUsePlan?              @relation(fields: [annualLeaveUsePlanId], references: [id], onDelete: SetNull)
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  annualLeaveUsePlan AnnualLeaveUsePlan? @relation(fields: [annualLeaveUsePlanId], references: [id], onDelete: SetNull)
 
+  @@unique([userId, referenceYear, noticeType, scheduledDate], map: "AnnualLeavePromotionNotice_userId_referenceYear_noticeType_sche")
   @@index([userId])
   @@index([referenceYear])
   @@index([noticeType])
@@ -1308,53 +1328,52 @@ model AnnualLeavePromotionNotice {
   @@index([readAt])
   @@index([submittedAt])
   @@index([adminConfirmedAt])
-  @@unique([userId, referenceYear, noticeType, scheduledDate], map: "AnnualLeavePromotionNotice_userId_referenceYear_noticeType_sche")
 }
 
 model AnnualLeaveUsePlan {
-  id                 String                    @id @default(cuid())
+  id                 String                   @id @default(cuid())
   userId             String
   referenceYear      Int
-  status             AnnualLeaveUsePlanStatus  @default(DRAFT)
-  totalPlannedAmount Float                     @default(0)
-  unit               LeaveGrantUnit            @default(DAY)
+  status             AnnualLeaveUsePlanStatus @default(DRAFT)
+  totalPlannedAmount Float                    @default(0)
+  unit               LeaveGrantUnit           @default(DAY)
   submittedAt        DateTime?
   cancelledAt        DateTime?
   memo               String?
-  createdAt          DateTime                  @default(now())
-  updatedAt          DateTime                  @updatedAt
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
 
-  user               User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  items              AnnualLeaveUsePlanItem[]
-  notices            AnnualLeavePromotionNotice[]
+  user    User                         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items   AnnualLeaveUsePlanItem[]
+  notices AnnualLeavePromotionNotice[]
 
+  @@unique([userId, referenceYear])
   @@index([userId])
   @@index([referenceYear])
   @@index([status])
-  @@unique([userId, referenceYear])
 }
 
 model AnnualLeaveUsePlanItem {
-  id            String              @id @default(cuid())
-  usePlanId     String
-  plannedDate   DateTime            @db.Date
-  plannedStartDate DateTime?        @db.Date
-  plannedEndDate DateTime?          @db.Date
-  usageType     AnnualLeaveUsePlanUsageType?
+  id               String                       @id @default(cuid())
+  usePlanId        String
+  plannedDate      DateTime                     @db.Date
+  plannedStartDate DateTime?                    @db.Date
+  plannedEndDate   DateTime?                    @db.Date
+  usageType        AnnualLeaveUsePlanUsageType?
   calculatedAmount Float?
-  amount        Float
-  unit          LeaveGrantUnit       @default(DAY)
-  halfDayPeriod HalfDayPeriod?
-  memo          String?
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
+  amount           Float
+  unit             LeaveGrantUnit               @default(DAY)
+  halfDayPeriod    HalfDayPeriod?
+  memo             String?
+  createdAt        DateTime                     @default(now())
+  updatedAt        DateTime                     @updatedAt
 
-  usePlan       AnnualLeaveUsePlan  @relation(fields: [usePlanId], references: [id], onDelete: Cascade)
+  usePlan AnnualLeaveUsePlan @relation(fields: [usePlanId], references: [id], onDelete: Cascade)
 
+  @@unique([usePlanId, plannedDate, halfDayPeriod])
   @@index([usePlanId])
   @@index([plannedDate])
   @@index([plannedStartDate])
-  @@unique([usePlanId, plannedDate, halfDayPeriod])
 }
 
 model AnnualLeaveExpirationRun {
@@ -1373,7 +1392,7 @@ model AnnualLeaveExpirationRun {
 }
 
 model Notification {
-  id        String           @id @default(cuid())
+  id        String               @id @default(cuid())
   userId    String
   type      NotificationType
   priority  NotificationPriority @default(NORMAL)
@@ -1382,9 +1401,9 @@ model Notification {
   linkUrl   String?
   metadata  Json?
   readAt    DateTime?
-  createdAt DateTime         @default(now())
+  createdAt DateTime             @default(now())
 
-  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([type])
@@ -1394,12 +1413,12 @@ model Notification {
 }
 
 model JobRun {
-  id                String          @id @default(cuid())
+  id                String         @id @default(cuid())
   jobName           String
-  status            JobRunStatus    @default(RUNNING)
+  status            JobRunStatus   @default(RUNNING)
   triggeredBy       JobTriggeredBy
   triggeredByUserId String?
-  startedAt         DateTime        @default(now())
+  startedAt         DateTime       @default(now())
   finishedAt        DateTime?
   checkedCount      Int?
   createdCount      Int?
@@ -1408,10 +1427,10 @@ model JobRun {
   failedCount       Int?
   resultSummary     Json?
   errorSummary      String?
-  dryRun            Boolean         @default(false)
-  createdAt         DateTime        @default(now())
+  dryRun            Boolean        @default(false)
+  createdAt         DateTime       @default(now())
 
-  triggeredByUser   User?           @relation("JobRunTriggeredByUser", fields: [triggeredByUserId], references: [id], onDelete: SetNull)
+  triggeredByUser User? @relation("JobRunTriggeredByUser", fields: [triggeredByUserId], references: [id], onDelete: SetNull)
 
   @@index([jobName])
   @@index([status])
@@ -1420,49 +1439,49 @@ model JobRun {
 }
 
 model EmployeeSensitiveProfile {
-  id                    String   @id @default(cuid())
-  userId                String   @unique
-  residentIdEncrypted   String?
-  bankCode              String?
-  bankName              String?
-  bankAccountEncrypted  String?
-  bankAccountHolder     String?
-  swiftCode             String?
+  id                      String   @id @default(cuid())
+  userId                  String   @unique
+  residentIdEncrypted     String?
+  bankCode                String?
+  bankName                String?
+  bankAccountEncrypted    String?
+  bankAccountHolder       String?
+  swiftCode               String?
   veteranOrDisabledStatus String?
-  disabilityGrade       String?
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  disabilityGrade         String?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 
-  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model EmploymentProfile {
-  id                 String   @id @default(cuid())
-  userId             String   @unique
-  hireDate           DateTime? @db.Date
-  groupHireDate      DateTime? @db.Date
-  hireType           String?
-  primaryJob         String?
-  additionalJob      String?
-  jobGroup           String?
-  organizationName   String?
-  organizationCode   String?
-  isPrimaryOrganization Boolean?
-  isOrganizationLeader Boolean?
-  jobTitle           String?
-  position           String?
-  jobGrade           String?
-  lastPositionChangedAt DateTime? @db.Date
-  retirementDate     DateTime? @db.Date
+  id                            String    @id @default(cuid())
+  userId                        String    @unique
+  hireDate                      DateTime? @db.Date
+  groupHireDate                 DateTime? @db.Date
+  hireType                      String?
+  primaryJob                    String?
+  additionalJob                 String?
+  jobGroup                      String?
+  organizationName              String?
+  organizationCode              String?
+  isPrimaryOrganization         Boolean?
+  isOrganizationLeader          Boolean?
+  jobTitle                      String?
+  position                      String?
+  jobGrade                      String?
+  lastPositionChangedAt         DateTime? @db.Date
+  retirementDate                DateTime? @db.Date
   employmentInsuranceLossReason String?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  createdAt                     DateTime  @default(now())
+  updatedAt                     DateTime  @updatedAt
 
-  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model EmploymentContractProfile {
-  id                 String   @id @default(cuid())
+  id                 String    @id @default(cuid())
   userId             String
   contractType       String?
   contractStartDate  DateTime? @db.Date
@@ -1471,96 +1490,96 @@ model EmploymentContractProfile {
   probationEndDate   DateTime? @db.Date
   probationPayRate   Float?
   changeMemo         String?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
-  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
 
 model CompensationProfile {
-  id                 String   @id @default(cuid())
-  userId             String
-  incomeType         String?
+  id                    String    @id @default(cuid())
+  userId                String
+  incomeType            String?
   wageContractStartDate DateTime? @db.Date
-  wageContractEndDate DateTime? @db.Date
-  paymentType        String?
-  contractAmount     Float?
+  wageContractEndDate   DateTime? @db.Date
+  paymentType           String?
+  contractAmount        Float?
   inclusiveWageContract Boolean?
-  inclusiveWageBasis String?
-  ordinaryHourlyWage Float?
-  appliedAt          DateTime? @db.Date
-  baseMonthlyPay     Float?
-  baseHourlyPay      Float?
-  fixedOvertimePay   Float?
-  mealAllowance      Float?
-  vehicleAllowance   Float?
-  childcareAllowance Float?
-  researchAllowance  Float?
-  changeMemo         String?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  inclusiveWageBasis    String?
+  ordinaryHourlyWage    Float?
+  appliedAt             DateTime? @db.Date
+  baseMonthlyPay        Float?
+  baseHourlyPay         Float?
+  fixedOvertimePay      Float?
+  mealAllowance         Float?
+  vehicleAllowance      Float?
+  childcareAllowance    Float?
+  researchAllowance     Float?
+  changeMemo            String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
-  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
 
 model FamilyMember {
-  id                 String   @id @default(cuid())
-  userId             String
-  name               String
-  relationship       String?
-  phoneNumber        String?
-  residentIdEncrypted String?
-  basicDeduction     Boolean?
+  id                          String   @id @default(cuid())
+  userId                      String
+  name                        String
+  relationship                String?
+  phoneNumber                 String?
+  residentIdEncrypted         String?
+  basicDeduction              Boolean?
   incomeDeductionRelationCode String?
-  childTaxCredit     Boolean?
-  healthInsuranceDependent Boolean?
-  dependentRelationCode String?
-  veteranOrDisabledStatus String?
-  disabilityGrade    String?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  childTaxCredit              Boolean?
+  healthInsuranceDependent    Boolean?
+  dependentRelationCode       String?
+  veteranOrDisabledStatus     String?
+  disabilityGrade             String?
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
 
-  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
 
 model CareerRecord {
-  id             String   @id @default(cuid())
-  userId         String
-  companyName    String
-  contractType   String?
-  joinedMonth    String?
-  leftMonth      String?
-  job            String?
-  organization   String?
-  position       String?
-  title          String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id           String   @id @default(cuid())
+  userId       String
+  companyName  String
+  contractType String?
+  joinedMonth  String?
+  leftMonth    String?
+  job          String?
+  organization String?
+  position     String?
+  title        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
 
 model EducationRecord {
-  id             String   @id @default(cuid())
-  userId         String
-  schoolType     String?
-  schoolName     String?
+  id               String   @id @default(cuid())
+  userId           String
+  schoolType       String?
+  schoolName       String?
   graduationStatus String?
-  major          String?
-  entranceMonth  String?
-  graduationMonth String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  major            String?
+  entranceMonth    String?
+  graduationMonth  String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
@@ -1573,75 +1592,75 @@ model LanguageSkill {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
 
 model CertificateRecord {
-  id             String   @id @default(cuid())
-  userId         String
-  name           String
-  gradeOrScore   String?
-  acquiredAt     DateTime? @db.Date
-  issuer         String?
-  validUntil     DateTime? @db.Date
+  id                String    @id @default(cuid())
+  userId            String
+  name              String
+  gradeOrScore      String?
+  acquiredAt        DateTime? @db.Date
+  issuer            String?
+  validUntil        DateTime? @db.Date
   certificateNumber String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
 
 model ProjectSkillRecord {
-  id          String   @id @default(cuid())
-  userId      String
-  title       String?
-  content     String?
-  period      String?
-  project     String?
-  skills      String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(cuid())
+  userId    String
+  title     String?
+  content   String?
+  period    String?
+  project   String?
+  skills    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
 
 model TrainingRecord {
-  id              String   @id @default(cuid())
-  userId          String
-  name            String
-  trainingDate    DateTime? @db.Date
-  type            String?
-  institution     String?
-  category        String?
-  totalHours      Float?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id           String    @id @default(cuid())
+  userId       String
+  name         String
+  trainingDate DateTime? @db.Date
+  type         String?
+  institution  String?
+  category     String?
+  totalHours   Float?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
 
 model EmployeeProfileChangeRequest {
-  id             String                     @id @default(cuid())
-  userId         String
-  section        EmployeeProfileSection
-  status         ProfileChangeRequestStatus @default(PENDING)
+  id               String                     @id @default(cuid())
+  userId           String
+  section          EmployeeProfileSection
+  status           ProfileChangeRequestStatus @default(PENDING)
   requestedChanges Json
-  beforeSnapshot    Json?
-  reviewComment     String?
-  requestedAt    DateTime                   @default(now())
-  reviewedAt     DateTime?
+  beforeSnapshot   Json?
+  reviewComment    String?
+  requestedAt      DateTime                   @default(now())
+  reviewedAt       DateTime?
   reviewedByUserId String?
 
-  user           User                       @relation("ProfileChangeRequestUser", fields: [userId], references: [id], onDelete: Cascade)
-  reviewedBy     User?                      @relation("ProfileChangeRequestReviewer", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  user       User  @relation("ProfileChangeRequestUser", fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy User? @relation("ProfileChangeRequestReviewer", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([status])
@@ -1649,16 +1668,16 @@ model EmployeeProfileChangeRequest {
 }
 
 model FamilyMemberDraft {
-  id                 String   @id @default(cuid())
-  prejoinProfileId   String
-  name               String
-  relationship       String?
-  phoneNumber        String?
+  id                  String   @id @default(cuid())
+  prejoinProfileId    String
+  name                String
+  relationship        String?
+  phoneNumber         String?
   residentIdEncrypted String?
-  raw                Json?
-  createdAt          DateTime @default(now())
+  raw                 Json?
+  createdAt           DateTime @default(now())
 
-  prejoinProfile     EmployeePrejoinProfile @relation(fields: [prejoinProfileId], references: [id], onDelete: Cascade)
+  prejoinProfile EmployeePrejoinProfile @relation(fields: [prejoinProfileId], references: [id], onDelete: Cascade)
 
   @@index([prejoinProfileId])
 }
@@ -1676,7 +1695,7 @@ model CareerRecordDraft {
   title            String?
   createdAt        DateTime @default(now())
 
-  prejoinProfile   EmployeePrejoinProfile @relation(fields: [prejoinProfileId], references: [id], onDelete: Cascade)
+  prejoinProfile EmployeePrejoinProfile @relation(fields: [prejoinProfileId], references: [id], onDelete: Cascade)
 
   @@index([prejoinProfileId])
 }
@@ -1692,7 +1711,7 @@ model EducationRecordDraft {
   graduationMonth  String?
   createdAt        DateTime @default(now())
 
-  prejoinProfile   EmployeePrejoinProfile @relation(fields: [prejoinProfileId], references: [id], onDelete: Cascade)
+  prejoinProfile EmployeePrejoinProfile @relation(fields: [prejoinProfileId], references: [id], onDelete: Cascade)
 
   @@index([prejoinProfileId])
 }
@@ -1704,23 +1723,23 @@ model LanguageSkillDraft {
   level            String?
   createdAt        DateTime @default(now())
 
-  prejoinProfile   EmployeePrejoinProfile @relation(fields: [prejoinProfileId], references: [id], onDelete: Cascade)
+  prejoinProfile EmployeePrejoinProfile @relation(fields: [prejoinProfileId], references: [id], onDelete: Cascade)
 
   @@index([prejoinProfileId])
 }
 
 model CertificateRecordDraft {
-  id               String   @id @default(cuid())
-  prejoinProfileId String
-  name             String
-  gradeOrScore     String?
-  acquiredAt       DateTime? @db.Date
-  issuer           String?
-  validUntil       DateTime? @db.Date
+  id                String    @id @default(cuid())
+  prejoinProfileId  String
+  name              String
+  gradeOrScore      String?
+  acquiredAt        DateTime? @db.Date
+  issuer            String?
+  validUntil        DateTime? @db.Date
   certificateNumber String?
-  createdAt        DateTime @default(now())
+  createdAt         DateTime  @default(now())
 
-  prejoinProfile   EmployeePrejoinProfile @relation(fields: [prejoinProfileId], references: [id], onDelete: Cascade)
+  prejoinProfile EmployeePrejoinProfile @relation(fields: [prejoinProfileId], references: [id], onDelete: Cascade)
 
   @@index([prejoinProfileId])
 }
@@ -1735,13 +1754,13 @@ model ProjectSkillRecordDraft {
   skills           String?
   createdAt        DateTime @default(now())
 
-  prejoinProfile   EmployeePrejoinProfile @relation(fields: [prejoinProfileId], references: [id], onDelete: Cascade)
+  prejoinProfile EmployeePrejoinProfile @relation(fields: [prejoinProfileId], references: [id], onDelete: Cascade)
 
   @@index([prejoinProfileId])
 }
 
 model TrainingRecordDraft {
-  id               String   @id @default(cuid())
+  id               String    @id @default(cuid())
   prejoinProfileId String
   name             String
   trainingDate     DateTime? @db.Date
@@ -1749,27 +1768,27 @@ model TrainingRecordDraft {
   institution      String?
   category         String?
   totalHours       Float?
-  createdAt        DateTime @default(now())
+  createdAt        DateTime  @default(now())
 
-  prejoinProfile   EmployeePrejoinProfile @relation(fields: [prejoinProfileId], references: [id], onDelete: Cascade)
+  prejoinProfile EmployeePrejoinProfile @relation(fields: [prejoinProfileId], references: [id], onDelete: Cascade)
 
   @@index([prejoinProfileId])
 }
 
 model LeaveBalance {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   userId         String
   fiscalYear     Int
   year           Int?
-  annualEntitled Decimal  @db.Decimal(4, 1)
-  grantedDays    Decimal? @db.Decimal(4, 1)
-  manualGranted  Decimal  @default(0) @db.Decimal(4, 1)
-  usedDays       Decimal  @default(0) @db.Decimal(4, 1)
-  pendingDays    Decimal  @default(0) @db.Decimal(4, 1)
-  remainingDays  Decimal? @db.Decimal(4, 1)
+  annualEntitled Decimal   @db.Decimal(4, 1)
+  grantedDays    Decimal?  @db.Decimal(4, 1)
+  manualGranted  Decimal   @default(0) @db.Decimal(4, 1)
+  usedDays       Decimal   @default(0) @db.Decimal(4, 1)
+  pendingDays    Decimal   @default(0) @db.Decimal(4, 1)
+  remainingDays  Decimal?  @db.Decimal(4, 1)
   expiresAt      DateTime? @db.Date
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -1778,43 +1797,43 @@ model LeaveBalance {
 }
 
 model LeaveRequest {
-  id            String             @id @default(cuid())
-  userId        String
-  type          LeaveType
-  requestKind   LeaveRequestKind   @default(LEGACY)
-  leaveTypeId   String?
-  status        LeaveRequestStatus @default(PENDING)
-  startDate     DateTime           @db.Date
-  endDate       DateTime           @db.Date
-  halfDayPeriod HalfDayPeriod?
-  dayCount      Decimal            @db.Decimal(4, 1)
-  reason        String?
-  attachmentRequired Boolean       @default(false)
-  attachmentUrl String?
-  attachmentStatus LeaveRequestAttachmentStatus @default(NOT_REQUIRED)
-  reviewerId    String?
-  reviewedAt    DateTime?
-  reviewComment String?
-  rejectReason  String?
-  cancelReason  String?
-  withdrawnAt   DateTime?
-  cancelledAt   DateTime?
-  autoConfirmedAt DateTime?
-  autoConfirmReason String?
-  approvalSource LeaveApprovalSource? @default(MANUAL)
-  importBatchId String?
-  importRowId String? @unique
-  importedAt DateTime?
-  isImported Boolean @default(false)
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
+  id                 String                       @id @default(cuid())
+  userId             String
+  type               LeaveType
+  requestKind        LeaveRequestKind             @default(LEGACY)
+  leaveTypeId        String?
+  status             LeaveRequestStatus           @default(PENDING)
+  startDate          DateTime                     @db.Date
+  endDate            DateTime                     @db.Date
+  halfDayPeriod      HalfDayPeriod?
+  dayCount           Decimal                      @db.Decimal(4, 1)
+  reason             String?
+  attachmentRequired Boolean                      @default(false)
+  attachmentUrl      String?
+  attachmentStatus   LeaveRequestAttachmentStatus @default(NOT_REQUIRED)
+  reviewerId         String?
+  reviewedAt         DateTime?
+  reviewComment      String?
+  rejectReason       String?
+  cancelReason       String?
+  withdrawnAt        DateTime?
+  cancelledAt        DateTime?
+  autoConfirmedAt    DateTime?
+  autoConfirmReason  String?
+  approvalSource     LeaveApprovalSource?         @default(MANUAL)
+  importBatchId      String?
+  importRowId        String?                      @unique
+  importedAt         DateTime?
+  isImported         Boolean                      @default(false)
+  createdAt          DateTime                     @default(now())
+  updatedAt          DateTime                     @updatedAt
 
-  user     User  @relation("UserLeaveRequests", fields: [userId], references: [id], onDelete: Cascade)
-  reviewer User? @relation("LeaveReviews", fields: [reviewerId], references: [id], onDelete: SetNull)
-  customLeaveType LeaveTypeDefinition? @relation("CustomLeaveTypeRequests", fields: [leaveTypeId], references: [id], onDelete: SetNull)
-  grantUsages LeaveRequestGrantUsage[]
-  leaveLedgers LeaveLedger[]
-  attachments LeaveAttachment[]
+  user            User                     @relation("UserLeaveRequests", fields: [userId], references: [id], onDelete: Cascade)
+  reviewer        User?                    @relation("LeaveReviews", fields: [reviewerId], references: [id], onDelete: SetNull)
+  customLeaveType LeaveTypeDefinition?     @relation("CustomLeaveTypeRequests", fields: [leaveTypeId], references: [id], onDelete: SetNull)
+  grantUsages     LeaveRequestGrantUsage[]
+  leaveLedgers    LeaveLedger[]
+  attachments     LeaveAttachment[]
 
   @@index([userId, status])
   @@index([reviewerId])
@@ -1849,10 +1868,10 @@ model LeaveImportBatch {
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
 
-  uploadedBy       User              @relation("LeaveImportUploadedBy", fields: [uploadedByUserId], references: [id])
-  appliedBy        User?             @relation("LeaveImportAppliedBy", fields: [appliedByUserId], references: [id])
-  reversedBy       User?             @relation("LeaveImportReversedBy", fields: [reversedByUserId], references: [id])
-  rows             LeaveImportRow[]
+  uploadedBy User             @relation("LeaveImportUploadedBy", fields: [uploadedByUserId], references: [id])
+  appliedBy  User?            @relation("LeaveImportAppliedBy", fields: [appliedByUserId], references: [id])
+  reversedBy User?            @relation("LeaveImportReversedBy", fields: [reversedByUserId], references: [id])
+  rows       LeaveImportRow[]
 
   @@index([importType])
   @@index([status])
@@ -1863,21 +1882,21 @@ model LeaveImportBatch {
 }
 
 model LeaveImportRow {
-  id                    String                 @id @default(cuid())
+  id                    String                   @id @default(cuid())
   batchId               String
   rowNumber             Int
   matchedUserId         String?
-  matchStatus           LeaveImportMatchStatus @default(UNMATCHED)
+  matchStatus           LeaveImportMatchStatus   @default(UNMATCHED)
   employeeNumber        String?
   name                  String?
   companyName           String?
   teamName              String?
-  hireDate              DateTime?              @db.Date
+  hireDate              DateTime?                @db.Date
   leaveTypeRaw          String?
   mappedLeaveTypeId     String?
   mappedLeaveTypeCode   String?
-  startDate             DateTime?              @db.Date
-  endDate               DateTime?              @db.Date
+  startDate             DateTime?                @db.Date
+  endDate               DateTime?                @db.Date
   amountDays            Float?
   amountHoursText       String?
   statusRaw             String?
@@ -1888,14 +1907,14 @@ model LeaveImportRow {
   rawJson               Json?
   warnings              Json?
   errors                Json?
-  applied               Boolean                @default(false)
+  applied               Boolean                  @default(false)
   appliedLeaveRequestId String?
   appliedLedgerIds      Json?
-  createdAt             DateTime               @default(now())
-  updatedAt             DateTime               @updatedAt
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
 
-  batch                 LeaveImportBatch       @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  matchedUser           User?                  @relation("LeaveImportRowMatchedUser", fields: [matchedUserId], references: [id])
+  batch       LeaveImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  matchedUser User?            @relation("LeaveImportRowMatchedUser", fields: [matchedUserId], references: [id])
 
   @@index([batchId])
   @@index([matchedUserId])
@@ -1926,10 +1945,10 @@ model LeaveAttachment {
   createdAt        DateTime              @default(now())
   updatedAt        DateTime              @updatedAt
 
-  leaveRequest     LeaveRequest          @relation(fields: [leaveRequestId], references: [id], onDelete: Cascade)
-  uploadedBy       User                  @relation("LeaveAttachmentUploadedBy", fields: [uploadedByUserId], references: [id])
-  reviewedBy       User?                 @relation("LeaveAttachmentReviewedBy", fields: [reviewedByUserId], references: [id])
-  deletedBy        User?                 @relation("LeaveAttachmentDeletedBy", fields: [deletedByUserId], references: [id])
+  leaveRequest LeaveRequest @relation(fields: [leaveRequestId], references: [id], onDelete: Cascade)
+  uploadedBy   User         @relation("LeaveAttachmentUploadedBy", fields: [uploadedByUserId], references: [id])
+  reviewedBy   User?        @relation("LeaveAttachmentReviewedBy", fields: [reviewedByUserId], references: [id])
+  deletedBy    User?        @relation("LeaveAttachmentDeletedBy", fields: [deletedByUserId], references: [id])
 
   @@index([leaveRequestId])
   @@index([uploadedByUserId])
@@ -1946,8 +1965,8 @@ model LeaveRequestGrantUsage {
   unit           LeaveGrantUnit
   createdAt      DateTime       @default(now())
 
-  leaveRequest   LeaveRequest   @relation(fields: [leaveRequestId], references: [id], onDelete: Cascade)
-  leaveGrant     LeaveGrant     @relation(fields: [leaveGrantId], references: [id])
+  leaveRequest LeaveRequest @relation(fields: [leaveRequestId], references: [id], onDelete: Cascade)
+  leaveGrant   LeaveGrant   @relation(fields: [leaveGrantId], references: [id])
 
   @@index([leaveRequestId])
   @@index([leaveGrantId])
@@ -2035,19 +2054,19 @@ model AttendanceMonthlyClose {
 }
 
 model LeaveAdjustment {
-  id          String   @id @default(cuid())
-  userId      String
-  fiscalYear  Int
-  year        Int?
-  days        Decimal  @db.Decimal(4, 1)
-  amount      Decimal? @db.Decimal(4, 1)
-  reason      String
-  createdById String
+  id              String   @id @default(cuid())
+  userId          String
+  fiscalYear      Int
+  year            Int?
+  days            Decimal  @db.Decimal(4, 1)
+  amount          Decimal? @db.Decimal(4, 1)
+  reason          String
+  createdById     String
   createdByUserId String?
-  createdAt   DateTime @default(now())
+  createdAt       DateTime @default(now())
 
-  user      User @relation("AdjustedUser", fields: [userId], references: [id], onDelete: Cascade)
-  createdBy User @relation("AdjustmentCreator", fields: [createdById], references: [id])
+  user         User          @relation("AdjustedUser", fields: [userId], references: [id], onDelete: Cascade)
+  createdBy    User          @relation("AdjustmentCreator", fields: [createdById], references: [id])
   leaveLedgers LeaveLedger[]
 
   @@index([userId, fiscalYear])
@@ -2075,12 +2094,12 @@ model LeaveLedger {
   createdByUserId   String?
   createdAt         DateTime             @default(now())
 
-  user              User                 @relation("LeaveLedgerUser", fields: [userId], references: [id], onDelete: Cascade)
-  createdByUser     User?                @relation("LeaveLedgerCreatedBy", fields: [createdByUserId], references: [id])
-  leaveType         LeaveTypeDefinition? @relation(fields: [leaveTypeId], references: [id], onDelete: SetNull)
-  leaveGrant        LeaveGrant?          @relation(fields: [leaveGrantId], references: [id], onDelete: SetNull)
-  leaveRequest      LeaveRequest?        @relation(fields: [leaveRequestId], references: [id], onDelete: SetNull)
-  leaveAdjustment   LeaveAdjustment?     @relation(fields: [leaveAdjustmentId], references: [id], onDelete: SetNull)
+  user            User                 @relation("LeaveLedgerUser", fields: [userId], references: [id], onDelete: Cascade)
+  createdByUser   User?                @relation("LeaveLedgerCreatedBy", fields: [createdByUserId], references: [id])
+  leaveType       LeaveTypeDefinition? @relation(fields: [leaveTypeId], references: [id], onDelete: SetNull)
+  leaveGrant      LeaveGrant?          @relation(fields: [leaveGrantId], references: [id], onDelete: SetNull)
+  leaveRequest    LeaveRequest?        @relation(fields: [leaveRequestId], references: [id], onDelete: SetNull)
+  leaveAdjustment LeaveAdjustment?     @relation(fields: [leaveAdjustmentId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([leaveTypeId])
@@ -2105,34 +2124,79 @@ model CompanyHoliday {
 }
 
 model ClickUpTaskMirror {
-  id                 String   @id @default(cuid())
-  clickUpTaskId      String   @unique
-  name               String
-  descriptionSummary String?
-  clickUpStatus      String?
-  clickUpAssignees   Json?
-  dueDate            DateTime? @db.Date
-  clickUpUrl         String?
-  sourceListId       String?
-  sourceListName     String?
-  sourceFolderId     String?
-  sourceFolderName   String?
-  sourceSpaceId      String?
-  sourceSpaceName    String?
-  lastSyncedAt       DateTime?
-  rawJson            Json?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id                    String    @id @default(cuid())
+  clickUpTaskId         String    @unique
+  name                  String
+  descriptionSummary    String?
+  clickUpStatus         String?
+  clickUpAssignees      Json?
+  dueDate               DateTime? @db.Date
+  clickUpUrl            String?
+  sourceTeamId          String?
+  sourceTeamName        String?
+  clickUpSourceConfigId String?
+  sourceWorkspaceId     String?
+  sourceListId          String?
+  sourceListName        String?
+  sourceFolderId        String?
+  sourceFolderName      String?
+  sourceSpaceId         String?
+  sourceSpaceName       String?
+  lastSyncedAt          DateTime?
+  rawJson               Json?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
-  localState    WorkTaskLocalState?
-  documentLinks WorkTaskDocumentLink[]
-  changeRequests WorkTaskChangeRequest[]
-  activities    WorkTaskActivity[]
+  localState      WorkTaskLocalState?
+  sourceTeam      Team?                   @relation("ClickUpTaskSourceTeam", fields: [sourceTeamId], references: [id], onDelete: SetNull)
+  sourceConfig    ClickUpTeamSyncConfig?  @relation("ClickUpTaskSourceConfig", fields: [clickUpSourceConfigId], references: [id], onDelete: SetNull)
+  documentLinks   WorkTaskDocumentLink[]
+  changeRequests  WorkTaskChangeRequest[]
+  activities      WorkTaskActivity[]
+  childRelations  WorkTaskRelation[]      @relation("WorkTaskRelationParent")
+  parentRelations WorkTaskRelation[]      @relation("WorkTaskRelationRelated")
 
   @@index([clickUpStatus])
   @@index([dueDate])
   @@index([lastSyncedAt])
+  @@index([sourceTeamId])
+  @@index([clickUpSourceConfigId])
+  @@index([sourceWorkspaceId])
   @@index([sourceListId])
+}
+
+model ClickUpTeamSyncConfig {
+  id                 String    @id @default(cuid())
+  teamId             String    @unique
+  displayName        String
+  clickUpWorkspaceId String?
+  clickUpSpaceId     String?
+  clickUpFolderId    String?
+  clickUpListId      String?
+  clickUpListName    String?
+  syncScope          String    @default("TASKS_AND_DOCS")
+  isEnabled          Boolean   @default(false)
+  lastTaskSyncedAt   DateTime?
+  lastDocsSyncedAt   DateTime?
+  lastSyncStatus     String?
+  lastSyncMessage    String?
+  note               String?
+  updatedByUserId    String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  team          Team                @relation("ClickUpTeamSyncConfigTeam", fields: [teamId], references: [id], onDelete: Cascade)
+  updatedByUser User?               @relation("ClickUpTeamSyncConfigUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  taskMirrors   ClickUpTaskMirror[] @relation("ClickUpTaskSourceConfig")
+  docMirrors    ClickUpDocMirror[]  @relation("ClickUpDocSourceConfig")
+
+  @@index([teamId])
+  @@index([isEnabled])
+  @@index([clickUpWorkspaceId])
+  @@index([clickUpSpaceId])
+  @@index([clickUpFolderId])
+  @@index([clickUpListId])
+  @@index([updatedByUserId])
 }
 
 model WorkTaskLocalState {
@@ -2157,24 +2221,33 @@ model WorkTaskLocalState {
 }
 
 model ClickUpDocMirror {
-  id               String   @id @default(cuid())
-  clickUpDocId     String?  @unique
-  title            String
-  documentUrl      String?
-  plainTextSummary String?
-  sourceSpaceId    String?
-  sourceSpaceName  String?
-  sourceFolderId   String?
-  sourceFolderName String?
-  lastSyncedAt     DateTime?
-  rawJson          Json?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id                    String    @id @default(cuid())
+  clickUpDocId          String?   @unique
+  title                 String
+  documentUrl           String?
+  plainTextSummary      String?
+  sourceTeamId          String?
+  sourceTeamName        String?
+  clickUpSourceConfigId String?
+  sourceWorkspaceId     String?
+  sourceSpaceId         String?
+  sourceSpaceName       String?
+  sourceFolderId        String?
+  sourceFolderName      String?
+  lastSyncedAt          DateTime?
+  rawJson               Json?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
+  sourceTeam     Team?                   @relation("ClickUpDocSourceTeam", fields: [sourceTeamId], references: [id], onDelete: SetNull)
+  sourceConfig   ClickUpTeamSyncConfig?  @relation("ClickUpDocSourceConfig", fields: [clickUpSourceConfigId], references: [id], onDelete: SetNull)
   relatedTasks   WorkTaskDocumentLink[]
   changeRequests WorkTaskChangeRequest[]
 
   @@index([lastSyncedAt])
+  @@index([sourceTeamId])
+  @@index([clickUpSourceConfigId])
+  @@index([sourceWorkspaceId])
   @@index([sourceSpaceId])
   @@index([sourceFolderId])
 }
@@ -2222,6 +2295,27 @@ model WorkTaskChangeRequest {
   @@index([createdAt])
 }
 
+model WorkTaskRelation {
+  id                  String               @id @default(cuid())
+  parentTaskMirrorId  String
+  relatedTaskMirrorId String
+  relationType        WorkTaskRelationType @default(RELATED)
+  note                String?
+  createdByUserId     String?
+  createdAt           DateTime             @default(now())
+
+  parentTask    ClickUpTaskMirror @relation("WorkTaskRelationParent", fields: [parentTaskMirrorId], references: [id], onDelete: Cascade)
+  relatedTask   ClickUpTaskMirror @relation("WorkTaskRelationRelated", fields: [relatedTaskMirrorId], references: [id], onDelete: Cascade)
+  createdByUser User?             @relation("WorkTaskRelationCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([parentTaskMirrorId, relatedTaskMirrorId, relationType])
+  @@index([parentTaskMirrorId])
+  @@index([relatedTaskMirrorId])
+  @@index([relationType])
+  @@index([createdByUserId])
+  @@index([createdAt])
+}
+
 model WorkTaskActivity {
   id                  String   @id @default(cuid())
   clickUpTaskMirrorId String
@@ -2241,21 +2335,21 @@ model WorkTaskActivity {
 }
 
 model AuditLog {
-  id         String          @id @default(cuid())
-  actorId    String?
-  actorUserId String?
+  id           String          @id @default(cuid())
+  actorId      String?
+  actorUserId  String?
   targetUserId String?
-  action     AuditAction
-  category   AuditCategory   @default(GENERAL)
-  severity   AuditSeverity   @default(INFO)
-  targetType AuditTargetType
-  targetId   String?
-  metadata   Json?
-  beforeJson Json?
-  afterJson  Json?
-  ipAddress  String?
-  userAgent  String?
-  createdAt  DateTime        @default(now())
+  action       AuditAction
+  category     AuditCategory   @default(GENERAL)
+  severity     AuditSeverity   @default(INFO)
+  targetType   AuditTargetType
+  targetId     String?
+  metadata     Json?
+  beforeJson   Json?
+  afterJson    Json?
+  ipAddress    String?
+  userAgent    String?
+  createdAt    DateTime        @default(now())
 
   actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
 

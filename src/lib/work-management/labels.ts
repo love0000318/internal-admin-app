@@ -13,7 +13,7 @@ export const WORK_TASK_INTERNAL_STATUS_OPTIONS = [
 export const WORK_TASK_INTERNAL_STATUS_LABELS: Record<WorkTaskInternalStatus, string> = {
   PLANNED: "진행 예정",
   IN_PROGRESS: "진행 중",
-  HOTFIX: "Hotfix",
+  HOTFIX: "긴급 수정",
   DEPLOYED: "배포 완료",
 };
 

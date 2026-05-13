@@ -5,8 +5,11 @@ import {
   WORK_TASK_INTERNAL_STATUS_OPTIONS,
   normalizeWorkTaskInternalStatus,
 } from "@/lib/work-management/labels";
+import { listClickUpTeamSyncSettings } from "@/lib/work-management/team-sync-configs";
 
 export type WorkManagementFilters = {
+  sourceTeamId?: string;
+  sourceListId?: string;
   teamId?: string;
   status?: string;
   workDate?: string;
@@ -33,8 +36,18 @@ function buildTaskWhere(filters: WorkManagementFilters): Prisma.ClickUpTaskMirro
   const clauses: Prisma.ClickUpTaskMirrorWhereInput[] = [];
   const status = normalizeWorkTaskInternalStatus(filters.status);
   const teamId = trimmedString(filters.teamId);
+  const sourceTeamId = trimmedString(filters.sourceTeamId);
+  const sourceListId = trimmedString(filters.sourceListId);
   const query = trimmedString(filters.q);
   const localStateFilter: Prisma.WorkTaskLocalStateWhereInput = {};
+
+  if (sourceTeamId) {
+    clauses.push({ sourceTeamId });
+  }
+
+  if (sourceListId) {
+    clauses.push({ sourceListId });
+  }
 
   if (status) {
     localStateFilter.internalStatus = status;
@@ -72,11 +85,33 @@ function buildTaskWhere(filters: WorkManagementFilters): Prisma.ClickUpTaskMirro
 export async function listWorkManagementDashboard(filters: WorkManagementFilters = {}) {
   const prisma = getPrisma();
   const where = buildTaskWhere(filters);
-  const [tasks, teams, recentDocs, recentActivities, totalTasks, localStateCounts, openChanges] =
-    await Promise.all([
+  const [
+    tasks,
+    teams,
+    recentDocs,
+    recentActivities,
+    totalTasks,
+    localStateCounts,
+    openChanges,
+    teamSyncSettings,
+    relationCandidates,
+    sourceListRows,
+  ] = await Promise.all([
       prisma.clickUpTaskMirror.findMany({
         where,
         include: {
+          sourceTeam: { select: { id: true, name: true } },
+          sourceConfig: {
+            select: {
+              id: true,
+              displayName: true,
+              clickUpWorkspaceId: true,
+              clickUpSpaceId: true,
+              clickUpFolderId: true,
+              clickUpListId: true,
+              clickUpListName: true,
+            },
+          },
           localState: {
             include: {
               team: { select: { id: true, name: true } },
@@ -98,11 +133,57 @@ export async function listWorkManagementDashboard(filters: WorkManagementFilters
             orderBy: { createdAt: "desc" },
             take: 5,
           },
+          childRelations: {
+            include: {
+              relatedTask: {
+                select: {
+                  id: true,
+                  name: true,
+                  clickUpStatus: true,
+                  sourceTeamName: true,
+                  sourceListName: true,
+                  localState: {
+                    select: {
+                      internalStatus: true,
+                      team: { select: { id: true, name: true } },
+                    },
+                  },
+                },
+              },
+              createdByUser: { select: { id: true, name: true } },
+            },
+            orderBy: { createdAt: "desc" },
+            take: 10,
+          },
+          parentRelations: {
+            include: {
+              parentTask: {
+                select: {
+                  id: true,
+                  name: true,
+                  clickUpStatus: true,
+                  sourceTeamName: true,
+                  sourceListName: true,
+                  localState: {
+                    select: {
+                      internalStatus: true,
+                      team: { select: { id: true, name: true } },
+                    },
+                  },
+                },
+              },
+              createdByUser: { select: { id: true, name: true } },
+            },
+            orderBy: { createdAt: "desc" },
+            take: 10,
+          },
           _count: {
             select: {
               documentLinks: true,
               changeRequests: true,
               activities: true,
+              childRelations: true,
+              parentRelations: true,
             },
           },
         },
@@ -134,6 +215,26 @@ export async function listWorkManagementDashboard(filters: WorkManagementFilters
       prisma.workTaskChangeRequest.count({
         where: { status: "OPEN" },
       }),
+      listClickUpTeamSyncSettings(),
+      prisma.clickUpTaskMirror.findMany({
+        orderBy: [{ lastSyncedAt: "desc" }, { updatedAt: "desc" }],
+        take: 100,
+        select: {
+          id: true,
+          name: true,
+          sourceTeamName: true,
+          sourceListName: true,
+          clickUpStatus: true,
+        },
+      }),
+      prisma.clickUpTaskMirror.findMany({
+        where: { sourceListId: { not: null } },
+        select: {
+          sourceListId: true,
+          sourceListName: true,
+        },
+        take: 1000,
+      }),
     ]);
   const statusCounts = Object.fromEntries(
     WORK_TASK_INTERNAL_STATUS_OPTIONS.map((status) => [status, 0]),
@@ -142,12 +243,25 @@ export async function listWorkManagementDashboard(filters: WorkManagementFilters
   for (const count of localStateCounts) {
     statusCounts[count.internalStatus] = count._count._all;
   }
+  const sourceListMap = new Map<string, string | null>();
+
+  for (const row of sourceListRows) {
+    if (row.sourceListId && !sourceListMap.has(row.sourceListId)) {
+      sourceListMap.set(row.sourceListId, row.sourceListName);
+    }
+  }
 
   return {
     tasks,
     teams,
     recentDocs,
     recentActivities,
+    teamSyncSettings,
+    relationCandidates,
+    sourceLists: Array.from(sourceListMap.entries()).map(([id, name]) => ({
+      id,
+      name,
+    })),
     totalTasks,
     statusCounts,
     openChanges,

@@ -14,6 +14,8 @@ export const dynamic = "force-dynamic";
 type WorkManagementPageProps = {
   searchParams: Promise<{
     teamId?: string;
+    sourceTeamId?: string;
+    sourceListId?: string;
     status?: string;
     workDate?: string;
     q?: string;
@@ -22,6 +24,8 @@ type WorkManagementPageProps = {
     docs?: string;
     updated?: string;
     changeRequest?: string;
+    settings?: string;
+    relation?: string;
     error?: string;
   }>;
 };
@@ -63,6 +67,18 @@ function buildNotice(params: Awaited<WorkManagementPageProps["searchParams"]>) {
     return "change-checked";
   }
 
+  if (params.settings === "updated") {
+    return "settings-updated";
+  }
+
+  if (params.relation === "created") {
+    return "relation-created";
+  }
+
+  if (params.relation === "deleted") {
+    return "relation-deleted";
+  }
+
   if (params.error) {
     return "sync-failed";
   }
@@ -76,6 +92,8 @@ export default async function WorkManagementPage({
   await requireOwner();
   const params = await searchParams;
   const filters: WorkManagementFilters = {
+    sourceTeamId: params.sourceTeamId,
+    sourceListId: params.sourceListId,
     teamId: params.teamId,
     status: params.status,
     workDate: safeDateFilter(params.workDate),
@@ -87,15 +105,16 @@ export default async function WorkManagementPage({
 
   return (
     <PageContainer>
-            <PageHeader
-        eyebrow="OWNER test"
-        title="Work Management"
-        description="Manage ClickUp task and Docs mirrors for team assignment, internal status, and change request tracking."
+      <PageHeader
+        eyebrow="OWNER 전용"
+        title="업무 관리"
+        description="팀별 ClickUp 읽기 동기화 설정, 업무 mirror 검토, 내부 상태와 연계 정보를 관리합니다."
       />
       <WorkManagementDashboard
         data={data}
         filters={filters}
         taskConnectionMessage={clickUpConnection.message}
+        apiTokenConfigured={clickUpConnection.apiTokenConfigured}
         taskSyncConfigured={clickUpConnection.taskSyncConfigured}
         docsConnectionMessage={docsConnection.message}
         selectedTaskId={params.taskId}

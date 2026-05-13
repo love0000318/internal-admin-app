@@ -12,6 +12,12 @@ export type ClickUpSyncConfig = {
   spaceId: string | null;
   folderId: string | null;
   listId: string | null;
+  sourceConfigId?: string | null;
+  sourceTeamId?: string | null;
+  sourceTeamName?: string | null;
+  workspaceId?: string | null;
+  listName?: string | null;
+  displayName?: string | null;
   taskSyncConfigured: boolean;
   docsSyncConfigured: boolean;
   missingTaskKeys: ClickUpEnvKey[];
@@ -23,9 +29,7 @@ function getEnvValue(env: ClickUpEnv, key: ClickUpEnvKey) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
-export function buildClickUpSyncConfig(
-  env: ClickUpEnv,
-): ClickUpSyncConfig {
+export function buildClickUpSyncConfig(env: ClickUpEnv): ClickUpSyncConfig {
   const apiToken = getEnvValue(env, "CLICKUP_API_TOKEN");
   const teamId = getEnvValue(env, "CLICKUP_TEAM_ID");
   const spaceId = getEnvValue(env, "CLICKUP_SPACE_ID");
@@ -53,6 +57,7 @@ export function buildClickUpSyncConfig(
     spaceId,
     folderId,
     listId,
+    workspaceId: teamId,
     taskSyncConfigured: missingTaskKeys.length === 0,
     docsSyncConfigured: missingDocsKeys.length === 0,
     missingTaskKeys,
@@ -70,11 +75,20 @@ export function getClickUpSyncConfig() {
   });
 }
 
+export function getClickUpApiToken() {
+  return getEnvValue(
+    { CLICKUP_API_TOKEN: process.env.CLICKUP_API_TOKEN },
+    "CLICKUP_API_TOKEN",
+  );
+}
+
 export function getClickUpConnectionSummary() {
   const config = getClickUpSyncConfig();
+  const apiTokenConfigured = Boolean(config.apiToken);
 
   if (!config.taskSyncConfigured) {
     return {
+      apiTokenConfigured,
       taskSyncConfigured: false,
       docsSyncConfigured: config.docsSyncConfigured,
       message: "ClickUp 연결 정보가 아직 설정되지 않았습니다.",
@@ -82,6 +96,7 @@ export function getClickUpConnectionSummary() {
   }
 
   return {
+    apiTokenConfigured,
     taskSyncConfigured: true,
     docsSyncConfigured: config.docsSyncConfigured,
     message: "ClickUp 업무 동기화를 실행할 수 있습니다.",

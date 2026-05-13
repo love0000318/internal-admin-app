@@ -1,9 +1,30 @@
 import { Prisma } from "@/generated/prisma/client";
-import type { WorkTaskInternalStatus } from "@/generated/prisma/enums";
+import type {
+  WorkTaskInternalStatus,
+  WorkTaskRelationType,
+} from "@/generated/prisma/enums";
 import { getPrisma } from "@/lib/db/prisma";
 import { createInAppNotification } from "@/lib/notifications/notifications";
+import {
+  CLICKUP_SUPPORTED_TEAM_NAMES,
+  normalizeClickUpSyncScope,
+} from "@/lib/work-management/team-sync-configs";
 
 type WorkManagementTx = Prisma.TransactionClient;
+
+type UpdateClickUpTeamSyncConfigInput = {
+  actorUserId: string;
+  teamId: string;
+  displayName: string | null;
+  clickUpWorkspaceId: string | null;
+  clickUpSpaceId: string | null;
+  clickUpFolderId: string | null;
+  clickUpListId: string | null;
+  clickUpListName: string | null;
+  syncScope: string;
+  isEnabled: boolean;
+  note: string | null;
+};
 
 type UpdateWorkTaskLocalStateInput = {
   actorUserId: string;
@@ -21,6 +42,14 @@ type CreateWorkTaskChangeRequestInput = {
   title: string;
   content: string;
   sourceDocumentUrl: string | null;
+};
+
+type CreateWorkTaskRelationInput = {
+  actorUserId: string;
+  parentTaskMirrorId: string;
+  relatedTaskMirrorId: string;
+  relationType: WorkTaskRelationType;
+  note: string | null;
 };
 
 function cleanText(value: string | null | undefined, maxLength: number) {
@@ -55,6 +84,32 @@ function localStateAuditSnapshot(value: {
   };
 }
 
+function clickUpConfigAuditSnapshot(value: {
+  teamId?: string | null;
+  displayName?: string | null;
+  clickUpWorkspaceId?: string | null;
+  clickUpSpaceId?: string | null;
+  clickUpFolderId?: string | null;
+  clickUpListId?: string | null;
+  clickUpListName?: string | null;
+  syncScope?: string | null;
+  isEnabled?: boolean | null;
+  note?: string | null;
+}) {
+  return {
+    teamId: value.teamId ?? null,
+    displayName: value.displayName ?? null,
+    clickUpWorkspaceId: value.clickUpWorkspaceId ?? null,
+    clickUpSpaceId: value.clickUpSpaceId ?? null,
+    clickUpFolderId: value.clickUpFolderId ?? null,
+    clickUpListId: value.clickUpListId ?? null,
+    clickUpListName: value.clickUpListName ?? null,
+    syncScope: value.syncScope ?? null,
+    isEnabled: Boolean(value.isEnabled),
+    hasNote: Boolean(value.note),
+  };
+}
+
 async function notifyActiveOwners(
   prisma: WorkManagementTx,
   params: {
@@ -83,6 +138,102 @@ async function notifyActiveOwners(
       }),
     ),
   );
+}
+
+export function normalizeWorkTaskRelationType(
+  value: FormDataEntryValue | string | null | undefined,
+): WorkTaskRelationType {
+  const allowed: WorkTaskRelationType[] = [
+    "RELATED",
+    "BLOCKED_BY",
+    "FOLLOW_UP",
+    "DUPLICATE",
+    "REFERENCE",
+  ];
+
+  return allowed.includes(value as WorkTaskRelationType)
+    ? (value as WorkTaskRelationType)
+    : "RELATED";
+}
+
+export async function updateClickUpTeamSyncConfig(
+  input: UpdateClickUpTeamSyncConfigInput,
+) {
+  const prisma = getPrisma();
+
+  return prisma.$transaction(async (tx) => {
+    const team = await tx.team.findFirst({
+      where: { id: input.teamId, status: "ACTIVE" },
+      select: { id: true, name: true },
+    });
+
+    if (!team) {
+      throw new Error("Team not found.");
+    }
+
+    if (!(CLICKUP_SUPPORTED_TEAM_NAMES as readonly string[]).includes(team.name)) {
+      throw new Error("Unsupported work-management team.");
+    }
+
+    const existing = await tx.clickUpTeamSyncConfig.findUnique({
+      where: { teamId: team.id },
+    });
+    const displayName = cleanText(input.displayName, 120) ?? team.name;
+    const data = {
+      displayName,
+      clickUpWorkspaceId: cleanText(input.clickUpWorkspaceId, 120),
+      clickUpSpaceId: cleanText(input.clickUpSpaceId, 120),
+      clickUpFolderId: cleanText(input.clickUpFolderId, 120),
+      clickUpListId: cleanText(input.clickUpListId, 120),
+      clickUpListName: cleanText(input.clickUpListName, 120),
+      syncScope: normalizeClickUpSyncScope(input.syncScope),
+      isEnabled: input.isEnabled,
+      note: cleanText(input.note, 1000),
+      updatedByUserId: input.actorUserId,
+    };
+    const config = await tx.clickUpTeamSyncConfig.upsert({
+      where: { teamId: team.id },
+      create: {
+        teamId: team.id,
+        ...data,
+      },
+      update: data,
+    });
+    const action = existing
+      ? "CLICKUP_TEAM_SYNC_CONFIG_UPDATED"
+      : "CLICKUP_TEAM_SYNC_CONFIG_CREATED";
+
+    await tx.auditLog.create({
+      data: {
+        actorId: input.actorUserId,
+        actorUserId: input.actorUserId,
+        action,
+        targetType: "CLICKUP_TEAM_SYNC_CONFIG",
+        targetId: config.id,
+        metadata: {
+          teamId: team.id,
+          teamName: team.name,
+          changedFields: [
+            "displayName",
+            "clickUpWorkspaceId",
+            "clickUpSpaceId",
+            "clickUpFolderId",
+            "clickUpListId",
+            "clickUpListName",
+            "syncScope",
+            "isEnabled",
+            "note",
+          ],
+        } satisfies Prisma.JsonObject,
+        beforeJson: existing
+          ? clickUpConfigAuditSnapshot(existing)
+          : Prisma.JsonNull,
+        afterJson: clickUpConfigAuditSnapshot(config),
+      },
+    });
+
+    return config;
+  });
 }
 
 export async function updateWorkTaskLocalState(input: UpdateWorkTaskLocalStateInput) {
@@ -314,7 +465,7 @@ export async function acknowledgeWorkTaskChangeRequest(input: {
         clickUpTaskMirrorId: existing.clickUpTaskMirrorId,
         actorUserId: input.actorUserId,
         type: "CHANGE_REQUEST_CHECKED",
-        message: "변경 요청이 확인 처리되었습니다.",
+        message: "변경 요청을 확인 처리했습니다.",
         metadata: {
           changeRequestId: changeRequest.id,
         } satisfies Prisma.JsonObject,
@@ -337,5 +488,145 @@ export async function acknowledgeWorkTaskChangeRequest(input: {
     });
 
     return changeRequest;
+  });
+}
+
+export async function createWorkTaskRelation(input: CreateWorkTaskRelationInput) {
+  const prisma = getPrisma();
+
+  return prisma.$transaction(async (tx) => {
+    if (input.parentTaskMirrorId === input.relatedTaskMirrorId) {
+      throw new Error("A task cannot be related to itself.");
+    }
+
+    const [parentTask, relatedTask] = await Promise.all([
+      tx.clickUpTaskMirror.findUnique({
+        where: { id: input.parentTaskMirrorId },
+        select: { id: true, name: true, sourceTeamName: true },
+      }),
+      tx.clickUpTaskMirror.findUnique({
+        where: { id: input.relatedTaskMirrorId },
+        select: { id: true, name: true, sourceTeamName: true },
+      }),
+    ]);
+
+    if (!parentTask || !relatedTask) {
+      throw new Error("Task mirror not found.");
+    }
+
+    const note = cleanText(input.note, 1000);
+    const existing = await tx.workTaskRelation.findUnique({
+      where: {
+        parentTaskMirrorId_relatedTaskMirrorId_relationType: {
+          parentTaskMirrorId: parentTask.id,
+          relatedTaskMirrorId: relatedTask.id,
+          relationType: input.relationType,
+        },
+      },
+    });
+    const relation = await tx.workTaskRelation.upsert({
+      where: {
+        parentTaskMirrorId_relatedTaskMirrorId_relationType: {
+          parentTaskMirrorId: parentTask.id,
+          relatedTaskMirrorId: relatedTask.id,
+          relationType: input.relationType,
+        },
+      },
+      create: {
+        parentTaskMirrorId: parentTask.id,
+        relatedTaskMirrorId: relatedTask.id,
+        relationType: input.relationType,
+        note,
+        createdByUserId: input.actorUserId,
+      },
+      update: {
+        note,
+      },
+    });
+
+    await tx.workTaskActivity.create({
+      data: {
+        clickUpTaskMirrorId: parentTask.id,
+        actorUserId: input.actorUserId,
+        type: "RELATION_CREATED",
+        message: "타 팀 연계 업무가 추가되었습니다.",
+        metadata: {
+          relationId: relation.id,
+          relatedTaskMirrorId: relatedTask.id,
+          relationType: relation.relationType,
+          alreadyExisted: Boolean(existing),
+        } satisfies Prisma.JsonObject,
+      },
+    });
+
+    await tx.auditLog.create({
+      data: {
+        actorId: input.actorUserId,
+        actorUserId: input.actorUserId,
+        action: "WORK_TASK_RELATION_CREATED",
+        targetType: "WORK_TASK_RELATION",
+        targetId: relation.id,
+        metadata: {
+          parentTaskMirrorId: parentTask.id,
+          relatedTaskMirrorId: relatedTask.id,
+          relationType: relation.relationType,
+          hasNote: Boolean(note),
+        } satisfies Prisma.JsonObject,
+      },
+    });
+
+    return relation;
+  });
+}
+
+export async function deleteWorkTaskRelation(input: {
+  actorUserId: string;
+  relationId: string;
+}) {
+  const prisma = getPrisma();
+
+  return prisma.$transaction(async (tx) => {
+    const relation = await tx.workTaskRelation.findUnique({
+      where: { id: input.relationId },
+      include: {
+        parentTask: { select: { id: true, name: true } },
+        relatedTask: { select: { id: true, name: true } },
+      },
+    });
+
+    if (!relation) {
+      throw new Error("Task relation not found.");
+    }
+
+    await tx.workTaskRelation.delete({ where: { id: relation.id } });
+    await tx.workTaskActivity.create({
+      data: {
+        clickUpTaskMirrorId: relation.parentTaskMirrorId,
+        actorUserId: input.actorUserId,
+        type: "RELATION_DELETED",
+        message: "타 팀 연계 업무가 해제되었습니다.",
+        metadata: {
+          relationId: relation.id,
+          relatedTaskMirrorId: relation.relatedTaskMirrorId,
+          relationType: relation.relationType,
+        } satisfies Prisma.JsonObject,
+      },
+    });
+    await tx.auditLog.create({
+      data: {
+        actorId: input.actorUserId,
+        actorUserId: input.actorUserId,
+        action: "WORK_TASK_RELATION_DELETED",
+        targetType: "WORK_TASK_RELATION",
+        targetId: relation.id,
+        metadata: {
+          parentTaskMirrorId: relation.parentTaskMirrorId,
+          relatedTaskMirrorId: relation.relatedTaskMirrorId,
+          relationType: relation.relationType,
+        } satisfies Prisma.JsonObject,
+      },
+    });
+
+    return relation;
   });
 }

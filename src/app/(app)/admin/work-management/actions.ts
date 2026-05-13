@@ -12,7 +12,11 @@ import { normalizeWorkTaskInternalStatus } from "@/lib/work-management/labels";
 import { parseDateOnlyInput } from "@/lib/work-management/queries";
 import {
   acknowledgeWorkTaskChangeRequest,
+  createWorkTaskRelation,
   createWorkTaskChangeRequest,
+  deleteWorkTaskRelation,
+  normalizeWorkTaskRelationType,
+  updateClickUpTeamSyncConfig,
   updateWorkTaskLocalState,
 } from "@/lib/work-management/service";
 
@@ -20,9 +24,10 @@ function nullableString(value: FormDataEntryValue | null) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
-export async function runClickUpTaskSyncAction() {
+export async function runClickUpTaskSyncAction(formData?: FormData) {
   const actor = await requireOwner();
-  const result = await syncClickUpTasks();
+  const sourceConfigId = formData ? nullableString(formData.get("sourceConfigId")) : null;
+  const result = await syncClickUpTasks(sourceConfigId);
 
   await getPrisma().auditLog.create({
     data: {
@@ -38,6 +43,18 @@ export async function runClickUpTaskSyncAction() {
         updatedCount: result.updatedCount,
         skippedCount: result.skippedCount,
         syncedAt: result.syncedAt?.toISOString() ?? null,
+        sourceConfigId,
+        sourceResults: result.sourceResults.map((source) => ({
+          configId: source.configId,
+          teamId: source.teamId,
+          teamName: source.teamName,
+          displayName: source.displayName,
+          status: source.status,
+          checkedCount: source.checkedCount,
+          createdCount: source.createdCount,
+          updatedCount: source.updatedCount,
+          skippedCount: source.skippedCount,
+        })),
       } satisfies Prisma.JsonObject,
     },
   });
@@ -46,9 +63,10 @@ export async function runClickUpTaskSyncAction() {
   redirect(`/admin/work-management?sync=${result.status}`);
 }
 
-export async function runClickUpDocsSyncAction() {
+export async function runClickUpDocsSyncAction(formData?: FormData) {
   const actor = await requireOwner();
-  const result = await syncClickUpDocsSkeleton();
+  const sourceConfigId = formData ? nullableString(formData.get("sourceConfigId")) : null;
+  const result = await syncClickUpDocsSkeleton(sourceConfigId);
 
   await getPrisma().auditLog.create({
     data: {
@@ -63,12 +81,43 @@ export async function runClickUpDocsSyncAction() {
         createdCount: result.createdCount,
         updatedCount: result.updatedCount,
         syncedAt: result.syncedAt?.toISOString() ?? null,
+        sourceConfigId,
       } satisfies Prisma.JsonObject,
     },
   });
 
   revalidatePath("/admin/work-management");
   redirect(`/admin/work-management?docs=${result.status}`);
+}
+
+export async function updateClickUpTeamSyncConfigAction(formData: FormData) {
+  const actor = await requireOwner();
+  const teamId = nullableString(formData.get("teamId"));
+
+  if (!teamId) {
+    redirect("/admin/work-management?error=invalid-sync-config");
+  }
+
+  try {
+    await updateClickUpTeamSyncConfig({
+      actorUserId: actor.id,
+      teamId,
+      displayName: nullableString(formData.get("displayName")),
+      clickUpWorkspaceId: nullableString(formData.get("clickUpWorkspaceId")),
+      clickUpSpaceId: nullableString(formData.get("clickUpSpaceId")),
+      clickUpFolderId: nullableString(formData.get("clickUpFolderId")),
+      clickUpListId: nullableString(formData.get("clickUpListId")),
+      clickUpListName: nullableString(formData.get("clickUpListName")),
+      syncScope: nullableString(formData.get("syncScope")) ?? "TASKS_AND_DOCS",
+      isEnabled: formData.get("isEnabled") === "on",
+      note: nullableString(formData.get("note")),
+    });
+  } catch {
+    redirect("/admin/work-management?error=sync-config-failed");
+  }
+
+  revalidatePath("/admin/work-management");
+  redirect("/admin/work-management?settings=updated");
 }
 
 export async function updateWorkTaskLocalStateAction(formData: FormData) {
@@ -142,4 +191,51 @@ export async function acknowledgeWorkTaskChangeRequestAction(formData: FormData)
 
   revalidatePath("/admin/work-management");
   redirect(`/admin/work-management?taskId=${taskMirrorId ?? ""}&changeRequest=checked`);
+}
+
+export async function createWorkTaskRelationAction(formData: FormData) {
+  const actor = await requireOwner();
+  const parentTaskMirrorId = nullableString(formData.get("parentTaskMirrorId"));
+  const relatedTaskMirrorId = nullableString(formData.get("relatedTaskMirrorId"));
+
+  if (!parentTaskMirrorId || !relatedTaskMirrorId) {
+    redirect("/admin/work-management?error=invalid-task-relation");
+  }
+
+  try {
+    await createWorkTaskRelation({
+      actorUserId: actor.id,
+      parentTaskMirrorId,
+      relatedTaskMirrorId,
+      relationType: normalizeWorkTaskRelationType(formData.get("relationType")),
+      note: nullableString(formData.get("note")),
+    });
+  } catch {
+    redirect(`/admin/work-management?taskId=${parentTaskMirrorId}&error=task-relation-failed`);
+  }
+
+  revalidatePath("/admin/work-management");
+  redirect(`/admin/work-management?taskId=${parentTaskMirrorId}&relation=created`);
+}
+
+export async function deleteWorkTaskRelationAction(formData: FormData) {
+  const actor = await requireOwner();
+  const relationId = nullableString(formData.get("relationId"));
+  const taskMirrorId = nullableString(formData.get("taskMirrorId"));
+
+  if (!relationId) {
+    redirect("/admin/work-management?error=invalid-task-relation");
+  }
+
+  try {
+    await deleteWorkTaskRelation({
+      actorUserId: actor.id,
+      relationId,
+    });
+  } catch {
+    redirect(`/admin/work-management?taskId=${taskMirrorId ?? ""}&error=task-relation-delete-failed`);
+  }
+
+  revalidatePath("/admin/work-management");
+  redirect(`/admin/work-management?taskId=${taskMirrorId ?? ""}&relation=deleted`);
 }
