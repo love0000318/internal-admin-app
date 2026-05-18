@@ -17,6 +17,7 @@ import type { DateOnly, HalfDayPeriod } from "@/lib/leave/types";
 import { isLead, isManager, isOwner, type RbacUser } from "@/lib/rbac/roles";
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+const INTERNAL_CALENDAR_ROLES = ["OWNER", "LEAD", "MANAGER"] as const;
 
 export const CALENDAR_STATUS_LABELS: Record<LeaveRequestStatus, string> = {
   PENDING: "승인 대기",
@@ -127,6 +128,10 @@ export function canViewCalendarLeaveEvent({
   visibility: LeaveVisibility;
 }) {
   void _visibility;
+
+  if (request.status === "APPROVED" && (isOwner(actor) || isLead(actor) || isManager(actor))) {
+    return true;
+  }
 
   if (isSelf(actor, request) || isOwner(actor)) {
     return true;
@@ -290,8 +295,16 @@ export function buildLeaveCalendarEventsFromRequest({
   }));
 }
 
-function statusWhere(actor: RbacUser, statuses?: LeaveRequestStatus[]) {
+function statusWhere(
+  actor: RbacUser,
+  statuses: LeaveRequestStatus[] | undefined,
+  scope: CalendarScope,
+) {
   const requested = statuses?.length ? statuses : ["APPROVED" as const];
+
+  if (scope === "ALL") {
+    return requested.filter((status) => status === "APPROVED");
+  }
 
   if (isOwner(actor) || isLead(actor)) {
     return requested;
@@ -302,12 +315,25 @@ function statusWhere(actor: RbacUser, statuses?: LeaveRequestStatus[]) {
   );
 }
 
+function internalCalendarUserWhere(): Prisma.UserWhereInput {
+  return {
+    role: { in: [...INTERNAL_CALENDAR_ROLES] },
+    status: "ACTIVE",
+  };
+}
+
 function baseUserWhere(
   actor: RbacUser,
   scope: CalendarScope,
 ): Prisma.UserWhereInput {
   if (scope === "ME") {
     return { id: actor.id };
+  }
+
+  if (scope === "ALL") {
+    return isOwner(actor) || isLead(actor) || isManager(actor)
+      ? internalCalendarUserWhere()
+      : { id: "__calendar_access_denied__" };
   }
 
   if (isOwner(actor)) {
@@ -355,7 +381,7 @@ export async function listCalendarLeaveEvents({
       userId ? { id: userId } : {},
     ],
   };
-  const queryStatuses = statusWhere(scopedActor, statuses);
+  const queryStatuses = statusWhere(scopedActor, statuses, scope);
 
   const requests = await prisma.leaveRequest.findMany({
     where: {
@@ -416,18 +442,14 @@ export async function listCalendarFilterOptions({
   prisma?: PrismaClient;
 }) {
   const scopedActor = await hydrateReviewScope(actor, prisma);
-  const teamWhere: Prisma.TeamWhereInput = isOwner(scopedActor)
+  const canViewCompanyCalendar =
+    isOwner(scopedActor) || isLead(scopedActor) || isManager(scopedActor);
+  const teamWhere: Prisma.TeamWhereInput = canViewCompanyCalendar
     ? { status: "ACTIVE" }
-    : isLead(scopedActor)
-      ? { id: { in: scopedActor.managedTeamIds ?? [] }, status: "ACTIVE" }
-      : scopedActor.teamId
-        ? { id: scopedActor.teamId, status: "ACTIVE" }
-        : { id: "__no_team__" };
-
-  const userWhere = baseUserWhere(
-    scopedActor,
-    isOwner(scopedActor) ? "ALL" : "TEAM",
-  );
+    : { id: "__no_team__" };
+  const userWhere = canViewCompanyCalendar
+    ? internalCalendarUserWhere()
+    : { id: "__no_user__" };
 
   const [teams, users, leaveTypes] = await Promise.all([
     prisma.team.findMany({
@@ -437,7 +459,7 @@ export async function listCalendarFilterOptions({
     }),
     prisma.user.findMany({
       where: { AND: [userWhere, { status: "ACTIVE" }] },
-      select: { id: true, name: true, email: true },
+      select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),
     prisma.leaveTypeDefinition.findMany({

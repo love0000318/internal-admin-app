@@ -42,16 +42,14 @@ const halfDayLabels = {
 
 const statusOptions: Array<{ value: LeaveRequestStatus; label: string }> = [
   { value: "APPROVED", label: statusLabels.APPROVED },
-  { value: "PENDING", label: statusLabels.PENDING },
-  { value: "REJECTED", label: statusLabels.REJECTED },
-  { value: "CANCELLED", label: statusLabels.CANCELLED },
-  { value: "WITHDRAWN", label: statusLabels.WITHDRAWN },
 ];
 
 const weekdayLabels = ["일", "월", "화", "수", "목", "금", "토"];
 
 function defaultScope(role: string): CalendarScope {
-  return role === "OWNER" ? "ALL" : "TEAM";
+  void role;
+
+  return "ALL";
 }
 
 function normalizeScope(value: string | undefined, role: string): CalendarScope {
@@ -59,7 +57,7 @@ function normalizeScope(value: string | undefined, role: string): CalendarScope 
     return "ME";
   }
 
-  if (value === "ALL" && role === "OWNER") {
+  if (value === "ALL") {
     return "ALL";
   }
 
@@ -219,7 +217,7 @@ export default async function LeaveCalendarPage({
             >
               <option value="ME">내 휴가만</option>
               <option value="TEAM">팀 휴가</option>
-              {actor.role === "OWNER" ? <option value="ALL">전체 보기</option> : null}
+              <option value="ALL">전체 구성원</option>
             </select>
           </label>
           <label className="break-keep text-sm font-medium text-slate-800">

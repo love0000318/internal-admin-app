@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { Prisma } from "@/generated/prisma/client";
+import { Prisma, type PrismaClient } from "@/generated/prisma/client";
 import {
   buildLeaveCalendarEventsFromRequest,
   canViewCalendarLeaveDetail,
   canViewCalendarLeaveEvent,
   formatCalendarLeaveTitle,
   getLeaveCalendarEventColorClass,
+  listCalendarLeaveEvents,
   type CalendarLeaveRequest,
 } from "@/lib/leave/calendar";
 import type { RbacUser } from "@/lib/rbac/roles";
@@ -65,6 +66,11 @@ const otherTeamManager: RbacUser = {
   role: "MANAGER",
   status: "ACTIVE",
   teamId: "team-b",
+};
+const externalPartner: RbacUser = {
+  id: "external",
+  role: "EXTERNAL_PARTNER",
+  status: "ACTIVE",
 };
 
 function request(overrides: Partial<CalendarLeaveRequest> = {}): CalendarLeaveRequest {
@@ -131,14 +137,24 @@ describe("leave calendar visibility", () => {
     ).toBe("양현지 - 반차 오후");
   });
 
-  it("hides PRIVATE_TO_APPROVERS events from ordinary teammates", () => {
+  it("shows approved private leave as a limited public calendar event", () => {
     expect(
       canViewCalendarLeaveEvent({
         actor: manager,
         request: request({ type: "BEREAVEMENT" }),
         visibility: "PRIVATE_TO_APPROVERS",
       }),
-    ).toBe(false);
+    ).toBe(true);
+
+    const events = buildLeaveCalendarEventsFromRequest({
+      actor: manager,
+      request: request({ type: "BEREAVEMENT" }),
+      definitionsByCode: definitions,
+    });
+
+    expect(events).toHaveLength(3);
+    expect(events[0].isPrivate).toBe(true);
+    expect(events[0].leaveTypeLabel).toBeUndefined();
   });
 
   it("allows OWNER and scoped LEAD to see private and pending requests", () => {
@@ -170,25 +186,39 @@ describe("leave calendar visibility", () => {
     ).toBe(false);
   });
 
-  it("blocks managers from seeing other users on the calendar", () => {
+  it("allows internal users to see approved company leave but not pending peer leave", () => {
     expect(
       canViewCalendarLeaveEvent({
         actor: otherTeamManager,
         request: request(),
         visibility: "PUBLIC_WITH_TYPE",
       }),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       canViewCalendarLeaveEvent({
         actor: manager,
         request: request(),
         visibility: "PUBLIC_WITH_TYPE",
       }),
-    ).toBe(false);
+    ).toBe(true);
+    expect(
+      canViewCalendarLeaveEvent({
+        actor: outsideLead,
+        request: request(),
+        visibility: "PUBLIC_WITH_TYPE",
+      }),
+    ).toBe(true);
     expect(
       canViewCalendarLeaveEvent({
         actor: manager,
         request: request({ status: "PENDING" }),
+        visibility: "PUBLIC_WITH_TYPE",
+      }),
+    ).toBe(false);
+    expect(
+      canViewCalendarLeaveEvent({
+        actor: externalPartner,
+        request: request(),
         visibility: "PUBLIC_WITH_TYPE",
       }),
     ).toBe(false);
@@ -247,4 +277,77 @@ describe("leave calendar visibility", () => {
       }),
     ).toContain("bg-purple-100");
   });
+
+  it("lists approved company events for MANAGER and LEAD across teams", async () => {
+    const otherTeamApproved = request({
+      id: "request-other-team",
+      userId: "employee-2",
+      user: {
+        id: "employee-2",
+        name: "다른팀 구성원",
+        role: "MANAGER",
+        status: "ACTIVE",
+        teamId: "team-b",
+        team: { id: "team-b", name: "다른팀" },
+      },
+    });
+    const prisma = fakeCalendarPrisma([request(), otherTeamApproved]);
+
+    const managerEvents = await listCalendarLeaveEvents({
+      actor: manager,
+      fromDate: "2026-05-01",
+      toDate: "2026-05-31",
+      scope: "ALL",
+      statuses: ["APPROVED"],
+      prisma,
+    });
+    const leadEvents = await listCalendarLeaveEvents({
+      actor: lead,
+      fromDate: "2026-05-01",
+      toDate: "2026-05-31",
+      scope: "ALL",
+      statuses: ["APPROVED"],
+      prisma,
+    });
+
+    expect(new Set(managerEvents.map((event) => event.leaveRequestId))).toEqual(
+      new Set(["request-1", "request-other-team"]),
+    );
+    expect(new Set(leadEvents.map((event) => event.leaveRequestId))).toEqual(
+      new Set(["request-1", "request-other-team"]),
+    );
+  });
+
+  it("does not list pending, rejected, or cancelled leave on the all-company calendar", async () => {
+    const hiddenRequests = [
+      request({ id: "pending", status: "PENDING" }),
+      request({ id: "rejected", status: "REJECTED" }),
+      request({ id: "cancelled", status: "CANCELLED" }),
+      request({ id: "approved", status: "APPROVED" }),
+    ];
+    const events = await listCalendarLeaveEvents({
+      actor: manager,
+      fromDate: "2026-05-01",
+      toDate: "2026-05-31",
+      scope: "ALL",
+      statuses: ["APPROVED", "PENDING", "REJECTED", "CANCELLED"],
+      prisma: fakeCalendarPrisma(hiddenRequests),
+    });
+
+    expect(new Set(events.map((event) => event.leaveRequestId))).toEqual(
+      new Set(["approved"]),
+    );
+  });
 });
+
+function fakeCalendarPrisma(requests: CalendarLeaveRequest[]) {
+  return {
+    leaveTypeDefinition: {
+      findMany: async () => Array.from(definitions.values()),
+    },
+    leaveRequest: {
+      findMany: async (args: { where: { status: { in: string[] } } }) =>
+        requests.filter((item) => args.where.status.in.includes(item.status)),
+    },
+  } as unknown as PrismaClient;
+}

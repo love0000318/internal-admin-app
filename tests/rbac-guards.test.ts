@@ -36,6 +36,11 @@ const managerInOtherTeam: RbacUser = {
   status: "ACTIVE",
   teamId: "team-b",
 };
+const externalPartner: RbacUser = {
+  id: "external",
+  role: "EXTERNAL_PARTNER",
+  status: "ACTIVE",
+};
 
 describe("rbac guards", () => {
   it("allows only OWNER to invite users and manage leave policies", () => {
@@ -133,6 +138,7 @@ describe("rbac guards", () => {
     expect(canAccessRoute(lead, "/leaves/approvals")).toBe(true);
     expect(canAccessRoute(managerInLeadTeam, "/leaves/approvals")).toBe(false);
     expect(canAccessRoute(managerInLeadTeam, "/admin/work-management")).toBe(false);
+    expect(canAccessRoute(externalPartner, "/leaves/calendar")).toBe(false);
     expect(canAccessRoute(managerInLeadTeam, "/tasks")).toBe(false);
   });
 

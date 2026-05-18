@@ -342,6 +342,7 @@ export async function approveLeaveRequest(formData: FormData) {
   revalidatePath("/leaves/approvals");
   revalidatePath("/leaves/approvals/approved");
   revalidatePath("/leaves/me");
+  revalidatePath("/leaves/calendar");
   await notifyLeaveRequestApproved({ leaveRequestId: requestId, approvedByUserId: actor.id, prisma });
   redirect(withSearchParam(returnTo, "success", "approved"));
 }
@@ -620,6 +621,7 @@ export async function cancelApprovedLeaveRequest(formData: FormData) {
   revalidatePath("/leaves/approvals");
   revalidatePath("/leaves/approvals/approved");
   revalidatePath("/leaves/me");
+  revalidatePath("/leaves/calendar");
   await notifyLeaveRequestRejectedOrCancelled({ leaveRequestId: requestId, action: "CANCELLED", prisma });
   redirect(withSearchParam(returnTo, "success", "cancelled"));
 }

@@ -5,8 +5,9 @@ import {
   canApproveLeaveRequestWithPolicy,
   canCancelApprovedLeaveRequestWithPolicy,
   canRejectLeaveRequestWithPolicy,
+  shouldAutoApproveLeaveRequest,
 } from "@/lib/leave/approval-policy";
-import { Prisma } from "@/generated/prisma/client";
+import { Prisma, type PrismaClient } from "@/generated/prisma/client";
 import type { RbacUser } from "@/lib/rbac/roles";
 
 const requester = {
@@ -69,6 +70,7 @@ const outsideLead: RbacUser = {
   managedTeamIds: ["team-b"],
 };
 const manager: RbacUser = { id: "manager", role: "MANAGER", status: "ACTIVE" };
+const unusedPrisma = {} as unknown as PrismaClient;
 
 describe("approval policy authorization", () => {
   it("allows only OWNER for OWNER policy", () => {
@@ -135,5 +137,53 @@ describe("approval policy authorization", () => {
         { requireAttachmentAcceptedBeforeApproval: true },
       ),
     ).not.toThrow();
+  });
+
+  it("marks NONE approval policy requests for immediate auto approval", async () => {
+    await expect(
+      shouldAutoApproveLeaveRequest({
+        leaveRequest: request(),
+        prisma: unusedPrisma,
+        policy: {
+          approvalMode: "NONE",
+          approverRule: "OWNER",
+          customApproverUserId: null,
+          autoApproveIfNoApprover: false,
+          requireAttachmentAcceptedBeforeApproval: false,
+        },
+      }),
+    ).resolves.toBe(true);
+  });
+
+  it("keeps non-auto approval policy requests pending", async () => {
+    await expect(
+      shouldAutoApproveLeaveRequest({
+        leaveRequest: request(),
+        prisma: unusedPrisma,
+        policy: {
+          approvalMode: "SINGLE",
+          approverRule: "OWNER",
+          customApproverUserId: null,
+          autoApproveIfNoApprover: false,
+          requireAttachmentAcceptedBeforeApproval: false,
+        },
+      }),
+    ).resolves.toBe(false);
+  });
+
+  it("does not auto approve when required evidence has not been accepted", async () => {
+    await expect(
+      shouldAutoApproveLeaveRequest({
+        leaveRequest: { ...request(), attachmentStatus: "SUBMITTED" },
+        prisma: unusedPrisma,
+        policy: {
+          approvalMode: "NONE",
+          approverRule: "OWNER",
+          customApproverUserId: null,
+          autoApproveIfNoApprover: false,
+          requireAttachmentAcceptedBeforeApproval: true,
+        },
+      }),
+    ).resolves.toBe(false);
   });
 });

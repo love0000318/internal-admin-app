@@ -331,7 +331,7 @@ export async function notifyLeaveRequestApproved({
           priority: "NORMAL",
           title: "담당 조직 구성원의 휴가가 승인되었습니다.",
           message: `${leaveRequest.user.name}님의 ${typeName}이 승인되었습니다. 기간: ${period}.`,
-          linkUrl: "/leaves/calendar?scope=TEAM",
+          linkUrl: "/leaves/calendar?scope=ALL",
           metadata: buildLeaveNotificationMetadata({
             deduplicationKey: `managed-leave-approved:${leaveRequest.id}:${recipientId}`,
             leaveRequestId: leaveRequest.id,

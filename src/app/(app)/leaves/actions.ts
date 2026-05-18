@@ -417,6 +417,9 @@ async function createCustomGrantLeaveRequest(formData: FormData) {
   }
 
   revalidatePath("/leaves/me");
+  if (autoApprove) {
+    revalidatePath("/leaves/calendar");
+  }
   redirect(`/leaves/me/requests/${leaveRequest.id}?success=created`);
 }
 
@@ -718,6 +721,9 @@ export async function createLeaveRequest(formData: FormData) {
   }
 
   revalidatePath("/leaves/me");
+  if (autoApprove) {
+    revalidatePath("/leaves/calendar");
+  }
   redirect(`/leaves/me/requests/${leaveRequest.id}?success=created`);
 }
 
