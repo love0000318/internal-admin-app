@@ -1,6 +1,10 @@
 import { Prisma, type ApprovalPolicy, type PrismaClient } from "@/generated/prisma/client";
 import { getPrisma } from "@/lib/db/prisma";
-import { approvalPolicySummary, resolveApproversForLeaveRequest, type LeaveRequestWithPolicy } from "@/lib/leave/approval-policy";
+import {
+  approvalPolicySummary,
+  resolveApproversForLeaveRequest,
+  type LeaveRequestWithPolicy,
+} from "@/lib/leave/approval-policy";
 import { dateToDateOnly } from "@/lib/leave/calculate-business-days";
 import {
   formatLeaveDays,
@@ -11,6 +15,7 @@ import { createNotificationOnce, dedupeRecipientUserIds } from "@/lib/notificati
 import { sanitizeSecurityValue } from "@/lib/security/sanitize";
 
 type NotificationPrisma = PrismaClient | Prisma.TransactionClient;
+type LeaveApprovalNotificationSource = "MANUAL" | "AUTO_POLICY" | "AUTO_START_DATE";
 
 type LeaveNotificationRequest = LeaveRequestWithPolicy & {
   user: LeaveRequestWithPolicy["user"] & {
@@ -51,7 +56,7 @@ function leaveDateRangeLabel(leaveRequest: Pick<LeaveNotificationRequest, "start
 
 function formatKoreanDateTime(value: Date | null | undefined) {
   if (!value) {
-    return "처리 시각 미확정";
+    return "처리 시각 미확인";
   }
 
   return new Intl.DateTimeFormat("ko-KR", {
@@ -66,9 +71,10 @@ export function buildLeaveNotificationMetadata(input: {
   leaveRequestId: string;
   requesterUserId?: string;
   targetUserId?: string;
-  approvedByUserId?: string;
+  approvedByUserId?: string | null;
   processedByUserId?: string | null;
   processedAt?: string | null;
+  approvalSource?: LeaveApprovalNotificationSource | null;
   leaveType?: string;
   leaveTypeName?: string;
   status?: string;
@@ -86,6 +92,7 @@ export function buildLeaveNotificationMetadata(input: {
     approvedByUserId: input.approvedByUserId,
     processedByUserId: input.processedByUserId,
     processedAt: input.processedAt,
+    approvalSource: input.approvalSource,
     leaveType: input.leaveType,
     leaveTypeName: input.leaveTypeName,
     status: input.status,
@@ -115,7 +122,7 @@ export async function getLeaveApprovalNotificationRecipients({
   return dedupeRecipientUserIds(approvers.map((approver) => approver.id));
 }
 
-async function getApprovedLeaveRequest(leaveRequestId: string, prisma: NotificationPrisma) {
+async function getReviewedLeaveRequest(leaveRequestId: string, prisma: NotificationPrisma) {
   return prisma.leaveRequest.findUnique({
     where: { id: leaveRequestId },
     include: {
@@ -241,8 +248,8 @@ export async function notifyLeaveApprovalNeeded({
           userId: recipientId,
           type: "LEAVE_REQUEST_CREATED",
           priority: "HIGH",
-          title: "휴가 승인 요청이 도착했습니다.",
-          message: `${leaveRequest.user.name}님이 ${typeName} ${formatLeaveDays(dayCount)}을(를) 요청했습니다. 기간: ${period}.`,
+          title: "휴가 승인 요청이 접수되었습니다.",
+          message: `${leaveRequest.user.name}님이 ${typeName} ${formatLeaveDays(dayCount)}을 요청했습니다. 기간: ${period}.`,
           linkUrl: `/leaves/approvals/${leaveRequestId}`,
           metadata: buildLeaveNotificationMetadata({
             deduplicationKey: `leave-approval-needed:${leaveRequestId}:${recipientId}`,
@@ -271,41 +278,72 @@ export async function notifyLeaveApprovalNeeded({
 
 export async function notifyLeaveRequestApproved({
   leaveRequestId,
-  approvedByUserId,
+  approvedByUserId = null,
+  approvalSource = null,
   prisma = getPrisma(),
 }: {
   leaveRequestId: string;
-  approvedByUserId: string;
+  approvedByUserId?: string | null;
+  approvalSource?: LeaveApprovalNotificationSource | null;
   prisma?: NotificationPrisma;
 }) {
   try {
-    const leaveRequest = await getApprovedLeaveRequest(leaveRequestId, prisma);
+    const leaveRequest = await getReviewedLeaveRequest(leaveRequestId, prisma);
 
     if (!leaveRequest || leaveRequest.status !== "APPROVED" || leaveRequest.user.status !== "ACTIVE") {
       return { requesterCount: 0, managedLeadCount: 0 };
     }
 
+    const effectiveApprovalSource: LeaveApprovalNotificationSource =
+      approvalSource ?? (leaveRequest.approvalSource === "AUTO_START_DATE" ? "AUTO_START_DATE" : "MANUAL");
+    const isAutoConfirmed = effectiveApprovalSource === "AUTO_START_DATE";
+    const isAutoApproved = effectiveApprovalSource === "AUTO_POLICY";
     const range = dateRangeMetadata(leaveRequest);
     const typeName = leaveTypeLabel(leaveRequest);
     const period = leaveDateRangeLabel(leaveRequest);
     const processedAt = leaveRequest.reviewedAt ?? new Date();
-    const processorName = leaveRequest.reviewer?.name ?? "승인자";
+    const processedByUserId = approvedByUserId ?? leaveRequest.reviewerId;
+    const processorName =
+      isAutoConfirmed || isAutoApproved
+        ? "자동 처리"
+        : leaveRequest.reviewer?.name ?? "승인자";
     const dayCount = Number(leaveRequest.dayCount);
+    const requesterNotificationType = isAutoConfirmed
+      ? "LEAVE_REQUEST_AUTO_CONFIRMED"
+      : "LEAVE_REQUEST_APPROVED";
+    const requesterPurpose = isAutoConfirmed
+      ? "LEAVE_REQUEST_AUTO_CONFIRMED"
+      : "LEAVE_REQUEST_APPROVED";
+    const requesterDeduplicationPrefix = isAutoConfirmed
+      ? "leave-auto-confirmed-requester"
+      : "leave-approved-requester";
+    const requesterTitle = isAutoConfirmed
+      ? `${typeName} 요청이 자동 확정되었습니다.`
+      : isAutoApproved
+        ? `${typeName} 요청이 자동 승인되었습니다.`
+        : `${typeName} 요청이 승인되었습니다.`;
+    const requesterMessage = isAutoConfirmed
+      ? `${period} ${formatLeaveDays(dayCount)} 요청이 휴가 시작일 경과로 자동 확정되었습니다. 처리 시각: ${formatKoreanDateTime(processedAt)}.`
+      : isAutoApproved
+        ? `${period} ${formatLeaveDays(dayCount)} 요청이 승인 정책에 따라 자동 승인되었습니다. 처리 시각: ${formatKoreanDateTime(processedAt)}.`
+        : `${period} ${formatLeaveDays(dayCount)} 요청이 승인되었습니다. 처리자: ${processorName}, 처리 시각: ${formatKoreanDateTime(processedAt)}.`;
+
     await createNotificationOnce({
       userId: leaveRequest.userId,
-      type: "LEAVE_REQUEST_APPROVED",
+      type: requesterNotificationType,
       priority: "NORMAL",
-      title: `${typeName} 요청이 승인되었습니다.`,
-      message: `${period} ${formatLeaveDays(dayCount)} 요청이 승인되었습니다. 처리자: ${processorName}, 처리시각: ${formatKoreanDateTime(processedAt)}.`,
+      title: requesterTitle,
+      message: requesterMessage,
       linkUrl: `/leaves/me/requests/${leaveRequest.id}`,
       metadata: buildLeaveNotificationMetadata({
-        deduplicationKey: `leave-approved-requester:${leaveRequest.id}:${leaveRequest.userId}`,
+        deduplicationKey: `${requesterDeduplicationPrefix}:${leaveRequest.id}:${leaveRequest.userId}`,
         leaveRequestId: leaveRequest.id,
         requesterUserId: leaveRequest.userId,
         targetUserId: leaveRequest.userId,
-        approvedByUserId,
-        processedByUserId: approvedByUserId,
+        approvedByUserId: processedByUserId,
+        processedByUserId,
         processedAt: processedAt.toISOString(),
+        approvalSource: effectiveApprovalSource,
         teamId: leaveRequest.user.teamId,
         startDate: range.startDate,
         endDate: range.endDate,
@@ -313,33 +351,48 @@ export async function notifyLeaveRequestApproved({
         leaveTypeName: typeName,
         status: leaveRequest.status,
         dayCount,
-        notificationPurpose: "LEAVE_REQUEST_APPROVED",
+        notificationPurpose: requesterPurpose,
       }),
     });
 
     const leadRecipientIds = await getManagedOrganizationLeaveNotificationRecipients({
       leaveRequest,
-      approvedByUserId,
+      approvedByUserId: processedByUserId,
       prisma,
     });
+
+    const managedNotificationType = isAutoConfirmed ? "LEAVE_AUTO_CONFIRMED" : "LEAVE_APPROVED";
+    const managedPurpose = isAutoConfirmed
+      ? "MANAGED_TEAM_LEAVE_AUTO_CONFIRMED"
+      : "MANAGED_TEAM_LEAVE_APPROVED";
+    const managedDeduplicationPrefix = isAutoConfirmed
+      ? "managed-leave-auto-confirmed"
+      : "managed-leave-approved";
+    const managedTitle = isAutoConfirmed
+      ? "담당 조직 구성원의 휴가가 자동 확정되었습니다."
+      : "담당 조직 구성원의 휴가가 승인되었습니다.";
+    const managedMessage = isAutoConfirmed
+      ? `${leaveRequest.user.name}님의 ${typeName}이 휴가 시작일 경과로 자동 확정되었습니다. 기간: ${period}.`
+      : `${leaveRequest.user.name}님의 ${typeName}이 승인되었습니다. 기간: ${period}.`;
 
     await Promise.all(
       leadRecipientIds.map((recipientId) =>
         createNotificationOnce({
           userId: recipientId,
-          type: "LEAVE_APPROVED",
+          type: managedNotificationType,
           priority: "NORMAL",
-          title: "담당 조직 구성원의 휴가가 승인되었습니다.",
-          message: `${leaveRequest.user.name}님의 ${typeName}이 승인되었습니다. 기간: ${period}.`,
+          title: managedTitle,
+          message: managedMessage,
           linkUrl: "/leaves/calendar?scope=ALL",
           metadata: buildLeaveNotificationMetadata({
-            deduplicationKey: `managed-leave-approved:${leaveRequest.id}:${recipientId}`,
+            deduplicationKey: `${managedDeduplicationPrefix}:${leaveRequest.id}:${recipientId}`,
             leaveRequestId: leaveRequest.id,
             requesterUserId: leaveRequest.userId,
             targetUserId: leaveRequest.userId,
-            approvedByUserId,
-            processedByUserId: approvedByUserId,
+            approvedByUserId: processedByUserId,
+            processedByUserId,
             processedAt: processedAt.toISOString(),
+            approvalSource: effectiveApprovalSource,
             teamId: leaveRequest.user.teamId,
             startDate: range.startDate,
             endDate: range.endDate,
@@ -347,7 +400,7 @@ export async function notifyLeaveRequestApproved({
             leaveTypeName: typeName,
             status: leaveRequest.status,
             dayCount,
-            notificationPurpose: "MANAGED_TEAM_LEAVE_APPROVED",
+            notificationPurpose: managedPurpose,
           }),
         }),
       ),
@@ -370,7 +423,7 @@ export async function notifyLeaveRequestRejectedOrCancelled({
   prisma?: NotificationPrisma;
 }) {
   try {
-    const leaveRequest = await getApprovedLeaveRequest(leaveRequestId, prisma);
+    const leaveRequest = await getReviewedLeaveRequest(leaveRequestId, prisma);
 
     if (!leaveRequest || leaveRequest.user.status !== "ACTIVE") {
       return { count: 0 };
@@ -390,8 +443,8 @@ export async function notifyLeaveRequestRejectedOrCancelled({
         ? `${typeName} 요청이 반려되었습니다.`
         : `${typeName} 요청이 취소되었습니다.`,
       message: isRejected
-        ? `${period} ${formatLeaveDays(dayCount)} 요청이 반려되었습니다. 처리자: ${processorName}, 처리시각: ${formatKoreanDateTime(processedAt)}. 상세 사유는 요청 상세에서 확인해 주세요.`
-        : `${period} ${formatLeaveDays(dayCount)} 승인 휴가가 취소되었습니다. 처리자: ${processorName}, 처리시각: ${formatKoreanDateTime(processedAt)}.`,
+        ? `${period} ${formatLeaveDays(dayCount)} 요청이 반려되었습니다. 처리자: ${processorName}, 처리 시각: ${formatKoreanDateTime(processedAt)}. 상세 사유는 요청 상세에서 확인해 주세요.`
+        : `${period} ${formatLeaveDays(dayCount)} 승인 휴가가 취소되었습니다. 처리자: ${processorName}, 처리 시각: ${formatKoreanDateTime(processedAt)}.`,
       linkUrl: `/leaves/me/requests/${leaveRequest.id}`,
       metadata: buildLeaveNotificationMetadata({
         deduplicationKey: `leave-${action.toLowerCase()}:${leaveRequest.id}:${leaveRequest.userId}`,

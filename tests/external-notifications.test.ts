@@ -6,13 +6,13 @@ import {
   isEmailProviderUsable,
   isSlackProviderUsable,
 } from "@/lib/external-notifications/config";
+import { dispatchExternalNotification } from "@/lib/external-notifications/dispatch-external-notification";
 import { sendEmail } from "@/lib/external-notifications/send-email";
 import { WebhookSlackProvider } from "@/lib/external-notifications/slack-provider";
 import {
   buildExternalEmailTemplate,
   buildInvitationEmailTemplate,
 } from "@/lib/external-notifications/templates";
-import { dispatchExternalNotification } from "@/lib/external-notifications/dispatch-external-notification";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -93,6 +93,27 @@ describe("external notification templates", () => {
 
     expect(template.subject).toBe("휴가 승인 요청이 등록되었습니다.");
     expect(template.text).toContain("연차");
+    expect(template.text).not.toContain("private reason");
+  });
+
+  it("builds auto-confirmed leave email without private reasons", () => {
+    const template = buildExternalEmailTemplate({
+      type: "LEAVE_AUTO_CONFIRMED",
+      title: "ignored",
+      message: "private reason should not be copied",
+      linkUrl: "/leaves/me/requests/request-1",
+      appBaseUrl: "https://app.example.com",
+      context: {
+        leaveTypeName: "연차",
+        startDate: "2026-05-01",
+        endDate: "2026-05-01",
+        reason: "private reason",
+      },
+    });
+
+    expect(template.subject).toBe("휴가 요청이 자동 확정되었습니다.");
+    expect(template.text).toContain("연차");
+    expect(template.text).toContain("https://app.example.com/leaves/me/requests/request-1");
     expect(template.text).not.toContain("private reason");
   });
 

@@ -50,7 +50,10 @@ import {
 } from "@/lib/leave/queries";
 import type { DateOnly, LeaveOverlapCandidate } from "@/lib/leave/types";
 import { leaveRequestSchema, optionalString } from "@/lib/leave/validation";
-import { notifyLeaveApprovalNeeded } from "@/lib/notifications/leave-notifications";
+import {
+  notifyLeaveApprovalNeeded,
+  notifyLeaveRequestApproved,
+} from "@/lib/notifications/leave-notifications";
 import { requireRouteAccess } from "@/lib/rbac/server-guards";
 
 function toJsonValue(value: unknown): Prisma.InputJsonValue {
@@ -386,19 +389,6 @@ async function createCustomGrantLeaveRequest(formData: FormData) {
           actorId: actor.id,
         });
 
-        await tx.notification.create({
-          data: {
-            userId: actor.id,
-            type: "LEAVE_APPROVED",
-            title: "휴가 신청이 자동 승인되었습니다.",
-            message: `${grant!.leaveType.name} 신청이 승인 정책에 따라 자동 승인되었습니다.`,
-            linkUrl: `/leaves/me/requests/${created.id}`,
-            metadata: toJsonValue({
-              leaveRequestId: created.id,
-              approvalPolicy: approvalPolicySummary(approvalPolicy),
-            }),
-          },
-        });
       }
 
       return created;
@@ -406,7 +396,14 @@ async function createCustomGrantLeaveRequest(formData: FormData) {
     { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
   );
 
-  if (!autoApprove) {
+  if (autoApprove) {
+    await notifyLeaveRequestApproved({
+      prisma,
+      leaveRequestId: leaveRequest.id,
+      approvedByUserId: null,
+      approvalSource: "AUTO_POLICY",
+    });
+  } else {
     await notifyLeaveApprovalNeeded({
       prisma,
       leaveRequest: approvalCheckRequest,
@@ -692,25 +689,19 @@ export async function createLeaveRequest(formData: FormData) {
         actorId: actor.id,
       });
 
-      await tx.notification.create({
-        data: {
-          userId: actor.id,
-          type: "LEAVE_APPROVED",
-          title: "휴가 신청이 자동 승인되었습니다.",
-          message: `${policy.name} 신청이 승인 정책에 따라 자동 승인되었습니다.`,
-          linkUrl: `/leaves/me/requests/${created.id}`,
-          metadata: toJsonValue({
-            leaveRequestId: created.id,
-            approvalPolicy: approvalPolicySummary(approvalPolicy),
-          }),
-        },
-      });
     }
 
     return created;
   });
 
-  if (!autoApprove) {
+  if (autoApprove) {
+    await notifyLeaveRequestApproved({
+      prisma,
+      leaveRequestId: leaveRequest.id,
+      approvedByUserId: null,
+      approvalSource: "AUTO_POLICY",
+    });
+  } else {
     await notifyLeaveApprovalNeeded({
       prisma,
       leaveRequest: approvalCheckRequest,

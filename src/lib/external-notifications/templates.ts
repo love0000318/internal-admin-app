@@ -68,6 +68,20 @@ export function buildExternalEmailTemplate(params: ExternalNotificationTemplateP
     };
   }
 
+  if (params.type === "LEAVE_AUTO_CONFIRMED" || params.type === "LEAVE_REQUEST_AUTO_CONFIRMED") {
+    return {
+      subject: "휴가 요청이 자동 확정되었습니다.",
+      text: joinLines([
+        "휴가 시작일이 지나 승인 대기 중이던 휴가 요청이 자동 확정되었습니다.",
+        "",
+        `휴가 유형: ${leaveType}`,
+        period ? `기간: ${period}` : null,
+        "",
+        link ? `Internal Ops에서 확인하기: ${link}` : null,
+      ]),
+    };
+  }
+
   if (params.type === "LEAVE_REJECTED" || params.type === "LEAVE_REQUEST_REJECTED") {
     return {
       subject: "휴가 요청이 반려되었습니다.",

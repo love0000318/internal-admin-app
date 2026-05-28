@@ -347,7 +347,7 @@ function baseUserWhere(
   }
 
   if (isManager(actor)) {
-    return { id: actor.id };
+    return actor.teamId ? { teamId: actor.teamId } : { id: actor.id };
   }
 
   return { id: "__calendar_access_denied__" };

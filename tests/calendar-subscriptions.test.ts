@@ -10,6 +10,7 @@ import {
   getCalendarProviderLabel,
   isCalendarProvider,
 } from "@/lib/calendar-subscriptions/permissions";
+import { resolveCalendarSubscriptionEventScope } from "@/lib/calendar-subscriptions/service";
 import {
   generateCalendarSubscriptionToken,
   hashCalendarSubscriptionToken,
@@ -57,6 +58,52 @@ describe("calendar provider mapping", () => {
     expect(getCalendarProviderLabel("GOOGLE")).toBe("Google Calendar");
     expect(getCalendarProviderFromName("provider:OUTLOOK")).toBe("OUTLOOK");
     expect(getCalendarProviderFromName("unexpected")).toBe("OTHER");
+  });
+});
+
+describe("calendar subscription scopes", () => {
+  const actor = {
+    id: "user-1",
+    role: "MANAGER" as const,
+    status: "ACTIVE" as const,
+    teamId: "team-a",
+  };
+
+  it("uses the stored subscription scope when building ICS feeds", () => {
+    expect(
+      resolveCalendarSubscriptionEventScope({
+        actor,
+        subscription: { scope: "ME", teamId: null },
+      }),
+    ).toEqual({ scope: "ME", teamId: null });
+
+    expect(
+      resolveCalendarSubscriptionEventScope({
+        actor,
+        subscription: { scope: "TEAM", teamId: "team-b" },
+      }),
+    ).toEqual({ scope: "TEAM", teamId: "team-b" });
+
+    expect(
+      resolveCalendarSubscriptionEventScope({
+        actor,
+        subscription: { scope: "TEAM", teamId: null },
+      }),
+    ).toEqual({ scope: "TEAM", teamId: "team-a" });
+
+    expect(
+      resolveCalendarSubscriptionEventScope({
+        actor,
+        subscription: { scope: "MANAGED_TEAMS", teamId: null },
+      }),
+    ).toEqual({ scope: "TEAM", teamId: null });
+
+    expect(
+      resolveCalendarSubscriptionEventScope({
+        actor,
+        subscription: { scope: "ALL_COMPANY", teamId: null },
+      }),
+    ).toEqual({ scope: "ALL", teamId: null });
   });
 });
 

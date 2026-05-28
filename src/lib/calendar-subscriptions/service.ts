@@ -16,7 +16,7 @@ import {
 } from "@/lib/calendar-subscriptions/tokens";
 import { getPrisma } from "@/lib/db/prisma";
 import { isPrismaSchemaPreparationError } from "@/lib/db/schema-errors";
-import { listCalendarLeaveEvents } from "@/lib/leave/calendar";
+import { listCalendarLeaveEvents, type CalendarScope } from "@/lib/leave/calendar";
 import { todayInSeoul } from "@/lib/leave/calculate-business-days";
 import { hydrateReviewScope } from "@/lib/leave/review";
 import type { DateOnly } from "@/lib/leave/types";
@@ -310,6 +310,28 @@ function shouldUpdateLastUsedAt(lastUsedAt: Date | null) {
   return Date.now() - lastUsedAt.getTime() > 24 * 60 * 60 * 1000;
 }
 
+export function resolveCalendarSubscriptionEventScope({
+  actor,
+  subscription,
+}: {
+  actor: RbacUser;
+  subscription: Pick<CalendarSubscriptionToken, "scope" | "teamId">;
+}): { scope: CalendarScope; teamId: string | null } {
+  if (subscription.scope === "ALL_COMPANY") {
+    return { scope: "ALL", teamId: null };
+  }
+
+  if (subscription.scope === "MANAGED_TEAMS") {
+    return { scope: "TEAM", teamId: null };
+  }
+
+  if (subscription.scope === "TEAM") {
+    return { scope: "TEAM", teamId: subscription.teamId ?? actor.teamId ?? null };
+  }
+
+  return { scope: "ME", teamId: null };
+}
+
 export async function buildCalendarSubscriptionIcs(rawToken: string) {
   let subscription;
 
@@ -336,12 +358,17 @@ export async function buildCalendarSubscriptionIcs(rawToken: string) {
   const today = todayInSeoul();
   const fromDate = addMonthsDateOnly(today, -12);
   const toDate = addMonthsDateOnly(today, 24);
+  const eventScope = resolveCalendarSubscriptionEventScope({
+    actor,
+    subscription,
+  });
   const events = await listCalendarLeaveEvents({
     actor,
     fromDate,
     toDate,
     statuses: ["APPROVED"],
-    scope: "ME",
+    scope: eventScope.scope,
+    teamId: eventScope.teamId,
   });
 
   if (shouldUpdateLastUsedAt(subscription.lastUsedAt)) {
@@ -352,7 +379,7 @@ export async function buildCalendarSubscriptionIcs(rawToken: string) {
   }
 
   return buildIcsCalendar({
-    calendarName: getCalendarSubscriptionScopeLabel("ME"),
+    calendarName: getCalendarSubscriptionScopeLabel(subscription.scope),
     events,
   });
 }

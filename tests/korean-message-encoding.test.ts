@@ -6,6 +6,8 @@ const criticalMessageFiles = [
   "src/app/(app)/leaves/actions.ts",
   "src/lib/leave/auto-confirm.ts",
   "src/lib/leave/birthday-half-day.ts",
+  "src/lib/leave/labels.ts",
+  "src/lib/external-notifications/templates.ts",
   "src/lib/notifications/leave-notifications.ts",
   "src/lib/organization/invitations.ts",
 ];

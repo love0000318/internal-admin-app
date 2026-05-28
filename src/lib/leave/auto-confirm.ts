@@ -21,6 +21,7 @@ import { recordLeaveRequestAutoConfirmedLedger } from "@/lib/leave/ledger";
 import { assertNoOverlappingLeaveRequest } from "@/lib/leave/overlap";
 import { getLeavePolicyMap, getUserLeaveBalance } from "@/lib/leave/queries";
 import type { DateOnly, LeaveOverlapCandidate } from "@/lib/leave/types";
+import { notifyLeaveRequestApproved } from "@/lib/notifications/leave-notifications";
 
 const AUTO_CONFIRM_REASON = "휴가 시작일 경과로 자동 확정";
 
@@ -260,128 +261,138 @@ export async function autoConfirmPendingLeaveRequest({
   date?: DateOnly;
   prisma?: PrismaClient;
 }) {
-  return prisma.$transaction(
-    async (tx) => {
-      const leaveRequest = (await tx.leaveRequest.findUnique({
-        where: { id: leaveRequestId },
-        include: autoConfirmLeaveRequestInclude,
-      })) as AutoConfirmLeaveRequest | null;
+  let result;
 
-      if (!leaveRequest) {
-        return { status: "SKIPPED" as const, reason: "NOT_PENDING" as AutoConfirmSkipReason };
-      }
+  try {
+    result = await prisma.$transaction(
+      async (tx) => {
+        const leaveRequest = (await tx.leaveRequest.findUnique({
+          where: { id: leaveRequestId },
+          include: autoConfirmLeaveRequestInclude,
+        })) as AutoConfirmLeaveRequest | null;
 
-      const approvalPolicy = await resolveApprovalPolicyForLeaveRequest({
-        leaveRequest,
-        prisma: tx,
-      });
-
-      const decision = shouldAutoConfirmLeaveRequest({
-        leaveRequest,
-        policy: approvalPolicy,
-        today: date,
-      });
-
-      if (!decision.shouldAutoConfirm) {
-        return { status: "SKIPPED" as const, reason: decision.reason };
-      }
-
-      try {
-        assertAttachmentRequirementForApproval(leaveRequest, approvalPolicy);
-        await assertAutoConfirmStillValid({ tx, leaveRequest });
-      } catch (error) {
-        const reason =
-          error instanceof Error && error.message === "ALREADY_HAS_AUTO_CONFIRM_LEDGER"
-            ? "ALREADY_HAS_AUTO_CONFIRM_LEDGER"
-            : error instanceof Error && error.message === "LEAVE_TYPE_DISABLED"
-              ? "LEAVE_TYPE_DISABLED"
-              : "BALANCE_OR_OVERLAP";
-        return { status: "SKIPPED" as const, reason: reason as AutoConfirmSkipReason };
-      }
-
-      const autoConfirmedAt = new Date();
-      const updateResult = await tx.leaveRequest.updateMany({
-        where: {
-          id: leaveRequest.id,
-          status: "PENDING",
-          autoConfirmedAt: null,
-        },
-        data: {
-          status: "APPROVED",
-          reviewerId: null,
-          reviewedAt: autoConfirmedAt,
-          reviewComment: AUTO_CONFIRM_REASON,
-          rejectReason: null,
-          cancelReason: null,
-          cancelledAt: null,
-          autoConfirmedAt,
-          autoConfirmReason: AUTO_CONFIRM_REASON,
-          approvalSource: "AUTO_START_DATE",
-        },
-      });
-
-      if (updateResult.count !== 1) {
-        return { status: "SKIPPED" as const, reason: "NOT_PENDING" as AutoConfirmSkipReason };
-      }
-
-      if (leaveRequest.requestKind === "CUSTOM_GRANT") {
-        try {
-          for (const usage of leaveRequest.grantUsages) {
-            await convertLeaveGrantPendingToUsed({
-              tx,
-              leaveGrantId: usage.leaveGrantId,
-              amount: usage.amount,
-            });
-          }
-        } catch (error) {
-          if (error instanceof CustomLeaveRequestError) {
-            throw new Error("GRANT_STATE");
-          }
-          throw error;
+        if (!leaveRequest) {
+          return { status: "SKIPPED" as const, reason: "NOT_PENDING" as AutoConfirmSkipReason };
         }
-      }
 
-      await recordLeaveRequestAutoConfirmedLedger({ tx, leaveRequest });
+        const approvalPolicy = await resolveApprovalPolicyForLeaveRequest({
+          leaveRequest,
+          prisma: tx,
+        });
 
-      await tx.notification.create({
-        data: {
-          userId: leaveRequest.userId,
-          type: "LEAVE_AUTO_CONFIRMED",
-          title: "휴가 요청이 자동 확정되었습니다.",
-          message: "휴가 시작일이 지나 승인 대기 중이던 휴가 요청이 자동 확정되었습니다.",
-          linkUrl: `/leaves/me/requests/${leaveRequest.id}`,
-          metadata: toJsonValue({ leaveRequestId: leaveRequest.id }),
-        },
-      });
+        const decision = shouldAutoConfirmLeaveRequest({
+          leaveRequest,
+          policy: approvalPolicy,
+          today: date,
+        });
 
-      await tx.auditLog.create({
-        data: {
-          actorId: null,
-          actorUserId: null,
-          targetUserId: leaveRequest.userId,
-          action: "LEAVE_REQUEST_AUTO_CONFIRMED_AFTER_START_DATE",
-          targetType: "LEAVE_REQUEST",
-          targetId: leaveRequest.id,
-          metadata: toJsonValue({
-            leaveRequestId: leaveRequest.id,
-            requesterId: leaveRequest.userId,
-            leaveTypeId: leaveRequest.leaveTypeId,
-            startDate: dateToDateOnly(leaveRequest.startDate),
-            endDate: dateToDateOnly(leaveRequest.endDate),
-            requestedDays: toNumber(leaveRequest.dayCount),
-            previousStatus: leaveRequest.status,
-            newStatus: "APPROVED",
-            autoConfirmedAt: autoConfirmedAt.toISOString(),
-            reason: "START_DATE_PASSED",
-            approvalPolicy: approvalPolicySummary(approvalPolicy),
-          }),
-        },
-      });
+        if (!decision.shouldAutoConfirm) {
+          return { status: "SKIPPED" as const, reason: decision.reason };
+        }
 
-      return { status: "AUTO_CONFIRMED" as const };
-    },
-    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-  );
+        try {
+          assertAttachmentRequirementForApproval(leaveRequest, approvalPolicy);
+          await assertAutoConfirmStillValid({ tx, leaveRequest });
+        } catch (error) {
+          const reason =
+            error instanceof Error && error.message === "ALREADY_HAS_AUTO_CONFIRM_LEDGER"
+              ? "ALREADY_HAS_AUTO_CONFIRM_LEDGER"
+              : error instanceof Error && error.message === "LEAVE_TYPE_DISABLED"
+                ? "LEAVE_TYPE_DISABLED"
+                : "BALANCE_OR_OVERLAP";
+          return { status: "SKIPPED" as const, reason: reason as AutoConfirmSkipReason };
+        }
+
+        const autoConfirmedAt = new Date();
+        const updateResult = await tx.leaveRequest.updateMany({
+          where: {
+            id: leaveRequest.id,
+            status: "PENDING",
+            autoConfirmedAt: null,
+          },
+          data: {
+            status: "APPROVED",
+            reviewerId: null,
+            reviewedAt: autoConfirmedAt,
+            reviewComment: AUTO_CONFIRM_REASON,
+            rejectReason: null,
+            cancelReason: null,
+            cancelledAt: null,
+            autoConfirmedAt,
+            autoConfirmReason: AUTO_CONFIRM_REASON,
+            approvalSource: "AUTO_START_DATE",
+          },
+        });
+
+        if (updateResult.count !== 1) {
+          return { status: "SKIPPED" as const, reason: "NOT_PENDING" as AutoConfirmSkipReason };
+        }
+
+        if (leaveRequest.requestKind === "CUSTOM_GRANT") {
+          try {
+            for (const usage of leaveRequest.grantUsages) {
+              await convertLeaveGrantPendingToUsed({
+                tx,
+                leaveGrantId: usage.leaveGrantId,
+                amount: usage.amount,
+              });
+            }
+          } catch (error) {
+            if (error instanceof CustomLeaveRequestError) {
+              throw new Error("GRANT_STATE");
+            }
+            throw error;
+          }
+        }
+
+        await recordLeaveRequestAutoConfirmedLedger({ tx, leaveRequest });
+
+        await tx.auditLog.create({
+          data: {
+            actorId: null,
+            actorUserId: null,
+            targetUserId: leaveRequest.userId,
+            action: "LEAVE_REQUEST_AUTO_CONFIRMED_AFTER_START_DATE",
+            targetType: "LEAVE_REQUEST",
+            targetId: leaveRequest.id,
+            metadata: toJsonValue({
+              leaveRequestId: leaveRequest.id,
+              requesterId: leaveRequest.userId,
+              leaveTypeId: leaveRequest.leaveTypeId,
+              startDate: dateToDateOnly(leaveRequest.startDate),
+              endDate: dateToDateOnly(leaveRequest.endDate),
+              requestedDays: toNumber(leaveRequest.dayCount),
+              previousStatus: leaveRequest.status,
+              newStatus: "APPROVED",
+              autoConfirmedAt: autoConfirmedAt.toISOString(),
+              reason: "START_DATE_PASSED",
+              approvalPolicy: approvalPolicySummary(approvalPolicy),
+            }),
+          },
+        });
+
+        return { status: "AUTO_CONFIRMED" as const };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+  } catch (error) {
+    if (error instanceof Error && error.message === "GRANT_STATE") {
+      return { status: "SKIPPED" as const, reason: "GRANT_STATE" as AutoConfirmSkipReason };
+    }
+
+    throw error;
+  }
+
+  if (result.status === "AUTO_CONFIRMED") {
+    await notifyLeaveRequestApproved({
+      prisma,
+      leaveRequestId,
+      approvedByUserId: null,
+      approvalSource: "AUTO_START_DATE",
+    });
+  }
+
+  return result;
 }
 
 export async function autoConfirmPendingLeaveRequestsForDate({
