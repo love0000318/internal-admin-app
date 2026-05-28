@@ -363,12 +363,54 @@ describe("birthday half-day grant job", () => {
 
     expect(result.mode).toBe("due-through-date");
     expect(result.dueCount).toBe(1);
+    expect(result.expiredCount).toBe(0);
     expect(result.grants).toEqual([
       expect.objectContaining({
         userId: "user-due",
         birthdayDate: "2026-06-10",
         nominalGrantDate: "2026-06-03",
         actualGrantDate: "2026-06-03",
+        usableUntil: "2026-06-17",
+      }),
+    ]);
+    expect(leaveGrants).toHaveLength(0);
+  });
+
+  it("reports past missed grants as expired instead of due after usable period ends", async () => {
+    const { prisma, leaveGrants } = createBirthdayGrantPrismaMock({
+      users: [
+        {
+          id: "user-expired",
+          name: "Expired User",
+          status: "ACTIVE",
+          birthDate: utcDate("1995-01-18"),
+        },
+      ],
+    });
+
+    const result = await grantBirthdayHalfDaysForDate({
+      prisma,
+      processedDate: "2026-05-29",
+      dryRun: true,
+      includePastDue: true,
+    });
+
+    expect(result.dueCount).toBe(0);
+    expect(result.expiredCount).toBe(1);
+    expect(result.grants).toHaveLength(0);
+    expect(result.expiredCandidates).toEqual([
+      expect.objectContaining({
+        userId: "user-expired",
+        birthdayDate: "2026-01-18",
+        actualGrantDate: "2026-01-11",
+        usableUntil: "2026-01-25",
+      }),
+    ]);
+    expect(result.skipped).toEqual([
+      expect.objectContaining({
+        userId: "user-expired",
+        reason: "EXPIRED",
+        birthdayDate: "2026-01-18",
       }),
     ]);
     expect(leaveGrants).toHaveLength(0);
@@ -395,6 +437,34 @@ describe("birthday half-day grant job", () => {
 
     expect(result.dueCount).toBe(0);
     expect(result.grants).toHaveLength(0);
+  });
+
+  it("does not create grants for expired missed birthdays in apply mode", async () => {
+    const { prisma, leaveGrants, leaveLedgers, auditLogs } =
+      createBirthdayGrantPrismaMock({
+        users: [
+          {
+            id: "user-expired-apply",
+            name: "Expired Apply User",
+            status: "ACTIVE",
+            birthDate: utcDate("1995-01-18"),
+          },
+        ],
+      });
+
+    const result = await grantBirthdayHalfDaysForDate({
+      prisma,
+      processedDate: "2026-05-29",
+      dryRun: false,
+      includePastDue: true,
+    });
+
+    expect(result.dueCount).toBe(0);
+    expect(result.expiredCount).toBe(1);
+    expect(result.grantedCount).toBe(0);
+    expect(leaveGrants).toHaveLength(0);
+    expect(leaveLedgers).toHaveLength(0);
+    expect(auditLogs).toHaveLength(0);
   });
 
   it("creates grant, ledger, and audit records when apply mode runs", async () => {
@@ -463,6 +533,7 @@ describe("birthday half-day grant job", () => {
     });
 
     expect(result.alreadyGrantedCount).toBe(1);
+    expect(result.dueCount).toBe(0);
     expect(result.grantedCount).toBe(0);
     expect(leaveGrants).toHaveLength(1);
   });

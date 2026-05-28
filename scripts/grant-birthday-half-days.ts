@@ -73,6 +73,7 @@ async function main() {
           mode: result.mode,
           activeUserCount: result.activeUserCount,
           dueCount: result.dueCount,
+          expiredCount: result.expiredCount,
           missingBirthDateCount: result.missingBirthDateCount,
           alreadyGrantedCount: result.alreadyGrantedCount,
           grantedCount: result.grantedCount,
@@ -85,6 +86,14 @@ async function main() {
             actualGrantDate: grant.actualGrantDate,
             usableFrom: grant.usableFrom,
             usableUntil: grant.usableUntil,
+          })),
+          expiredCandidates: result.expiredCandidates.map((candidate) => ({
+            userId: candidate.userId,
+            birthdayDate: candidate.birthdayDate,
+            nominalGrantDate: candidate.nominalGrantDate,
+            actualGrantDate: candidate.actualGrantDate,
+            usableFrom: candidate.usableFrom,
+            usableUntil: candidate.usableUntil,
           })),
         },
       };

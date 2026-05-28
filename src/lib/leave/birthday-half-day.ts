@@ -33,6 +33,7 @@ export type BirthdayGrantJobResult = {
   mode: BirthdayGrantMode;
   activeUserCount: number;
   dueCount: number;
+  expiredCount: number;
   missingBirthDateCount: number;
   alreadyGrantedCount: number;
   grantedCount: number;
@@ -47,10 +48,20 @@ export type BirthdayGrantJobResult = {
     usableFrom: DateOnly;
     usableUntil: DateOnly;
   }>;
+  expiredCandidates: Array<{
+    userId: string;
+    birthdayDate: DateOnly;
+    nominalGrantDate: DateOnly;
+    actualGrantDate: DateOnly;
+    usableFrom: DateOnly;
+    usableUntil: DateOnly;
+  }>;
   skipped: Array<{
     userId: string;
     reason: string;
     birthdayDate?: DateOnly;
+    actualGrantDate?: DateOnly;
+    usableUntil?: DateOnly;
   }>;
 };
 
@@ -289,12 +300,14 @@ export async function grantBirthdayHalfDaysForDate({
     mode,
     activeUserCount: 0,
     dueCount: 0,
+    expiredCount: 0,
     missingBirthDateCount: 0,
     alreadyGrantedCount: 0,
     grantedCount: 0,
     skippedCount: 0,
     disabled: !policy?.isEnabled,
     grants: [],
+    expiredCandidates: [],
     skipped: [],
   };
 
@@ -363,8 +376,6 @@ export async function grantBirthdayHalfDaysForDate({
         continue;
       }
 
-      result.dueCount += 1;
-
       const existing = await prisma.leaveGrant.findFirst({
         where: {
           userId: user.id,
@@ -384,6 +395,31 @@ export async function grantBirthdayHalfDaysForDate({
         });
         continue;
       }
+
+      const grantWindowExpired = compareDateOnly(usableUntil, processedDate) < 0;
+
+      if (grantWindowExpired) {
+        result.expiredCount += 1;
+        result.skippedCount += 1;
+        result.expiredCandidates.push({
+          userId: user.id,
+          birthdayDate,
+          nominalGrantDate,
+          actualGrantDate,
+          usableFrom,
+          usableUntil,
+        });
+        result.skipped.push({
+          userId: user.id,
+          reason: "EXPIRED",
+          birthdayDate,
+          actualGrantDate,
+          usableUntil,
+        });
+        continue;
+      }
+
+      result.dueCount += 1;
 
       if (dryRun) {
         result.grants.push({

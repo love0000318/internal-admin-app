@@ -19,6 +19,10 @@ export async function POST(request: Request) {
   const processedDate = (url.searchParams.get("date") ?? todayInSeoul()) as DateOnly;
   const dryRun = url.searchParams.get("dryRun") === "true";
   const includePastDue = url.searchParams.get("recoverMissing") === "true";
+  const birthdayGrantCounts = {
+    dueCount: 0,
+    expiredCount: 0,
+  };
 
   const jobRun = await runJobWithTracking(
     {
@@ -32,6 +36,8 @@ export async function POST(request: Request) {
         dryRun,
         includePastDue,
       });
+      birthdayGrantCounts.dueCount = result.dueCount;
+      birthdayGrantCounts.expiredCount = result.expiredCount;
 
       return {
         checkedCount: result.activeUserCount,
@@ -43,6 +49,7 @@ export async function POST(request: Request) {
           mode: result.mode,
           activeUserCount: result.activeUserCount,
           dueCount: result.dueCount,
+          expiredCount: result.expiredCount,
           missingBirthDateCount: result.missingBirthDateCount,
           alreadyGrantedCount: result.alreadyGrantedCount,
           grantedCount: result.grantedCount,
@@ -59,6 +66,8 @@ export async function POST(request: Request) {
     dryRun,
     mode: includePastDue ? "due-through-date" : "exact-date",
     checkedCount: jobRun.checkedCount ?? 0,
+    dueCount: birthdayGrantCounts.dueCount,
+    expiredCount: birthdayGrantCounts.expiredCount,
     grantedCount: jobRun.createdCount ?? 0,
     skippedCount: jobRun.skippedCount ?? 0,
   });
