@@ -122,6 +122,25 @@ type NotificationPrisma = PrismaClient | Prisma.TransactionClient;
 
 export const NOTIFICATION_PRIORITIES = ["LOW", "NORMAL", "HIGH", "CRITICAL"] as const;
 
+export function normalizeNotificationRedirectPath(value: string | null | undefined) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+
+  if (
+    !trimmed.startsWith("/") ||
+    trimmed.startsWith("//") ||
+    trimmed.startsWith("/\\") ||
+    /[\u0000-\u001F\u007F]/.test(trimmed)
+  ) {
+    return null;
+  }
+
+  return trimmed;
+}
+
 export function normalizeNotificationPriority(
   priority: string | null | undefined,
 ): NotificationPriority {
@@ -376,8 +395,56 @@ export function assertCanViewNotification(actor: RbacUser, notification: Notific
   }
 }
 
-export async function markNotificationAsRead(userId: string, notificationId: string) {
-  const prisma = getPrisma();
+async function markAnnualPromotionNoticeRead({
+  userId,
+  metadata,
+  readAt,
+  prisma,
+}: {
+  userId: string;
+  metadata: unknown;
+  readAt: Date;
+  prisma: NotificationPrisma;
+}) {
+  const annualLeavePromotionNoticeId = getAnnualLeavePromotionNoticeId(metadata);
+
+  if (typeof annualLeavePromotionNoticeId !== "string") {
+    return { count: 0 };
+  }
+
+  return prisma.annualLeavePromotionNotice.updateMany({
+    where: {
+      id: annualLeavePromotionNoticeId,
+      userId,
+      readAt: null,
+    },
+    data: { readAt },
+  });
+}
+
+export async function markNotificationAsRead(
+  userId: string,
+  notificationId: string,
+  prisma: NotificationPrisma = getPrisma(),
+) {
+  const notification = await prisma.notification.findFirst({
+    where: { id: notificationId, userId },
+    select: {
+      id: true,
+      linkUrl: true,
+      metadata: true,
+      readAt: true,
+    },
+  });
+
+  if (!notification) {
+    return { count: 0, wasUpdated: false, notification: null };
+  }
+
+  if (notification.readAt) {
+    return { count: 1, wasUpdated: false, notification };
+  }
+
   const readAt = new Date();
   const result = await prisma.notification.updateMany({
     where: {
@@ -391,15 +458,19 @@ export async function markNotificationAsRead(userId: string, notificationId: str
   });
 
   if (result.count > 0) {
-    await markAnnualPromotionNoticeReadFromNotification({
+    await markAnnualPromotionNoticeRead({
       userId,
-      notificationId,
+      metadata: notification.metadata,
       readAt,
       prisma,
     });
   }
 
-  return result;
+  return {
+    count: 1,
+    wasUpdated: result.count > 0,
+    notification: { ...notification, readAt },
+  };
 }
 
 export async function markAllNotificationsAsRead(userId: string) {
@@ -466,12 +537,10 @@ export async function markAnnualPromotionNoticeReadFromNotification({
     return { count: 0 };
   }
 
-  return prisma.annualLeavePromotionNotice.updateMany({
-    where: {
-      id: annualLeavePromotionNoticeId,
-      userId,
-      readAt: null,
-    },
-    data: { readAt },
+  return markAnnualPromotionNoticeRead({
+    userId,
+    metadata: notification?.metadata,
+    readAt,
+    prisma,
   });
 }

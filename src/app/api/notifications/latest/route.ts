@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getCurrentUser } from "@/lib/auth/session";
 import { getPrisma } from "@/lib/db/prisma";
+import { normalizeNotificationRedirectPath } from "@/lib/notifications/notifications";
 import { canAccessRoute } from "@/lib/rbac/server-guards";
 
 export const dynamic = "force-dynamic";
@@ -57,6 +58,7 @@ export async function GET(request: NextRequest) {
     unreadCount,
     latest: latest.map((notification) => ({
       ...notification,
+      linkUrl: normalizeNotificationRedirectPath(notification.linkUrl),
       createdAt: notification.createdAt.toISOString(),
       readAt: notification.readAt?.toISOString() ?? null,
     })),

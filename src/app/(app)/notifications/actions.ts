@@ -7,6 +7,7 @@ import { getPrisma } from "@/lib/db/prisma";
 import {
   markAllNotificationsAsRead,
   markNotificationAsRead,
+  normalizeNotificationRedirectPath,
 } from "@/lib/notifications/notifications";
 import { requireRouteAccess } from "@/lib/rbac/server-guards";
 
@@ -24,16 +25,18 @@ export async function markNotificationRead(formData: FormData) {
     redirect("/notifications?error=forbidden");
   }
 
-  await getPrisma().auditLog.create({
-    data: {
-      actorId: user.id,
-      actorUserId: user.id,
-      action: "NOTIFICATION_MARKED_READ",
-      targetType: "NOTIFICATION",
-      targetId: notificationId,
-      metadata: { notificationId },
-    },
-  });
+  if (result.wasUpdated) {
+    await getPrisma().auditLog.create({
+      data: {
+        actorId: user.id,
+        actorUserId: user.id,
+        action: "NOTIFICATION_MARKED_READ",
+        targetType: "NOTIFICATION",
+        targetId: notificationId,
+        metadata: { notificationId },
+      },
+    });
+  }
 
   revalidatePath("/notifications");
   redirect("/notifications?success=read");
@@ -42,7 +45,6 @@ export async function markNotificationRead(formData: FormData) {
 export async function markNotificationReadAndRedirect(formData: FormData) {
   const user = await requireRouteAccess("/notifications");
   const notificationId = formData.get("notificationId");
-  const linkUrl = formData.get("linkUrl");
 
   if (typeof notificationId !== "string" || !notificationId) {
     redirect("/notifications?error=invalid");
@@ -54,19 +56,24 @@ export async function markNotificationReadAndRedirect(formData: FormData) {
     redirect("/notifications?error=forbidden");
   }
 
-  await getPrisma().auditLog.create({
-    data: {
-      actorId: user.id,
-      actorUserId: user.id,
-      action: "NOTIFICATION_MARKED_READ",
-      targetType: "NOTIFICATION",
-      targetId: notificationId,
-      metadata: { notificationId },
-    },
-  });
+  if (result.wasUpdated) {
+    await getPrisma().auditLog.create({
+      data: {
+        actorId: user.id,
+        actorUserId: user.id,
+        action: "NOTIFICATION_MARKED_READ",
+        targetType: "NOTIFICATION",
+        targetId: notificationId,
+        metadata: { notificationId },
+      },
+    });
+  }
 
   revalidatePath("/notifications");
-  redirect(typeof linkUrl === "string" && linkUrl.startsWith("/") ? linkUrl : "/notifications");
+  redirect(
+    normalizeNotificationRedirectPath(result.notification?.linkUrl) ??
+      "/notifications?success=read",
+  );
 }
 
 export async function markAllNotificationsRead() {

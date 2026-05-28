@@ -388,7 +388,6 @@ export default async function NotificationsPage({
                 {notification.linkUrl ? (
                   <form action={markNotificationReadAndRedirect}>
                     <input name="notificationId" type="hidden" value={notification.id} />
-                    <input name="linkUrl" type="hidden" value={notification.linkUrl} />
                     <button className={buttonClassName({ className: "w-full" })}>
                       {actionLabel(notification.type)}
                     </button>
@@ -465,7 +464,6 @@ export default async function NotificationsPage({
                     {notification.linkUrl ? (
                       <form action={markNotificationReadAndRedirect}>
                         <input name="notificationId" type="hidden" value={notification.id} />
-                        <input name="linkUrl" type="hidden" value={notification.linkUrl} />
                         <button className="whitespace-nowrap break-keep font-semibold text-blue-700 underline">
                           {actionLabel(notification.type)}
                         </button>

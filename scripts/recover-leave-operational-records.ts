@@ -1,17 +1,47 @@
 import { getPrisma } from "@/lib/db/prisma";
+import { todayInSeoul } from "@/lib/leave/calculate-business-days";
 import { runJobWithTracking } from "@/lib/jobs/job-runner";
-import { runLeaveOperationalRecovery } from "@/lib/leave/operational-recovery";
+import {
+  normalizeLeaveOperationalRecoveryDateWindow,
+  runLeaveOperationalRecovery,
+} from "@/lib/leave/operational-recovery";
+import type { DateOnly } from "@/lib/leave/types";
 import { loadLocalEnv } from "./env";
+
+function addDateOnlyDays(value: DateOnly, days: number): DateOnly {
+  const date = new Date(`${value}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+
+  return date.toISOString().slice(0, 10) as DateOnly;
+}
 
 function parseArgs(argv: string[]) {
   const args = {
     apply: false,
+    all: false,
+    fromDate: null as string | null,
+    toDate: null as string | null,
     notificationScanLimit: 1000,
   };
 
   for (const arg of argv) {
     if (arg === "--apply") {
       args.apply = true;
+      continue;
+    }
+
+    if (arg === "--all") {
+      args.all = true;
+      continue;
+    }
+
+    if (arg.startsWith("--from-date=")) {
+      args.fromDate = arg.slice("--from-date=".length);
+      continue;
+    }
+
+    if (arg.startsWith("--to-date=")) {
+      args.toDate = arg.slice("--to-date=".length);
       continue;
     }
 
@@ -25,6 +55,21 @@ function parseArgs(argv: string[]) {
       args.notificationScanLimit = value;
     }
   }
+
+  if (args.all && (args.fromDate || args.toDate)) {
+    throw new Error("Use either --all or --from-date/--to-date, not both.");
+  }
+
+  if (!args.all && !args.fromDate && !args.toDate) {
+    const today = todayInSeoul();
+    args.fromDate = addDateOnlyDays(today, -1);
+    args.toDate = today;
+  }
+
+  normalizeLeaveOperationalRecoveryDateWindow({
+    fromDate: args.fromDate,
+    toDate: args.toDate,
+  });
 
   return args;
 }
@@ -46,13 +91,17 @@ async function main() {
         prisma,
         dryRun,
         notificationScanLimit: args.notificationScanLimit,
+        fromDate: args.all ? null : (args.fromDate as DateOnly | null),
+        toDate: args.all ? null : (args.toDate as DateOnly | null),
       });
 
       reportSummary = {
         dryRun: report.dryRun,
+        window: report.window,
         checked: report.checked,
         missingApprovalNotifications: report.missingApprovalNotifications.length,
         missingRequesterNotifications: report.missingRequesterNotifications.length,
+        notificationLinkRepairs: report.notificationLinkRepairs.length,
         autoApprovalCandidates: report.autoApprovalCandidates.length,
         calendarEligibleApprovedLeaveRequests:
           report.calendarEligibleApprovedLeaveRequestIds.length,
@@ -64,6 +113,9 @@ async function main() {
             ...new Set(report.missingApprovalNotifications.map((item) => item.leaveRequestId)),
           ],
           missingRequesterNotifications: report.missingRequesterNotifications.map(
+            (item) => item.leaveRequestId,
+          ),
+          notificationLinkRepairs: report.notificationLinkRepairs.map(
             (item) => item.leaveRequestId,
           ),
           autoApprovalCandidates: report.autoApprovalCandidates.map(
@@ -86,7 +138,9 @@ async function main() {
           report.applied.approvalNotificationsCreated +
           report.applied.requesterNotificationsCreated +
           report.applied.autoApprovedRequests,
-        updatedCount: report.applied.koreanNotificationsUpdated,
+        updatedCount:
+          report.applied.notificationLinksUpdated +
+          report.applied.koreanNotificationsUpdated,
         skippedCount: report.skipped.autoApprovalRequestIds.length,
         failedCount: 0,
         resultSummary: reportSummary,

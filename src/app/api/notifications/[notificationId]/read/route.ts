@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getCurrentUser } from "@/lib/auth/session";
 import { getPrisma } from "@/lib/db/prisma";
-import { markNotificationAsRead } from "@/lib/notifications/notifications";
+import {
+  markNotificationAsRead,
+  normalizeNotificationRedirectPath,
+} from "@/lib/notifications/notifications";
 import { canAccessRoute } from "@/lib/rbac/server-guards";
 
 export const dynamic = "force-dynamic";
@@ -34,16 +37,22 @@ export async function POST(_request: NextRequest, context: RouteContext) {
     return NextResponse.json({ ok: false, error: "not-found" }, { status: 404 });
   }
 
-  await getPrisma().auditLog.create({
-    data: {
-      actorId: user.id,
-      actorUserId: user.id,
-      action: "NOTIFICATION_MARKED_READ",
-      targetType: "NOTIFICATION",
-      targetId: notificationId,
-      metadata: { notificationId, source: "notification-bell" },
-    },
-  });
+  if (result.wasUpdated) {
+    await getPrisma().auditLog.create({
+      data: {
+        actorId: user.id,
+        actorUserId: user.id,
+        action: "NOTIFICATION_MARKED_READ",
+        targetType: "NOTIFICATION",
+        targetId: notificationId,
+        metadata: { notificationId, source: "notification-bell" },
+      },
+    });
+  }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({
+    ok: true,
+    wasUpdated: result.wasUpdated,
+    linkUrl: normalizeNotificationRedirectPath(result.notification?.linkUrl),
+  });
 }

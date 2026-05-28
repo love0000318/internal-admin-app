@@ -23,7 +23,7 @@ import {
 } from "@/lib/leave/ledger";
 import { assertNoOverlappingLeaveRequest } from "@/lib/leave/overlap";
 import { getLeavePolicyMap, getUserLeaveBalance } from "@/lib/leave/queries";
-import type { LeaveOverlapCandidate } from "@/lib/leave/types";
+import type { DateOnly, LeaveOverlapCandidate } from "@/lib/leave/types";
 import {
   buildLeaveNotificationMetadata,
   getLeaveApprovalNotificationRecipients,
@@ -71,6 +71,15 @@ type KoreanNotificationRepair = {
   message: string;
 };
 
+type NotificationLinkRepair = {
+  notificationId: string;
+  leaveRequestId: string;
+  recipientUserId: string;
+  currentLinkUrl: string | null;
+  expectedLinkUrl: string;
+  reason: string;
+};
+
 type AutoApprovalCandidate = {
   leaveRequestId: string;
   policyCode: string;
@@ -80,6 +89,10 @@ type ResolvedApprovalPolicy = Awaited<ReturnType<typeof resolveApprovalPolicyFor
 
 export type LeaveOperationalRecoveryReport = {
   dryRun: boolean;
+  window: {
+    fromDate: DateOnly | null;
+    toDate: DateOnly | null;
+  };
   checked: {
     pendingLeaveRequests: number;
     approvedLeaveRequests: number;
@@ -87,12 +100,14 @@ export type LeaveOperationalRecoveryReport = {
   };
   missingApprovalNotifications: ExpectedApprovalNotification[];
   missingRequesterNotifications: ExpectedRequesterNotification[];
+  notificationLinkRepairs: NotificationLinkRepair[];
   autoApprovalCandidates: AutoApprovalCandidate[];
   calendarEligibleApprovedLeaveRequestIds: string[];
   koreanNotificationRepairs: KoreanNotificationRepair[];
   applied: {
     approvalNotificationsCreated: number;
     requesterNotificationsCreated: number;
+    notificationLinksUpdated: number;
     autoApprovedRequests: number;
     koreanNotificationsUpdated: number;
   };
@@ -143,6 +158,65 @@ function metadataString(metadata: unknown, key: string) {
   const value = metadataRecord(metadata)[key];
 
   return typeof value === "string" ? value : null;
+}
+
+function assertDateOnly(value: string): asserts value is DateOnly {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new Error("Invalid date. Use YYYY-MM-DD.");
+  }
+}
+
+function addDateOnlyDays(value: DateOnly, days: number): DateOnly {
+  const date = new Date(`${value}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+
+  return date.toISOString().slice(0, 10) as DateOnly;
+}
+
+function seoulDateOnlyStartInstant(value: DateOnly) {
+  return new Date(`${value}T00:00:00.000+09:00`);
+}
+
+function createdAtWindowWhere({
+  fromDate,
+  toDate,
+}: {
+  fromDate?: DateOnly;
+  toDate?: DateOnly;
+}): Prisma.DateTimeFilter | undefined {
+  if (!fromDate && !toDate) {
+    return undefined;
+  }
+
+  return {
+    ...(fromDate ? { gte: seoulDateOnlyStartInstant(fromDate) } : {}),
+    ...(toDate ? { lt: seoulDateOnlyStartInstant(addDateOnlyDays(toDate, 1)) } : {}),
+  };
+}
+
+export function normalizeLeaveOperationalRecoveryDateWindow({
+  fromDate,
+  toDate,
+}: {
+  fromDate?: string | null;
+  toDate?: string | null;
+}) {
+  if (fromDate) {
+    assertDateOnly(fromDate);
+  }
+
+  if (toDate) {
+    assertDateOnly(toDate);
+  }
+
+  if (fromDate && toDate && fromDate > toDate) {
+    throw new Error("Invalid date range. --from-date must be on or before --to-date.");
+  }
+
+  return {
+    fromDate: (fromDate ?? null) as DateOnly | null,
+    toDate: (toDate ?? null) as DateOnly | null,
+  };
 }
 
 export function containsLegacyKoreanMojibake(value: string) {
@@ -330,38 +404,43 @@ export function buildRecoveredLeaveNotificationContent({
   return null;
 }
 
-async function notificationExists({
+async function findNotificationByDeduplicationKey({
   prisma,
   userId,
   type,
-  linkUrl,
   deduplicationKey,
 }: {
   prisma: RecoveryPrisma;
   userId: string;
   type: NotificationType;
-  linkUrl: string;
   deduplicationKey: string;
 }) {
-  const existing = await prisma.notification.findFirst({
+  return prisma.notification.findFirst({
     where: {
       userId,
       type,
-      linkUrl,
       metadata: {
         path: ["deduplicationKey"],
         equals: deduplicationKey,
       },
     },
+    select: {
+      id: true,
+      linkUrl: true,
+    },
   });
-
-  return Boolean(existing);
 }
 
-async function listPendingRequests(prisma: RecoveryPrisma) {
+async function listPendingRequests(
+  prisma: RecoveryPrisma,
+  window: { fromDate?: DateOnly; toDate?: DateOnly },
+) {
+  const createdAt = createdAtWindowWhere(window);
+
   return prisma.leaveRequest.findMany({
     where: {
       status: "PENDING",
+      ...(createdAt ? { createdAt } : {}),
       user: {
         status: "ACTIVE",
         role: { not: "EXTERNAL_PARTNER" },
@@ -372,10 +451,16 @@ async function listPendingRequests(prisma: RecoveryPrisma) {
   }) as Promise<RecoveryLeaveRequest[]>;
 }
 
-async function listApprovedRequests(prisma: RecoveryPrisma) {
+async function listApprovedRequests(
+  prisma: RecoveryPrisma,
+  window: { fromDate?: DateOnly; toDate?: DateOnly },
+) {
+  const createdAt = createdAtWindowWhere(window);
+
   return prisma.leaveRequest.findMany({
     where: {
       status: "APPROVED",
+      ...(createdAt ? { createdAt } : {}),
       user: {
         status: "ACTIVE",
         role: { in: ["OWNER", "LEAD", "MANAGER"] },
@@ -407,6 +492,7 @@ async function findMissingApprovalNotifications({
   pendingRequests: RecoveryLeaveRequest[];
 }) {
   const missing: ExpectedApprovalNotification[] = [];
+  const linkRepairs: NotificationLinkRepair[] = [];
 
   for (const leaveRequest of pendingRequests) {
     const approvalPolicy = await resolveApprovalPolicyForLeaveRequest({
@@ -421,25 +507,37 @@ async function findMissingApprovalNotifications({
 
     for (const recipientUserId of recipientIds) {
       const deduplicationKey = `leave-approval-needed:${leaveRequest.id}:${recipientUserId}`;
-      const exists = await notificationExists({
+      const expectedLinkUrl = `/leaves/approvals/${leaveRequest.id}`;
+      const existing = await findNotificationByDeduplicationKey({
         prisma,
         userId: recipientUserId,
         type: "LEAVE_REQUEST_CREATED",
-        linkUrl: `/leaves/approvals/${leaveRequest.id}`,
         deduplicationKey,
       });
 
-      if (!exists) {
+      if (!existing) {
         missing.push({
           leaveRequestId: leaveRequest.id,
           recipientUserId,
           deduplicationKey,
         });
+        continue;
+      }
+
+      if (existing.linkUrl !== expectedLinkUrl) {
+        linkRepairs.push({
+          notificationId: existing.id,
+          leaveRequestId: leaveRequest.id,
+          recipientUserId,
+          currentLinkUrl: existing.linkUrl,
+          expectedLinkUrl,
+          reason: "APPROVAL_DETAIL_LINK",
+        });
       }
     }
   }
 
-  return missing;
+  return { missing, linkRepairs };
 }
 
 async function findMissingRequesterNotifications({
@@ -450,6 +548,7 @@ async function findMissingRequesterNotifications({
   approvedRequests: RecoveryLeaveRequest[];
 }) {
   const missing: ExpectedRequesterNotification[] = [];
+  const linkRepairs: NotificationLinkRepair[] = [];
 
   for (const leaveRequest of approvedRequests) {
     const approvalSource =
@@ -466,15 +565,15 @@ async function findMissingRequesterNotifications({
       approvalSource === "AUTO_START_DATE"
         ? `leave-auto-confirmed-requester:${leaveRequest.id}:${leaveRequest.userId}`
         : `leave-approved-requester:${leaveRequest.id}:${leaveRequest.userId}`;
-    const exists = await notificationExists({
+    const expectedLinkUrl = `/leaves/me/requests/${leaveRequest.id}`;
+    const existing = await findNotificationByDeduplicationKey({
       prisma,
       userId: leaveRequest.userId,
       type,
-      linkUrl: `/leaves/me/requests/${leaveRequest.id}`,
       deduplicationKey,
     });
 
-    if (!exists) {
+    if (!existing) {
       missing.push({
         leaveRequestId: leaveRequest.id,
         requesterUserId: leaveRequest.userId,
@@ -482,10 +581,22 @@ async function findMissingRequesterNotifications({
         deduplicationKey,
         approvalSource,
       });
+      continue;
+    }
+
+    if (existing.linkUrl !== expectedLinkUrl) {
+      linkRepairs.push({
+        notificationId: existing.id,
+        leaveRequestId: leaveRequest.id,
+        recipientUserId: leaveRequest.userId,
+        currentLinkUrl: existing.linkUrl,
+        expectedLinkUrl,
+        reason: "REQUESTER_DETAIL_LINK",
+      });
     }
   }
 
-  return missing;
+  return { missing, linkRepairs };
 }
 
 async function findAutoApprovalCandidates({
@@ -710,13 +821,17 @@ async function autoApprovePendingRequestByPolicy({
 async function findKoreanNotificationRepairs({
   prisma,
   notificationScanLimit,
+  window,
 }: {
   prisma: RecoveryPrisma;
   notificationScanLimit: number;
+  window: { fromDate?: DateOnly; toDate?: DateOnly };
 }) {
+  const createdAt = createdAtWindowWhere(window);
   const notifications = await prisma.notification.findMany({
     where: {
       type: { in: [...LEAVE_NOTIFICATION_TYPES] },
+      ...(createdAt ? { createdAt } : {}),
     },
     orderBy: { createdAt: "asc" },
     take: notificationScanLimit,
@@ -875,6 +990,47 @@ async function applyRequesterNotificationRepairs({
   return created;
 }
 
+async function applyNotificationLinkRepairs({
+  prisma,
+  repairs,
+}: {
+  prisma: RecoveryPrisma;
+  repairs: NotificationLinkRepair[];
+}) {
+  let updated = 0;
+
+  for (const repair of repairs) {
+    const result = await prisma.notification.updateMany({
+      where: { id: repair.notificationId },
+      data: { linkUrl: repair.expectedLinkUrl },
+    });
+
+    if (result.count > 0) {
+      updated += result.count;
+      await prisma.auditLog.create({
+        data: {
+          actorId: null,
+          actorUserId: null,
+          targetUserId: repair.recipientUserId,
+          action: "LEAVE_REQUEST_APPROVER_RESOLVED",
+          targetType: "LEAVE_REQUEST",
+          targetId: repair.leaveRequestId,
+          metadata: toJsonValue({
+            notificationId: repair.notificationId,
+            leaveRequestId: repair.leaveRequestId,
+            recovery: true,
+            repairedFields: ["linkUrl"],
+            expectedLinkUrl: repair.expectedLinkUrl,
+            reason: repair.reason,
+          }),
+        },
+      });
+    }
+  }
+
+  return updated;
+}
+
 async function applyKoreanNotificationRepairs({
   prisma,
   repairs,
@@ -920,14 +1076,23 @@ export async function runLeaveOperationalRecovery({
   prisma,
   dryRun = true,
   notificationScanLimit = 1000,
+  fromDate,
+  toDate,
 }: {
   prisma: RecoveryPrisma;
   dryRun?: boolean;
   notificationScanLimit?: number;
+  fromDate?: DateOnly | null;
+  toDate?: DateOnly | null;
 }): Promise<LeaveOperationalRecoveryReport> {
+  const window = normalizeLeaveOperationalRecoveryDateWindow({ fromDate, toDate });
+  const windowFilter = {
+    fromDate: window.fromDate ?? undefined,
+    toDate: window.toDate ?? undefined,
+  };
   const [pendingRequests, approvedRequests] = await Promise.all([
-    listPendingRequests(prisma),
-    listApprovedRequests(prisma),
+    listPendingRequests(prisma, windowFilter),
+    listApprovedRequests(prisma, windowFilter),
   ]);
   const policiesByRequestId = new Map<string, ResolvedApprovalPolicy>();
 
@@ -942,18 +1107,25 @@ export async function runLeaveOperationalRecovery({
   }
 
   const [
-    missingApprovalNotifications,
-    missingRequesterNotifications,
+    approvalNotificationScan,
+    requesterNotificationScan,
     autoApprovalCandidates,
     koreanRepairScan,
   ] = await Promise.all([
     findMissingApprovalNotifications({ prisma, pendingRequests }),
     findMissingRequesterNotifications({ prisma, approvedRequests }),
     findAutoApprovalCandidates({ prisma, pendingRequests }),
-    findKoreanNotificationRepairs({ prisma, notificationScanLimit }),
+    findKoreanNotificationRepairs({ prisma, notificationScanLimit, window: windowFilter }),
   ]);
+  const missingApprovalNotifications = approvalNotificationScan.missing;
+  const missingRequesterNotifications = requesterNotificationScan.missing;
+  const notificationLinkRepairs = [
+    ...approvalNotificationScan.linkRepairs,
+    ...requesterNotificationScan.linkRepairs,
+  ];
   const report: LeaveOperationalRecoveryReport = {
     dryRun,
+    window,
     checked: {
       pendingLeaveRequests: pendingRequests.length,
       approvedLeaveRequests: approvedRequests.length,
@@ -961,12 +1133,14 @@ export async function runLeaveOperationalRecovery({
     },
     missingApprovalNotifications,
     missingRequesterNotifications,
+    notificationLinkRepairs,
     autoApprovalCandidates,
     calendarEligibleApprovedLeaveRequestIds: approvedRequests.map((request) => request.id),
     koreanNotificationRepairs: koreanRepairScan.repairs,
     applied: {
       approvalNotificationsCreated: 0,
       requesterNotificationsCreated: 0,
+      notificationLinksUpdated: 0,
       autoApprovedRequests: 0,
       koreanNotificationsUpdated: 0,
     },
@@ -1007,6 +1181,10 @@ export async function runLeaveOperationalRecovery({
   report.applied.requesterNotificationsCreated = await applyRequesterNotificationRepairs({
     prisma,
     missing: missingRequesterNotifications,
+  });
+  report.applied.notificationLinksUpdated = await applyNotificationLinkRepairs({
+    prisma,
+    repairs: notificationLinkRepairs,
   });
 
   report.applied.koreanNotificationsUpdated = await applyKoreanNotificationRepairs({

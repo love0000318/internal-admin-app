@@ -111,7 +111,18 @@ export function NotificationBell({ unreadCount }: NotificationBellProps) {
       });
 
       if (response.ok) {
-        setCurrentUnreadCount((count) => Math.max(0, count - 1));
+        const payload = (await response.json()) as {
+          wasUpdated?: boolean;
+          linkUrl?: string | null;
+        };
+
+        if (payload.wasUpdated) {
+          setCurrentUnreadCount((count) => Math.max(0, count - 1));
+        }
+
+        setToast(null);
+        router.push(payload.linkUrl ?? "/notifications");
+        return;
       }
     } catch {
       // Navigation still works if read evidence recording has to retry from the center.

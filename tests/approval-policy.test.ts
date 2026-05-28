@@ -95,11 +95,19 @@ describe("approval policy authorization", () => {
       id: "custom-approver",
       role: "LEAD",
       status: "ACTIVE",
+      managedTeamIds: ["team-a"],
+    };
+    const outsideCustomApprover: RbacUser = {
+      id: "custom-approver",
+      role: "LEAD",
+      status: "ACTIVE",
+      managedTeamIds: ["team-b"],
     };
 
     expect(canApproveLeaveRequestWithPolicy(customApprover, request(), policy("CUSTOM_USER"))).toBe(true);
     expect(canApproveLeaveRequestWithPolicy(owner, request(), policy("CUSTOM_USER"))).toBe(true);
     expect(canApproveLeaveRequestWithPolicy(lead, request(), policy("CUSTOM_USER"))).toBe(false);
+    expect(canApproveLeaveRequestWithPolicy(outsideCustomApprover, request(), policy("CUSTOM_USER"))).toBe(false);
   });
 
   it("does not allow MANAGER or EXTERNAL_PARTNER as a custom leave approver", () => {

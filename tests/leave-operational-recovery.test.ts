@@ -4,6 +4,8 @@ import { Prisma } from "@/generated/prisma/client";
 import {
   buildRecoveredLeaveNotificationContent,
   containsLegacyKoreanMojibake,
+  normalizeLeaveOperationalRecoveryDateWindow,
+  runLeaveOperationalRecovery,
 } from "@/lib/leave/operational-recovery";
 
 const leaveRequest = {
@@ -72,6 +74,72 @@ describe("leave operational recovery helpers", () => {
     expect(content?.title).toBe("연차 요청이 자동 승인되었습니다.");
     expect(content?.message).toContain("승인 정책에 따라 자동 승인되었습니다.");
     expect(content?.message).not.toMatch(/�|[占筌獄]|[利泥湲諛痍]/);
+  });
+
+  it("validates recovery date windows", () => {
+    expect(
+      normalizeLeaveOperationalRecoveryDateWindow({
+        fromDate: "2026-05-28",
+        toDate: "2026-05-29",
+      }),
+    ).toEqual({ fromDate: "2026-05-28", toDate: "2026-05-29" });
+    expect(() =>
+      normalizeLeaveOperationalRecoveryDateWindow({
+        fromDate: "2026-05-30",
+        toDate: "2026-05-29",
+      }),
+    ).toThrow(/date range/);
+  });
+
+  it("reports bad approval notification links without creating duplicate notifications", async () => {
+    const prisma = {
+      leaveRequest: {
+        findMany: async (args: { where: Record<string, unknown> }) => {
+          if (args.where.status === "PENDING") {
+            return [{ ...leaveRequest, status: "PENDING" }];
+          }
+
+          return [];
+        },
+      },
+      leaveTypeDefinition: {
+        findUnique: async () => null,
+      },
+      approvalPolicy: {
+        findUnique: async () => null,
+      },
+      user: {
+        findMany: async () => [
+          { id: "owner", role: "OWNER", status: "ACTIVE", teamId: null },
+        ],
+      },
+      notification: {
+        findFirst: async () => ({
+          id: "notification-1",
+          linkUrl: "/leaves/approvals",
+        }),
+        findMany: async () => [],
+      },
+    };
+
+    const report = await runLeaveOperationalRecovery({
+      prisma: prisma as never,
+      dryRun: true,
+      fromDate: "2026-05-28",
+      toDate: "2026-05-29",
+    });
+
+    expect(report.missingApprovalNotifications).toHaveLength(0);
+    expect(report.notificationLinkRepairs).toEqual([
+      {
+        notificationId: "notification-1",
+        leaveRequestId: "leave-request-1",
+        recipientUserId: "owner",
+        currentLinkUrl: "/leaves/approvals",
+        expectedLinkUrl: "/leaves/approvals/leave-request-1",
+        reason: "APPROVAL_DETAIL_LINK",
+      },
+    ]);
   });
 });
 
