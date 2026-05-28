@@ -85,7 +85,7 @@ function preparedAttachmentFromUrl(attachmentUrl: string | null): PreparedLeaveA
 
   return {
     fileName: "external-reference",
-    originalFileName: "利앸챸?먮즺 李멸퀬 留곹겕",
+    originalFileName: "증빙자료 참고 링크",
     fileKey: null,
     fileUrl: attachmentUrl,
     fileSize: null,
@@ -276,7 +276,7 @@ async function createCustomGrantLeaveRequest(formData: FormData) {
           dayCount: requestedDays,
           reason,
           reviewedAt: autoApprove ? new Date() : undefined,
-          reviewComment: autoApprove ? "?뱀씤 ?뺤콉???곕씪 ?먮룞 ?뱀씤?섏뿀?듬땲??" : undefined,
+          reviewComment: autoApprove ? "승인 정책에 따라 자동 승인되었습니다." : undefined,
           attachmentRequired:
             grant!.leaveType.attachmentPolicy === "REQUIRED_BEFORE_REQUEST" ||
             grant!.leaveType.attachmentPolicy === "REQUIRED_AFTER_REQUEST",
@@ -312,8 +312,8 @@ async function createCustomGrantLeaveRequest(formData: FormData) {
           data: {
             userId: actor.id,
             type: "LEAVE_ATTACHMENT_RESUBMISSION_REQUESTED",
-            title: "?닿? 利앸챸?먮즺 ?쒖텧???꾩슂?⑸땲??",
-            message: `${grant!.leaveType.name} ?붿껌? 利앸챸?먮즺瑜??섏쨷???쒖텧?댁빞 ?⑸땲??`,
+            title: "휴가 증빙자료 제출이 필요합니다.",
+            message: `${grant!.leaveType.name} 요청은 증빙자료를 추후 제출해야 합니다.`,
             linkUrl: `/leaves/me/requests/${created.id}`,
             metadata: toJsonValue({ leaveRequestId: created.id }),
           },
@@ -390,8 +390,8 @@ async function createCustomGrantLeaveRequest(formData: FormData) {
           data: {
             userId: actor.id,
             type: "LEAVE_APPROVED",
-            title: "?닿? ?붿껌???먮룞 ?뱀씤?섏뿀?듬땲??",
-            message: `${grant!.leaveType.name} ?붿껌???뱀씤 ?뺤콉???곕씪 ?먮룞 ?뱀씤?섏뿀?듬땲??`,
+            title: "휴가 신청이 자동 승인되었습니다.",
+            message: `${grant!.leaveType.name} 신청이 승인 정책에 따라 자동 승인되었습니다.`,
             linkUrl: `/leaves/me/requests/${created.id}`,
             metadata: toJsonValue({
               leaveRequestId: created.id,
@@ -629,7 +629,7 @@ export async function createLeaveRequest(formData: FormData) {
         reason: parsed.data.reason ?? null,
         reviewerId: autoApprove ? null : undefined,
         reviewedAt: autoApprove ? new Date() : undefined,
-        reviewComment: autoApprove ? "?뱀씤 ?뺤콉???곕씪 ?먮룞 ?뱀씤?섏뿀?듬땲??" : undefined,
+        reviewComment: autoApprove ? "승인 정책에 따라 자동 승인되었습니다." : undefined,
         attachmentRequired:
           attachmentPolicy === "REQUIRED_BEFORE_REQUEST" ||
           attachmentPolicy === "REQUIRED_AFTER_REQUEST",
@@ -652,8 +652,8 @@ export async function createLeaveRequest(formData: FormData) {
         data: {
           userId: actor.id,
           type: "LEAVE_ATTACHMENT_RESUBMISSION_REQUESTED",
-          title: "?닿? 利앸챸?먮즺 ?쒖텧???꾩슂?⑸땲??",
-          message: `${policy.name} ?붿껌? 利앸챸?먮즺瑜??섏쨷???쒖텧?댁빞 ?⑸땲??`,
+          title: "휴가 증빙자료 제출이 필요합니다.",
+          message: `${policy.name} 요청은 증빙자료를 추후 제출해야 합니다.`,
           linkUrl: `/leaves/me/requests/${created.id}`,
           metadata: toJsonValue({ leaveRequestId: created.id }),
         },
@@ -696,8 +696,8 @@ export async function createLeaveRequest(formData: FormData) {
         data: {
           userId: actor.id,
           type: "LEAVE_APPROVED",
-          title: "?닿? ?붿껌???먮룞 ?뱀씤?섏뿀?듬땲??",
-          message: `${policy.name} ?붿껌???뱀씤 ?뺤콉???곕씪 ?먮룞 ?뱀씤?섏뿀?듬땲??`,
+          title: "휴가 신청이 자동 승인되었습니다.",
+          message: `${policy.name} 신청이 승인 정책에 따라 자동 승인되었습니다.`,
           linkUrl: `/leaves/me/requests/${created.id}`,
           metadata: toJsonValue({
             leaveRequestId: created.id,

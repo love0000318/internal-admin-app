@@ -464,18 +464,18 @@ export function normalizeBirthdayPolicyInput(input: {
   notifyEmployee: boolean;
 }): Omit<BirthdayPolicy, "id" | "leaveTypeId" | "grantUnit"> {
   if (!Number.isFinite(input.grantAmount) || input.grantAmount <= 0) {
-    throw new Error("?앹씪 諛섏감 吏湲??섎웾? 0蹂대떎 而ㅼ빞 ?⑸땲??");
+    throw new Error("생일 반차 지급 수량은 0보다 커야 합니다.");
   }
 
   if (!Number.isInteger(input.grantDaysBefore) || input.grantDaysBefore < 0) {
-    throw new Error("?앹씪 硫곗튌 ??吏湲됲븷吏 ?뺤씤??二쇱꽭??");
+    throw new Error("생일 며칠 전 지급할지 확인해 주세요.");
   }
 
   if (
     !Number.isInteger(input.usableDaysFromBirthday) ||
     input.usableDaysFromBirthday < 0
   ) {
-    throw new Error("?ъ슜 媛??湲곌컙???뺤씤??二쇱꽭??");
+    throw new Error("사용 가능 기간을 확인해 주세요.");
   }
 
   return {

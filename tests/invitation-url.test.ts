@@ -8,6 +8,8 @@ import {
 
 const originalAppBaseUrl = process.env.APP_BASE_URL;
 const originalAppUrl = process.env.APP_URL;
+const originalNextPublicAppBaseUrl = process.env.NEXT_PUBLIC_APP_BASE_URL;
+const originalVercelEnv = process.env.VERCEL_ENV;
 
 afterEach(() => {
   if (originalAppBaseUrl === undefined) {
@@ -20,6 +22,18 @@ afterEach(() => {
     delete process.env.APP_URL;
   } else {
     process.env.APP_URL = originalAppUrl;
+  }
+
+  if (originalNextPublicAppBaseUrl === undefined) {
+    delete process.env.NEXT_PUBLIC_APP_BASE_URL;
+  } else {
+    process.env.NEXT_PUBLIC_APP_BASE_URL = originalNextPublicAppBaseUrl;
+  }
+
+  if (originalVercelEnv === undefined) {
+    delete process.env.VERCEL_ENV;
+  } else {
+    process.env.VERCEL_ENV = originalVercelEnv;
   }
 });
 
@@ -53,6 +67,8 @@ describe("invitation URL builders", () => {
 
   it("falls back to request origin only when APP_BASE_URL is missing", () => {
     delete process.env.APP_BASE_URL;
+    delete process.env.NEXT_PUBLIC_APP_BASE_URL;
+    process.env.VERCEL_ENV = "preview";
     process.env.APP_URL = "https://stale-app-url.example";
 
     expect(
@@ -61,5 +77,32 @@ describe("invitation URL builders", () => {
           "https://internal-admin-app-love0000318s-projects.vercel.app/",
       }),
     ).toBe("https://internal-admin-app-love0000318s-projects.vercel.app");
+  });
+
+  it("falls back to the production Internal URL when production base URL is missing", () => {
+    delete process.env.APP_BASE_URL;
+    delete process.env.NEXT_PUBLIC_APP_BASE_URL;
+    process.env.VERCEL_ENV = "production";
+
+    expect(getAppBaseUrl()).toBe("https://interal-admin-app.vercel.app");
+  });
+
+  it("falls back to the production Internal URL when production base URL is invalid", () => {
+    process.env.APP_BASE_URL = "not a url";
+    delete process.env.NEXT_PUBLIC_APP_BASE_URL;
+    process.env.VERCEL_ENV = "production";
+
+    expect(buildInvitationAcceptUrl("raw token")).toBe(
+      "https://interal-admin-app.vercel.app/invitations/accept?token=raw%20token",
+    );
+  });
+
+  it("uses NEXT_PUBLIC_APP_BASE_URL when APP_BASE_URL is missing", () => {
+    delete process.env.APP_BASE_URL;
+    process.env.NEXT_PUBLIC_APP_BASE_URL = "https://interal-admin-app.vercel.app/";
+
+    expect(buildInviteUrl("abc")).toBe(
+      "https://interal-admin-app.vercel.app/i/abc",
+    );
   });
 });
