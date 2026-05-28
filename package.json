@@ -34,7 +34,8 @@
     "jobs:audit-fix-leave-integrity": "tsx scripts/audit-and-fix-leave-balance-integrity.ts",
     "jobs:cleanup-operational-data": "tsx scripts/cleanup-operational-data.ts",
     "jobs:auto-confirm-pending-leaves": "tsx scripts/auto-confirm-pending-leaves.ts",
-    "jobs:auto-confirm-past-start-leaves": "tsx scripts/auto-confirm-past-start-leaves.ts"
+    "jobs:auto-confirm-past-start-leaves": "tsx scripts/auto-confirm-past-start-leaves.ts",
+    "leave:operational-recovery": "tsx scripts/recover-leave-operational-records.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",

@@ -190,7 +190,7 @@ export function canReviewLeaveRequestWithPolicy({
   }
 
   if (policy.approverRule === "CUSTOM_USER") {
-    return actor.id === policy.customApproverUserId || isOwner(actor);
+    return isOwner(actor) || (isLead(actor) && actor.id === policy.customApproverUserId);
   }
 
   return false;

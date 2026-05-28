@@ -1,0 +1,1018 @@
+import {
+  Prisma,
+  type NotificationType,
+  type PrismaClient,
+} from "@/generated/prisma/client";
+import {
+  approvalPolicySummary,
+  assertAttachmentRequirementForApproval,
+  resolveApprovalPolicyForLeaveRequest,
+  shouldAutoApproveLeaveRequest,
+  type LeaveRequestWithPolicy,
+} from "@/lib/leave/approval-policy";
+import { assertEnoughLeaveBalance, policyDeductsAnnual, toNumber } from "@/lib/leave/balance";
+import { dateToDateOnly } from "@/lib/leave/calculate-business-days";
+import {
+  convertLeaveGrantPendingToUsed,
+  CustomLeaveRequestError,
+} from "@/lib/leave/custom-grant-requests";
+import { formatLeaveDays, LEAVE_TYPE_LABELS } from "@/lib/leave/labels";
+import {
+  recordLeaveRequestApprovedLedger,
+  recordLeaveRequestPendingLedger,
+} from "@/lib/leave/ledger";
+import { assertNoOverlappingLeaveRequest } from "@/lib/leave/overlap";
+import { getLeavePolicyMap, getUserLeaveBalance } from "@/lib/leave/queries";
+import type { LeaveOverlapCandidate } from "@/lib/leave/types";
+import {
+  buildLeaveNotificationMetadata,
+  getLeaveApprovalNotificationRecipients,
+  notifyLeaveRequestApproved,
+} from "@/lib/notifications/leave-notifications";
+import { createInAppNotificationOnce } from "@/lib/notifications/notifications";
+
+type RecoveryPrisma = PrismaClient;
+
+type RecoveryLeaveRequest = LeaveRequestWithPolicy & {
+  reason?: string | null;
+  attachmentRequired?: boolean;
+  attachmentUrl?: string | null;
+  reviewerId?: string | null;
+  reviewedAt?: Date | null;
+  reviewComment?: string | null;
+  rejectReason?: string | null;
+  cancelReason?: string | null;
+  withdrawnAt?: Date | null;
+  cancelledAt?: Date | null;
+  approvalSource?: "MANUAL" | "AUTO_START_DATE" | null;
+  createdAt?: Date;
+  updatedAt?: Date;
+  grantUsages: Array<{ leaveGrantId: string; amount: number; unit: string }>;
+};
+
+type ExpectedApprovalNotification = {
+  leaveRequestId: string;
+  recipientUserId: string;
+  deduplicationKey: string;
+};
+
+type ExpectedRequesterNotification = {
+  leaveRequestId: string;
+  requesterUserId: string;
+  type: NotificationType;
+  deduplicationKey: string;
+  approvalSource: "MANUAL" | "AUTO_POLICY" | "AUTO_START_DATE";
+};
+
+type KoreanNotificationRepair = {
+  notificationId: string;
+  leaveRequestId: string;
+  title: string;
+  message: string;
+};
+
+type AutoApprovalCandidate = {
+  leaveRequestId: string;
+  policyCode: string;
+};
+
+type ResolvedApprovalPolicy = Awaited<ReturnType<typeof resolveApprovalPolicyForLeaveRequest>>;
+
+export type LeaveOperationalRecoveryReport = {
+  dryRun: boolean;
+  checked: {
+    pendingLeaveRequests: number;
+    approvedLeaveRequests: number;
+    leaveNotifications: number;
+  };
+  missingApprovalNotifications: ExpectedApprovalNotification[];
+  missingRequesterNotifications: ExpectedRequesterNotification[];
+  autoApprovalCandidates: AutoApprovalCandidate[];
+  calendarEligibleApprovedLeaveRequestIds: string[];
+  koreanNotificationRepairs: KoreanNotificationRepair[];
+  applied: {
+    approvalNotificationsCreated: number;
+    requesterNotificationsCreated: number;
+    autoApprovedRequests: number;
+    koreanNotificationsUpdated: number;
+  };
+  skipped: {
+    autoApprovalRequestIds: string[];
+  };
+};
+
+const leaveRequestRecoveryInclude = {
+  user: {
+    select: {
+      id: true,
+      name: true,
+      role: true,
+      status: true,
+      teamId: true,
+    },
+  },
+  customLeaveType: {
+    include: {
+      approvalPolicy: {
+        include: { customApprover: true },
+      },
+    },
+  },
+  grantUsages: true,
+} satisfies Prisma.LeaveRequestInclude;
+
+const LEAVE_NOTIFICATION_TYPES = [
+  "LEAVE_REQUEST_CREATED",
+  "LEAVE_APPROVED",
+  "LEAVE_REQUEST_APPROVED",
+  "LEAVE_AUTO_CONFIRMED",
+  "LEAVE_REQUEST_AUTO_CONFIRMED",
+  "LEAVE_REQUEST_REJECTED",
+  "LEAVE_REQUEST_CANCELLED",
+] as const satisfies NotificationType[];
+
+function toJsonValue(value: unknown): Prisma.InputJsonValue {
+  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
+}
+
+function metadataRecord(metadata: unknown) {
+  return metadata && typeof metadata === "object" ? (metadata as Record<string, unknown>) : {};
+}
+
+function metadataString(metadata: unknown, key: string) {
+  const value = metadataRecord(metadata)[key];
+
+  return typeof value === "string" ? value : null;
+}
+
+export function containsLegacyKoreanMojibake(value: string) {
+  return /�|[占筌獄]|[利泥湲諛痍]/.test(value) || /\?[가-힣]/.test(value) || /\?{2,}/.test(value);
+}
+
+function leaveTypeLabel(
+  leaveRequest: Pick<RecoveryLeaveRequest, "type" | "customLeaveType">,
+) {
+  return leaveRequest.customLeaveType?.name ?? LEAVE_TYPE_LABELS[leaveRequest.type];
+}
+
+function leaveDateRangeLabel(leaveRequest: Pick<RecoveryLeaveRequest, "startDate" | "endDate">) {
+  const startDate = dateToDateOnly(leaveRequest.startDate);
+  const endDate = dateToDateOnly(leaveRequest.endDate);
+
+  return startDate === endDate ? startDate : `${startDate} ~ ${endDate}`;
+}
+
+function formatKoreanDateTime(value: Date | null | undefined) {
+  if (!value) {
+    return "처리 시각 미확인";
+  }
+
+  return new Intl.DateTimeFormat("ko-KR", {
+    timeZone: "Asia/Seoul",
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(value);
+}
+
+function buildApprovalNeededContent(leaveRequest: RecoveryLeaveRequest) {
+  const typeName = leaveTypeLabel(leaveRequest);
+  const period = leaveDateRangeLabel(leaveRequest);
+  const dayCount = toNumber(leaveRequest.dayCount);
+
+  return {
+    title: "휴가 승인 요청이 접수되었습니다.",
+    message: `${leaveRequest.user.name}님이 ${typeName} ${formatLeaveDays(
+      dayCount,
+    )}을 요청했습니다. 기간: ${period}.`,
+  };
+}
+
+function buildApprovedRequesterContent(
+  leaveRequest: RecoveryLeaveRequest,
+  approvalSource: ExpectedRequesterNotification["approvalSource"],
+) {
+  const typeName = leaveTypeLabel(leaveRequest);
+  const period = leaveDateRangeLabel(leaveRequest);
+  const dayCount = toNumber(leaveRequest.dayCount);
+  const processedAt = leaveRequest.reviewedAt ?? new Date();
+
+  if (approvalSource === "AUTO_START_DATE") {
+    return {
+      title: `${typeName} 요청이 자동 확정되었습니다.`,
+      message: `${period} ${formatLeaveDays(
+        dayCount,
+      )} 요청이 휴가 시작일 경과로 자동 확정되었습니다. 처리 시각: ${formatKoreanDateTime(
+        processedAt,
+      )}.`,
+    };
+  }
+
+  if (approvalSource === "AUTO_POLICY") {
+    return {
+      title: `${typeName} 요청이 자동 승인되었습니다.`,
+      message: `${period} ${formatLeaveDays(
+        dayCount,
+      )} 요청이 승인 정책에 따라 자동 승인되었습니다. 처리 시각: ${formatKoreanDateTime(
+        processedAt,
+      )}.`,
+    };
+  }
+
+  return {
+    title: `${typeName} 요청이 승인되었습니다.`,
+    message: `${period} ${formatLeaveDays(dayCount)} 요청이 승인되었습니다. 처리 시각: ${formatKoreanDateTime(
+      processedAt,
+    )}.`,
+  };
+}
+
+function buildManagedApprovedContent(
+  leaveRequest: RecoveryLeaveRequest,
+  approvalSource: ExpectedRequesterNotification["approvalSource"],
+) {
+  const typeName = leaveTypeLabel(leaveRequest);
+  const period = leaveDateRangeLabel(leaveRequest);
+
+  if (approvalSource === "AUTO_START_DATE") {
+    return {
+      title: "담당 조직 구성원의 휴가가 자동 확정되었습니다.",
+      message: `${leaveRequest.user.name}님의 ${typeName} 휴가가 시작일 경과로 자동 확정되었습니다. 기간: ${period}.`,
+    };
+  }
+
+  return {
+    title: "담당 조직 구성원의 휴가가 승인되었습니다.",
+    message: `${leaveRequest.user.name}님의 ${typeName} 휴가가 승인되었습니다. 기간: ${period}.`,
+  };
+}
+
+function buildRejectedOrCancelledContent(
+  leaveRequest: RecoveryLeaveRequest,
+  action: "REJECTED" | "CANCELLED",
+) {
+  const typeName = leaveTypeLabel(leaveRequest);
+  const period = leaveDateRangeLabel(leaveRequest);
+  const dayCount = toNumber(leaveRequest.dayCount);
+  const processedAt = leaveRequest.reviewedAt ?? leaveRequest.cancelledAt ?? new Date();
+
+  if (action === "REJECTED") {
+    return {
+      title: `${typeName} 요청이 반려되었습니다.`,
+      message: `${period} ${formatLeaveDays(
+        dayCount,
+      )} 요청이 반려되었습니다. 처리 시각: ${formatKoreanDateTime(processedAt)}.`,
+    };
+  }
+
+  return {
+    title: `${typeName} 요청이 취소되었습니다.`,
+    message: `${period} ${formatLeaveDays(
+      dayCount,
+    )} 승인 휴가가 취소되었습니다. 처리 시각: ${formatKoreanDateTime(processedAt)}.`,
+  };
+}
+
+export function buildRecoveredLeaveNotificationContent({
+  notification,
+  leaveRequest,
+}: {
+  notification: {
+    type: NotificationType;
+    metadata: unknown;
+  };
+  leaveRequest: RecoveryLeaveRequest;
+}) {
+  const purpose = metadataString(notification.metadata, "notificationPurpose");
+  const approvalSource =
+    metadataString(notification.metadata, "approvalSource") ??
+    (leaveRequest.approvalSource === "AUTO_START_DATE" ? "AUTO_START_DATE" : "MANUAL");
+
+  if (purpose === "LEAVE_APPROVAL_NEEDED" || notification.type === "LEAVE_REQUEST_CREATED") {
+    return buildApprovalNeededContent(leaveRequest);
+  }
+
+  if (
+    purpose === "MANAGED_TEAM_LEAVE_APPROVED" ||
+    purpose === "MANAGED_TEAM_LEAVE_AUTO_CONFIRMED" ||
+    notification.type === "LEAVE_APPROVED" ||
+    notification.type === "LEAVE_AUTO_CONFIRMED"
+  ) {
+    return buildManagedApprovedContent(
+      leaveRequest,
+      approvalSource === "AUTO_START_DATE" ? "AUTO_START_DATE" : "MANUAL",
+    );
+  }
+
+  if (
+    purpose === "LEAVE_REQUEST_APPROVED" ||
+    purpose === "LEAVE_REQUEST_AUTO_CONFIRMED" ||
+    notification.type === "LEAVE_REQUEST_APPROVED" ||
+    notification.type === "LEAVE_REQUEST_AUTO_CONFIRMED"
+  ) {
+    return buildApprovedRequesterContent(
+      leaveRequest,
+      approvalSource === "AUTO_START_DATE"
+        ? "AUTO_START_DATE"
+        : approvalSource === "AUTO_POLICY"
+          ? "AUTO_POLICY"
+          : "MANUAL",
+    );
+  }
+
+  if (purpose === "LEAVE_REQUEST_REJECTED" || notification.type === "LEAVE_REQUEST_REJECTED") {
+    return buildRejectedOrCancelledContent(leaveRequest, "REJECTED");
+  }
+
+  if (purpose === "LEAVE_REQUEST_CANCELLED" || notification.type === "LEAVE_REQUEST_CANCELLED") {
+    return buildRejectedOrCancelledContent(leaveRequest, "CANCELLED");
+  }
+
+  return null;
+}
+
+async function notificationExists({
+  prisma,
+  userId,
+  type,
+  linkUrl,
+  deduplicationKey,
+}: {
+  prisma: RecoveryPrisma;
+  userId: string;
+  type: NotificationType;
+  linkUrl: string;
+  deduplicationKey: string;
+}) {
+  const existing = await prisma.notification.findFirst({
+    where: {
+      userId,
+      type,
+      linkUrl,
+      metadata: {
+        path: ["deduplicationKey"],
+        equals: deduplicationKey,
+      },
+    },
+  });
+
+  return Boolean(existing);
+}
+
+async function listPendingRequests(prisma: RecoveryPrisma) {
+  return prisma.leaveRequest.findMany({
+    where: {
+      status: "PENDING",
+      user: {
+        status: "ACTIVE",
+        role: { not: "EXTERNAL_PARTNER" },
+      },
+    },
+    include: leaveRequestRecoveryInclude,
+    orderBy: [{ createdAt: "asc" }],
+  }) as Promise<RecoveryLeaveRequest[]>;
+}
+
+async function listApprovedRequests(prisma: RecoveryPrisma) {
+  return prisma.leaveRequest.findMany({
+    where: {
+      status: "APPROVED",
+      user: {
+        status: "ACTIVE",
+        role: { in: ["OWNER", "LEAD", "MANAGER"] },
+      },
+    },
+    include: leaveRequestRecoveryInclude,
+    orderBy: [{ reviewedAt: "asc" }, { createdAt: "asc" }],
+  }) as Promise<RecoveryLeaveRequest[]>;
+}
+
+async function hasAutoApprovedAudit(prisma: RecoveryPrisma, leaveRequestId: string) {
+  const auditLog = await prisma.auditLog.findFirst({
+    where: {
+      action: "LEAVE_REQUEST_AUTO_APPROVED",
+      targetType: "LEAVE_REQUEST",
+      targetId: leaveRequestId,
+    },
+    select: { id: true },
+  });
+
+  return Boolean(auditLog);
+}
+
+async function findMissingApprovalNotifications({
+  prisma,
+  pendingRequests,
+}: {
+  prisma: RecoveryPrisma;
+  pendingRequests: RecoveryLeaveRequest[];
+}) {
+  const missing: ExpectedApprovalNotification[] = [];
+
+  for (const leaveRequest of pendingRequests) {
+    const approvalPolicy = await resolveApprovalPolicyForLeaveRequest({
+      leaveRequest,
+      prisma,
+    });
+    const recipientIds = await getLeaveApprovalNotificationRecipients({
+      leaveRequest,
+      approvalPolicy,
+      prisma,
+    });
+
+    for (const recipientUserId of recipientIds) {
+      const deduplicationKey = `leave-approval-needed:${leaveRequest.id}:${recipientUserId}`;
+      const exists = await notificationExists({
+        prisma,
+        userId: recipientUserId,
+        type: "LEAVE_REQUEST_CREATED",
+        linkUrl: `/leaves/approvals/${leaveRequest.id}`,
+        deduplicationKey,
+      });
+
+      if (!exists) {
+        missing.push({
+          leaveRequestId: leaveRequest.id,
+          recipientUserId,
+          deduplicationKey,
+        });
+      }
+    }
+  }
+
+  return missing;
+}
+
+async function findMissingRequesterNotifications({
+  prisma,
+  approvedRequests,
+}: {
+  prisma: RecoveryPrisma;
+  approvedRequests: RecoveryLeaveRequest[];
+}) {
+  const missing: ExpectedRequesterNotification[] = [];
+
+  for (const leaveRequest of approvedRequests) {
+    const approvalSource =
+      leaveRequest.approvalSource === "AUTO_START_DATE"
+        ? "AUTO_START_DATE"
+        : (await hasAutoApprovedAudit(prisma, leaveRequest.id))
+          ? "AUTO_POLICY"
+          : "MANUAL";
+    const type =
+      approvalSource === "AUTO_START_DATE"
+        ? "LEAVE_REQUEST_AUTO_CONFIRMED"
+        : "LEAVE_REQUEST_APPROVED";
+    const deduplicationKey =
+      approvalSource === "AUTO_START_DATE"
+        ? `leave-auto-confirmed-requester:${leaveRequest.id}:${leaveRequest.userId}`
+        : `leave-approved-requester:${leaveRequest.id}:${leaveRequest.userId}`;
+    const exists = await notificationExists({
+      prisma,
+      userId: leaveRequest.userId,
+      type,
+      linkUrl: `/leaves/me/requests/${leaveRequest.id}`,
+      deduplicationKey,
+    });
+
+    if (!exists) {
+      missing.push({
+        leaveRequestId: leaveRequest.id,
+        requesterUserId: leaveRequest.userId,
+        type,
+        deduplicationKey,
+        approvalSource,
+      });
+    }
+  }
+
+  return missing;
+}
+
+async function findAutoApprovalCandidates({
+  prisma,
+  pendingRequests,
+}: {
+  prisma: RecoveryPrisma;
+  pendingRequests: RecoveryLeaveRequest[];
+}) {
+  const candidates: AutoApprovalCandidate[] = [];
+
+  for (const leaveRequest of pendingRequests) {
+    const approvalPolicy = await resolveApprovalPolicyForLeaveRequest({
+      leaveRequest,
+      prisma,
+    });
+    const autoApprove = await shouldAutoApproveLeaveRequest({
+      leaveRequest,
+      policy: approvalPolicy,
+      prisma,
+    });
+
+    if (autoApprove) {
+      candidates.push({
+        leaveRequestId: leaveRequest.id,
+        policyCode: approvalPolicy.code,
+      });
+    }
+  }
+
+  return candidates;
+}
+
+async function assertAutoApprovalStillValid({
+  tx,
+  leaveRequest,
+}: {
+  tx: Prisma.TransactionClient;
+  leaveRequest: RecoveryLeaveRequest;
+}) {
+  const existingApprovedLedger = await tx.leaveLedger.findUnique({
+    where: { idempotencyKey: `request-approved:${leaveRequest.id}` },
+  });
+
+  if (existingApprovedLedger) {
+    throw new Error("ALREADY_HAS_APPROVED_LEDGER");
+  }
+
+  const policies = await getLeavePolicyMap(tx as unknown as PrismaClient);
+  const leavePolicy = policies[leaveRequest.type];
+
+  if (leaveRequest.requestKind !== "CUSTOM_GRANT") {
+    if (!leavePolicy?.isEnabled) {
+      throw new Error("LEAVE_TYPE_DISABLED");
+    }
+
+    if (policyDeductsAnnual(leavePolicy)) {
+      const balance = await getUserLeaveBalance({
+        userId: leaveRequest.userId,
+        year: Number(dateToDateOnly(leaveRequest.startDate).slice(0, 4)),
+        prisma: tx as unknown as PrismaClient,
+      });
+
+      assertEnoughLeaveBalance({ requestedDays: 0, balance });
+    }
+  }
+
+  const approvedOverlaps = await tx.leaveRequest.findMany({
+    where: {
+      id: { not: leaveRequest.id },
+      userId: leaveRequest.userId,
+      status: "APPROVED",
+      startDate: { lte: leaveRequest.endDate },
+      endDate: { gte: leaveRequest.startDate },
+    },
+  });
+
+  assertNoOverlappingLeaveRequest({
+    candidate: {
+      id: leaveRequest.id,
+      type: leaveRequest.type,
+      status: leaveRequest.status,
+      startDate: dateToDateOnly(leaveRequest.startDate),
+      endDate: dateToDateOnly(leaveRequest.endDate),
+      halfDayPeriod: leaveRequest.halfDayPeriod,
+    },
+    existingRequests: approvedOverlaps.map(
+      (request): LeaveOverlapCandidate => ({
+        id: request.id,
+        type: request.type,
+        status: request.status,
+        startDate: dateToDateOnly(request.startDate),
+        endDate: dateToDateOnly(request.endDate),
+        halfDayPeriod: request.halfDayPeriod,
+      }),
+    ),
+  });
+}
+
+async function autoApprovePendingRequestByPolicy({
+  prisma,
+  leaveRequestId,
+}: {
+  prisma: RecoveryPrisma;
+  leaveRequestId: string;
+}) {
+  let approved = false;
+
+  try {
+    approved = await prisma.$transaction(
+      async (tx) => {
+        const leaveRequest = (await tx.leaveRequest.findUnique({
+          where: { id: leaveRequestId },
+          include: leaveRequestRecoveryInclude,
+        })) as RecoveryLeaveRequest | null;
+
+        if (!leaveRequest || leaveRequest.status !== "PENDING") {
+          return false;
+        }
+
+        const approvalPolicy = await resolveApprovalPolicyForLeaveRequest({
+          leaveRequest,
+          prisma: tx,
+        });
+        const autoApprove = await shouldAutoApproveLeaveRequest({
+          leaveRequest,
+          policy: approvalPolicy,
+          prisma: tx as unknown as PrismaClient,
+        });
+
+        if (!autoApprove) {
+          return false;
+        }
+
+        assertAttachmentRequirementForApproval(leaveRequest, approvalPolicy);
+        await assertAutoApprovalStillValid({ tx, leaveRequest });
+        await recordLeaveRequestPendingLedger({ tx, leaveRequest });
+
+        const reviewedAt = new Date();
+        const updateResult = await tx.leaveRequest.updateMany({
+          where: { id: leaveRequest.id, status: "PENDING" },
+          data: {
+            status: "APPROVED",
+            reviewerId: null,
+            reviewedAt,
+            reviewComment: "승인 정책에 따라 자동 승인되었습니다.",
+            rejectReason: null,
+            cancelReason: null,
+            cancelledAt: null,
+          },
+        });
+
+        if (updateResult.count !== 1) {
+          return false;
+        }
+
+        if (leaveRequest.requestKind === "CUSTOM_GRANT") {
+          try {
+            for (const usage of leaveRequest.grantUsages) {
+              await convertLeaveGrantPendingToUsed({
+                tx,
+                leaveGrantId: usage.leaveGrantId,
+                amount: usage.amount,
+              });
+            }
+          } catch (error) {
+            if (error instanceof CustomLeaveRequestError) {
+              throw new Error("GRANT_STATE");
+            }
+
+            throw error;
+          }
+        }
+
+        await tx.auditLog.create({
+          data: {
+            actorId: null,
+            actorUserId: null,
+            targetUserId: leaveRequest.userId,
+            action: "LEAVE_REQUEST_AUTO_APPROVED",
+            targetType: "LEAVE_REQUEST",
+            targetId: leaveRequest.id,
+            metadata: toJsonValue({
+              leaveRequestId: leaveRequest.id,
+              requesterId: leaveRequest.userId,
+              leaveType: leaveRequest.type,
+              requestedDays: toNumber(leaveRequest.dayCount),
+              startDate: dateToDateOnly(leaveRequest.startDate),
+              endDate: dateToDateOnly(leaveRequest.endDate),
+              recovery: true,
+              approvalPolicy: approvalPolicySummary(approvalPolicy),
+            }),
+          },
+        });
+
+        await recordLeaveRequestApprovedLedger({
+          tx,
+          leaveRequest,
+          actorId: null,
+        });
+
+        return true;
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+  } catch {
+    return false;
+  }
+
+  if (approved) {
+    await notifyLeaveRequestApproved({
+      prisma,
+      leaveRequestId,
+      approvedByUserId: null,
+      approvalSource: "AUTO_POLICY",
+    });
+  }
+
+  return approved;
+}
+
+async function findKoreanNotificationRepairs({
+  prisma,
+  notificationScanLimit,
+}: {
+  prisma: RecoveryPrisma;
+  notificationScanLimit: number;
+}) {
+  const notifications = await prisma.notification.findMany({
+    where: {
+      type: { in: [...LEAVE_NOTIFICATION_TYPES] },
+    },
+    orderBy: { createdAt: "asc" },
+    take: notificationScanLimit,
+  });
+  const leaveRequestIds = [
+    ...new Set(
+      notifications
+        .map((notification) => metadataString(notification.metadata, "leaveRequestId"))
+        .filter((value): value is string => Boolean(value)),
+    ),
+  ];
+  const leaveRequests = leaveRequestIds.length
+    ? ((await prisma.leaveRequest.findMany({
+        where: { id: { in: leaveRequestIds } },
+        include: leaveRequestRecoveryInclude,
+      })) as RecoveryLeaveRequest[])
+    : [];
+  const leaveRequestById = new Map(leaveRequests.map((request) => [request.id, request]));
+  const repairs: KoreanNotificationRepair[] = [];
+
+  for (const notification of notifications) {
+    if (
+      !containsLegacyKoreanMojibake(notification.title) &&
+      !containsLegacyKoreanMojibake(notification.message)
+    ) {
+      continue;
+    }
+
+    const leaveRequestId = metadataString(notification.metadata, "leaveRequestId");
+    const leaveRequest = leaveRequestId ? leaveRequestById.get(leaveRequestId) : null;
+
+    if (!leaveRequest) {
+      continue;
+    }
+
+    const content = buildRecoveredLeaveNotificationContent({
+      notification,
+      leaveRequest,
+    });
+
+    if (!content) {
+      continue;
+    }
+
+    repairs.push({
+      notificationId: notification.id,
+      leaveRequestId: leaveRequest.id,
+      title: content.title,
+      message: content.message,
+    });
+  }
+
+  return { repairs, checkedCount: notifications.length };
+}
+
+async function applyApprovalNotificationRepairs({
+  prisma,
+  missing,
+  requestsById,
+  policiesByRequestId,
+}: {
+  prisma: RecoveryPrisma;
+  missing: ExpectedApprovalNotification[];
+  requestsById: Map<string, RecoveryLeaveRequest>;
+  policiesByRequestId: Map<string, ResolvedApprovalPolicy>;
+}) {
+  const requestIds = [...new Set(missing.map((item) => item.leaveRequestId))];
+  let created = 0;
+
+  for (const leaveRequestId of requestIds) {
+    const leaveRequest = requestsById.get(leaveRequestId);
+    const approvalPolicy = policiesByRequestId.get(leaveRequestId);
+
+    if (!leaveRequest || !approvalPolicy) {
+      continue;
+    }
+
+    const requestMissing = missing.filter((item) => item.leaveRequestId === leaveRequestId);
+    const content = buildApprovalNeededContent(leaveRequest);
+    const range = {
+      startDate: dateToDateOnly(leaveRequest.startDate),
+      endDate: dateToDateOnly(leaveRequest.endDate),
+    };
+    const typeName = leaveTypeLabel(leaveRequest);
+    const dayCount = toNumber(leaveRequest.dayCount);
+
+    for (const item of requestMissing) {
+      await createInAppNotificationOnce({
+        prisma,
+        userId: item.recipientUserId,
+        type: "LEAVE_REQUEST_CREATED",
+        priority: "HIGH",
+        title: content.title,
+        message: content.message,
+        linkUrl: `/leaves/approvals/${leaveRequestId}`,
+        metadata: buildLeaveNotificationMetadata({
+          deduplicationKey: item.deduplicationKey,
+          leaveRequestId,
+          requesterUserId: leaveRequest.userId,
+          targetUserId: leaveRequest.userId,
+          teamId: leaveRequest.user.teamId,
+          startDate: range.startDate,
+          endDate: range.endDate,
+          leaveType: leaveRequest.type,
+          leaveTypeName: typeName,
+          status: leaveRequest.status,
+          dayCount,
+          notificationPurpose: "LEAVE_APPROVAL_NEEDED",
+        }),
+      });
+      created += 1;
+    }
+
+    await prisma.auditLog.create({
+      data: {
+        actorId: null,
+        actorUserId: null,
+        targetUserId: leaveRequest.userId,
+        action: "LEAVE_REQUEST_APPROVER_RESOLVED",
+        targetType: "LEAVE_REQUEST",
+        targetId: leaveRequestId,
+        metadata: toJsonValue({
+          leaveRequestId,
+          requesterId: leaveRequest.userId,
+          resolvedApproverIds: requestMissing.map((item) => item.recipientUserId),
+          approvalPolicy: approvalPolicySummary(approvalPolicy),
+          recovery: true,
+        }),
+      },
+    });
+  }
+
+  return created;
+}
+
+async function applyRequesterNotificationRepairs({
+  prisma,
+  missing,
+}: {
+  prisma: RecoveryPrisma;
+  missing: ExpectedRequesterNotification[];
+}) {
+  let created = 0;
+
+  for (const item of missing) {
+    const result = await notifyLeaveRequestApproved({
+      prisma,
+      leaveRequestId: item.leaveRequestId,
+      approvedByUserId: null,
+      approvalSource: item.approvalSource,
+    });
+
+    created += result.requesterCount;
+  }
+
+  return created;
+}
+
+async function applyKoreanNotificationRepairs({
+  prisma,
+  repairs,
+}: {
+  prisma: RecoveryPrisma;
+  repairs: KoreanNotificationRepair[];
+}) {
+  let updated = 0;
+
+  for (const repair of repairs) {
+    const result = await prisma.notification.updateMany({
+      where: { id: repair.notificationId },
+      data: {
+        title: repair.title,
+        message: repair.message,
+      },
+    });
+
+    if (result.count > 0) {
+      updated += result.count;
+      await prisma.auditLog.create({
+        data: {
+          actorId: null,
+          actorUserId: null,
+          action: "LEAVE_REQUEST_APPROVER_RESOLVED",
+          targetType: "LEAVE_REQUEST",
+          targetId: repair.leaveRequestId,
+          metadata: toJsonValue({
+            notificationId: repair.notificationId,
+            leaveRequestId: repair.leaveRequestId,
+            recovery: true,
+            repairedFields: ["title", "message"],
+          }),
+        },
+      });
+    }
+  }
+
+  return updated;
+}
+
+export async function runLeaveOperationalRecovery({
+  prisma,
+  dryRun = true,
+  notificationScanLimit = 1000,
+}: {
+  prisma: RecoveryPrisma;
+  dryRun?: boolean;
+  notificationScanLimit?: number;
+}): Promise<LeaveOperationalRecoveryReport> {
+  const [pendingRequests, approvedRequests] = await Promise.all([
+    listPendingRequests(prisma),
+    listApprovedRequests(prisma),
+  ]);
+  const policiesByRequestId = new Map<string, ResolvedApprovalPolicy>();
+
+  for (const leaveRequest of pendingRequests) {
+    policiesByRequestId.set(
+      leaveRequest.id,
+      await resolveApprovalPolicyForLeaveRequest({
+        leaveRequest,
+        prisma,
+      }),
+    );
+  }
+
+  const [
+    missingApprovalNotifications,
+    missingRequesterNotifications,
+    autoApprovalCandidates,
+    koreanRepairScan,
+  ] = await Promise.all([
+    findMissingApprovalNotifications({ prisma, pendingRequests }),
+    findMissingRequesterNotifications({ prisma, approvedRequests }),
+    findAutoApprovalCandidates({ prisma, pendingRequests }),
+    findKoreanNotificationRepairs({ prisma, notificationScanLimit }),
+  ]);
+  const report: LeaveOperationalRecoveryReport = {
+    dryRun,
+    checked: {
+      pendingLeaveRequests: pendingRequests.length,
+      approvedLeaveRequests: approvedRequests.length,
+      leaveNotifications: koreanRepairScan.checkedCount,
+    },
+    missingApprovalNotifications,
+    missingRequesterNotifications,
+    autoApprovalCandidates,
+    calendarEligibleApprovedLeaveRequestIds: approvedRequests.map((request) => request.id),
+    koreanNotificationRepairs: koreanRepairScan.repairs,
+    applied: {
+      approvalNotificationsCreated: 0,
+      requesterNotificationsCreated: 0,
+      autoApprovedRequests: 0,
+      koreanNotificationsUpdated: 0,
+    },
+    skipped: {
+      autoApprovalRequestIds: [],
+    },
+  };
+
+  if (dryRun) {
+    return report;
+  }
+
+  const requestsById = new Map(pendingRequests.map((request) => [request.id, request]));
+  const autoApprovedIds = new Set<string>();
+
+  for (const candidate of autoApprovalCandidates) {
+    const approved = await autoApprovePendingRequestByPolicy({
+      prisma,
+      leaveRequestId: candidate.leaveRequestId,
+    });
+
+    if (approved) {
+      report.applied.autoApprovedRequests += 1;
+      autoApprovedIds.add(candidate.leaveRequestId);
+    } else {
+      report.skipped.autoApprovalRequestIds.push(candidate.leaveRequestId);
+    }
+  }
+
+  report.applied.approvalNotificationsCreated = await applyApprovalNotificationRepairs({
+    prisma,
+    missing: missingApprovalNotifications.filter(
+      (item) => !autoApprovedIds.has(item.leaveRequestId),
+    ),
+    requestsById,
+    policiesByRequestId,
+  });
+  report.applied.requesterNotificationsCreated = await applyRequesterNotificationRepairs({
+    prisma,
+    missing: missingRequesterNotifications,
+  });
+
+  report.applied.koreanNotificationsUpdated = await applyKoreanNotificationRepairs({
+    prisma,
+    repairs: koreanRepairScan.repairs,
+  });
+
+  return report;
+}

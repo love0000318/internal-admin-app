@@ -325,8 +325,8 @@ async function createCustomGrantLeaveRequest(formData: FormData) {
 
       await tx.auditLog.create({
         data: {
-          actorId: actor.id,
-          actorUserId: actor.id,
+          actorId: autoApprove ? null : actor.id,
+          actorUserId: autoApprove ? null : actor.id,
           targetUserId: actor.id,
           action: autoApprove ? "LEAVE_REQUEST_AUTO_APPROVED" : "CUSTOM_LEAVE_REQUEST_CREATED",
           targetType: "LEAVE_REQUEST",
@@ -386,7 +386,7 @@ async function createCustomGrantLeaveRequest(formData: FormData) {
               },
             ],
           },
-          actorId: actor.id,
+          actorId: null,
         });
 
       }
@@ -414,8 +414,11 @@ async function createCustomGrantLeaveRequest(formData: FormData) {
   }
 
   revalidatePath("/leaves/me");
+  revalidatePath("/leaves/approvals");
+  revalidatePath("/notifications");
   if (autoApprove) {
     revalidatePath("/leaves/calendar");
+    revalidatePath("/leaves/approvals/approved");
   }
   redirect(`/leaves/me/requests/${leaveRequest.id}?success=created`);
 }
@@ -659,8 +662,8 @@ export async function createLeaveRequest(formData: FormData) {
 
     await tx.auditLog.create({
       data: {
-        actorId: actor.id,
-        actorUserId: actor.id,
+        actorId: autoApprove ? null : actor.id,
+        actorUserId: autoApprove ? null : actor.id,
         targetUserId: actor.id,
         action: autoApprove ? "LEAVE_REQUEST_AUTO_APPROVED" : "LEAVE_REQUEST_CREATED",
         targetType: "LEAVE_REQUEST",
@@ -686,7 +689,7 @@ export async function createLeaveRequest(formData: FormData) {
       await recordLeaveRequestApprovedLedger({
         tx,
         leaveRequest: { ...created, grantUsages: [] },
-        actorId: actor.id,
+        actorId: null,
       });
 
     }
@@ -712,8 +715,11 @@ export async function createLeaveRequest(formData: FormData) {
   }
 
   revalidatePath("/leaves/me");
+  revalidatePath("/leaves/approvals");
+  revalidatePath("/notifications");
   if (autoApprove) {
     revalidatePath("/leaves/calendar");
+    revalidatePath("/leaves/approvals/approved");
   }
   redirect(`/leaves/me/requests/${leaveRequest.id}?success=created`);
 }

@@ -476,7 +476,7 @@ export async function recordLeaveRequestApprovedLedger({
 }: {
   tx: LedgerDb;
   leaveRequest: Parameters<typeof recordLeaveRequestPendingLedger>[0]["leaveRequest"];
-  actorId: string;
+  actorId: string | null;
 }) {
   return createRequestTransitionLedger({
     tx,
@@ -573,7 +573,7 @@ async function createRequestTransitionLedger({
 }: {
   tx: LedgerDb;
   leaveRequest: Parameters<typeof recordLeaveRequestPendingLedger>[0]["leaveRequest"];
-  actorId: string;
+  actorId: string | null;
   eventType: LeaveLedgerEventType;
   source: LeaveLedgerSource;
   keyPrefix: string;

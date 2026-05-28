@@ -4,6 +4,10 @@ import { describe, expect, it } from "vitest";
 
 const criticalMessageFiles = [
   "src/app/(app)/leaves/actions.ts",
+  "src/app/(app)/leaves/approvals/page.tsx",
+  "src/app/(app)/leaves/calendar/page.tsx",
+  "src/app/(app)/notifications/page.tsx",
+  "src/components/notifications/notification-bell.tsx",
   "src/lib/leave/auto-confirm.ts",
   "src/lib/leave/birthday-half-day.ts",
   "src/lib/leave/labels.ts",

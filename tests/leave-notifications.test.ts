@@ -37,6 +37,8 @@ function prismaMock() {
           { id: "lead-a", role: "LEAD", status: "ACTIVE", teamId: "team-a" },
           { id: "lead-b", role: "LEAD", status: "ACTIVE", teamId: "team-b" },
           { id: "inactive-lead", role: "LEAD", status: "DEACTIVATED", teamId: "team-a" },
+          { id: "manager-approver", role: "MANAGER", status: "ACTIVE", teamId: "team-b" },
+          { id: "external-approver", role: "EXTERNAL_PARTNER", status: "ACTIVE", teamId: null },
           { id: "requester", role: "MANAGER", status: "ACTIVE", teamId: "team-a-child" },
         ];
 
@@ -119,6 +121,32 @@ describe("leave notification recipients", () => {
     });
 
     expect(recipients).toEqual(["lead-a"]);
+  });
+
+  it("does not resolve MANAGER or EXTERNAL_PARTNER custom approvers for internal leave notifications", async () => {
+    await expect(
+      getLeaveApprovalNotificationRecipients({
+        leaveRequest,
+        approvalPolicy: {
+          approvalMode: "SINGLE",
+          approverRule: "CUSTOM_USER",
+          customApproverUserId: "manager-approver",
+        },
+        prisma: prismaMock() as never,
+      }),
+    ).resolves.toEqual(["owner"]);
+
+    await expect(
+      getLeaveApprovalNotificationRecipients({
+        leaveRequest,
+        approvalPolicy: {
+          approvalMode: "SINGLE",
+          approverRule: "CUSTOM_USER",
+          customApproverUserId: "external-approver",
+        },
+        prisma: prismaMock() as never,
+      }),
+    ).resolves.toEqual(["owner"]);
   });
 
   it("keeps notification metadata free of sensitive leave content", () => {

@@ -102,6 +102,22 @@ describe("approval policy authorization", () => {
     expect(canApproveLeaveRequestWithPolicy(lead, request(), policy("CUSTOM_USER"))).toBe(false);
   });
 
+  it("does not allow MANAGER or EXTERNAL_PARTNER as a custom leave approver", () => {
+    const customManager: RbacUser = {
+      id: "custom-approver",
+      role: "MANAGER",
+      status: "ACTIVE",
+    };
+    const externalPartner: RbacUser = {
+      id: "custom-approver",
+      role: "EXTERNAL_PARTNER",
+      status: "ACTIVE",
+    };
+
+    expect(canApproveLeaveRequestWithPolicy(customManager, request(), policy("CUSTOM_USER"))).toBe(false);
+    expect(canApproveLeaveRequestWithPolicy(externalPartner, request(), policy("CUSTOM_USER"))).toBe(false);
+  });
+
   it("blocks requester self approval and NONE mode manual approval", () => {
     const self: RbacUser = {
       id: requester.id,
