@@ -8,6 +8,7 @@ import { getPrisma } from "@/lib/db/prisma";
 import { JOB_NAMES, isManualJobName } from "@/lib/jobs/job-names";
 import { runJobWithTracking } from "@/lib/jobs/job-runner";
 import { autoConfirmPendingLeaveRequestsForDate } from "@/lib/leave/auto-confirm";
+import { grantBirthdayHalfDaysForDate } from "@/lib/leave/birthday-half-day";
 import { requireOwner } from "@/lib/rbac/server-guards";
 
 export async function runManualJob(formData: FormData) {
@@ -130,19 +131,33 @@ async function runSupportedDryRun(jobName: string) {
   }
 
   if (jobName === JOB_NAMES.BIRTHDAY_HALF_DAY_GRANTS) {
-    const [usersWithBirthDate, birthdayGrants] = await Promise.all([
-      prisma.user.count({ where: { status: "ACTIVE", birthDate: { not: null } } }),
-      prisma.leaveGrant.count({ where: { source: "BIRTHDAY_AUTO" } }),
-    ]);
+    const result = await grantBirthdayHalfDaysForDate({
+      prisma,
+      dryRun: true,
+      includePastDue: true,
+    });
 
     return {
       status: "SUCCESS" as const,
-      checkedCount: usersWithBirthDate,
-      skippedCount: birthdayGrants,
+      checkedCount: result.activeUserCount,
+      skippedCount: result.skippedCount,
       resultSummary: {
-        activeUsersWithBirthDate: usersWithBirthDate,
-        existingBirthdayGrants: birthdayGrants,
-        dryRun: true,
+        processedDate: result.processedDate,
+        dryRun: result.dryRun,
+        mode: result.mode,
+        activeUserCount: result.activeUserCount,
+        dueCount: result.dueCount,
+        missingBirthDateCount: result.missingBirthDateCount,
+        alreadyGrantedCount: result.alreadyGrantedCount,
+        grantCandidateCount: result.grants.length,
+        grantCandidates: result.grants.map((grant) => ({
+          userId: grant.userId,
+          birthdayDate: grant.birthdayDate,
+          nominalGrantDate: grant.nominalGrantDate,
+          actualGrantDate: grant.actualGrantDate,
+          usableFrom: grant.usableFrom,
+          usableUntil: grant.usableUntil,
+        })),
       },
     };
   }

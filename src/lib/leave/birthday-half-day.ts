@@ -1,6 +1,7 @@
 ﻿import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { getPrisma } from "@/lib/db/prisma";
 import {
+  compareDateOnly,
   dateOnlyToDate,
   dateToDateOnly,
   formatDateOnly,
@@ -11,6 +12,8 @@ import type { DateOnly } from "@/lib/leave/types";
 
 export const BIRTHDAY_HALF_DAY_CODE = "BIRTHDAY_HALF_DAY";
 export const BIRTHDAY_HALF_DAY_REASON = "생일 반차 자동 지급";
+
+export type BirthdayGrantMode = "exact-date" | "due-through-date";
 
 type BirthdayPolicy = {
   id: string;
@@ -27,6 +30,7 @@ type BirthdayPolicy = {
 export type BirthdayGrantJobResult = {
   processedDate: DateOnly;
   dryRun: boolean;
+  mode: BirthdayGrantMode;
   activeUserCount: number;
   dueCount: number;
   missingBirthDateCount: number;
@@ -38,6 +42,8 @@ export type BirthdayGrantJobResult = {
     userId: string;
     leaveGrantId?: string;
     birthdayDate: DateOnly;
+    nominalGrantDate: DateOnly;
+    actualGrantDate: DateOnly;
     usableFrom: DateOnly;
     usableUntil: DateOnly;
   }>;
@@ -268,15 +274,19 @@ export async function grantBirthdayHalfDaysForDate({
   prisma = getPrisma(),
   processedDate = todayInSeoul(),
   dryRun = false,
+  includePastDue = false,
 }: {
   prisma?: PrismaClient;
   processedDate?: DateOnly;
   dryRun?: boolean;
+  includePastDue?: boolean;
 } = {}): Promise<BirthdayGrantJobResult> {
   const policy = await getBirthdayPolicy(prisma);
+  const mode: BirthdayGrantMode = includePastDue ? "due-through-date" : "exact-date";
   const result: BirthdayGrantJobResult = {
     processedDate,
     dryRun,
+    mode,
     activeUserCount: 0,
     dueCount: 0,
     missingBirthDateCount: 0,
@@ -345,7 +355,11 @@ export async function grantBirthdayHalfDaysForDate({
             policy.adjustGrantDateToPreviousBusinessDay,
         });
 
-      if (actualGrantDate !== processedDate) {
+      const grantIsDue = includePastDue
+        ? compareDateOnly(actualGrantDate, processedDate) <= 0
+        : actualGrantDate === processedDate;
+
+      if (!grantIsDue) {
         continue;
       }
 
@@ -375,6 +389,8 @@ export async function grantBirthdayHalfDaysForDate({
         result.grants.push({
           userId: user.id,
           birthdayDate,
+          nominalGrantDate,
+          actualGrantDate,
           usableFrom,
           usableUntil,
         });
@@ -446,6 +462,8 @@ export async function grantBirthdayHalfDaysForDate({
         userId: user.id,
         leaveGrantId: grant.id,
         birthdayDate,
+        nominalGrantDate,
+        actualGrantDate,
         usableFrom,
         usableUntil,
       });
