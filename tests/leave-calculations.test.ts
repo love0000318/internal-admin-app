@@ -19,6 +19,7 @@ import {
   calculateRemainingDays,
 } from "@/lib/leave/balance";
 import { assertNoOverlappingLeaveRequest } from "@/lib/leave/overlap";
+import { resolveLeaveBalanceAsOfDateForYear } from "@/lib/leave/queries";
 import type { LeavePolicy } from "@/lib/leave/types";
 
 const annualPolicy: LeavePolicy = {
@@ -210,6 +211,38 @@ describe("leave calculations", () => {
         endDate: "2026-05-03",
       }),
     ).toBe(0);
+  });
+
+  it("allows retroactive annual and half-day request dates when the caller opts in", () => {
+    expect(() =>
+      assertValidLeaveDateRange({
+        type: "ANNUAL",
+        startDate: "2026-04-30",
+        endDate: "2026-04-30",
+        today: "2026-05-01",
+      }),
+    ).toThrow("Past leave requests are not allowed.");
+
+    expect(() =>
+      assertValidLeaveDateRange({
+        type: "ANNUAL",
+        startDate: "2026-04-30",
+        endDate: "2026-04-30",
+        today: "2026-05-01",
+        allowPast: true,
+      }),
+    ).not.toThrow();
+
+    expect(() =>
+      assertValidLeaveDateRange({
+        type: "HALF_DAY",
+        startDate: "2026-04-30",
+        endDate: "2026-04-30",
+        halfDayPeriod: "PM",
+        today: "2026-05-01",
+        allowPast: true,
+      }),
+    ).not.toThrow();
   });
 
   it("rejects annual leave requests exceeding remaining balance", () => {
@@ -552,5 +585,91 @@ describe("leave calculations", () => {
         ],
       }),
     ).not.toThrow();
+  });
+
+  it("keeps overlap and balance checks active for retroactive requests", () => {
+    expect(() =>
+      assertNoOverlappingLeaveRequest({
+        candidate: {
+          type: "HALF_DAY",
+          status: "PENDING",
+          startDate: "2026-04-30",
+          endDate: "2026-04-30",
+          halfDayPeriod: "AM",
+        },
+        existingRequests: [
+          {
+            type: "HALF_DAY",
+            status: "APPROVED",
+            startDate: "2026-04-30",
+            endDate: "2026-04-30",
+            halfDayPeriod: "AM",
+          },
+        ],
+      }),
+    ).toThrow("Overlapping leave request already exists.");
+
+    expect(() =>
+      assertEnoughLeaveBalance({
+        requestedDays: 0.5,
+        balance: { remainingDays: 0 },
+      }),
+    ).toThrow("Leave request exceeds remaining annual leave.");
+  });
+
+  it("uses the selected year end as the default balance date for past and future years", () => {
+    expect(
+      resolveLeaveBalanceAsOfDateForYear({
+        year: 2026,
+        today: "2026-05-01",
+      }),
+    ).toBe("2026-05-01");
+    expect(
+      resolveLeaveBalanceAsOfDateForYear({
+        year: 2027,
+        today: "2026-05-01",
+      }),
+    ).toBe("2027-12-31");
+    expect(
+      resolveLeaveBalanceAsOfDateForYear({
+        year: 2025,
+        today: "2026-05-01",
+      }),
+    ).toBe("2025-12-31");
+  });
+
+  it("reflects additional tenure when calculating future-year annual balances", () => {
+    const policies = {
+      ANNUAL: annualPolicy,
+      HALF_DAY: { ...annualPolicy, type: "HALF_DAY" as const },
+      RESERVE_FORCES: { ...nonDeductingSickPolicy, type: "RESERVE_FORCES" as const },
+      SICK: nonDeductingSickPolicy,
+      BEREAVEMENT: { ...nonDeductingSickPolicy, type: "BEREAVEMENT" as const },
+    };
+    const currentYear = calculateLeaveBalanceForUser({
+      hireDate: "2024-01-01",
+      asOfDate: resolveLeaveBalanceAsOfDateForYear({
+        year: 2026,
+        today: "2026-05-01",
+      }),
+      fiscalYear: 2026,
+      adjustments: [],
+      leaveRequests: [],
+      policies,
+    });
+    const futureYear = calculateLeaveBalanceForUser({
+      hireDate: "2024-01-01",
+      asOfDate: resolveLeaveBalanceAsOfDateForYear({
+        year: 2027,
+        today: "2026-05-01",
+      }),
+      fiscalYear: 2027,
+      adjustments: [],
+      leaveRequests: [],
+      policies,
+    });
+
+    expect(currentYear.annualEntitled).toBe(15);
+    expect(futureYear.annualEntitled).toBe(16);
   });
 });

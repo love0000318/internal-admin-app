@@ -295,14 +295,16 @@ export async function listRequestableLeaveGrants(
   prisma: PrismaClient = getPrisma(),
 ) {
   const asOfDate = date ?? todayInSeoul();
-  const dateValue = dateOnlyToDate(asOfDate);
+  const dateValue = date ? dateOnlyToDate(asOfDate) : null;
 
   const grants = await prisma.leaveGrant.findMany({
     where: {
       userId,
       status: "ACTIVE",
       remainingAmount: { gt: 0 },
-      OR: [{ expiresAt: null }, { expiresAt: { gte: dateValue } }],
+      ...(dateValue
+        ? { OR: [{ expiresAt: null }, { expiresAt: { gte: dateValue } }] }
+        : {}),
       leaveType: {
         isEnabled: true,
       },
@@ -313,7 +315,7 @@ export async function listRequestableLeaveGrants(
 
   return date
     ? filterRequestableLeaveGrantsForDate(grants, date)
-    : grants.filter((grant) => isLeaveGrantRequestCandidateVisible(grant, asOfDate));
+    : grants.filter((grant) => isRequestableLeaveGrantType(grant));
 }
 
 export async function getRequestableLeaveGrantDetail(

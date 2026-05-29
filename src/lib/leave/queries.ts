@@ -168,10 +168,22 @@ export async function listEnabledCompanyHolidayDateOnlys(
   return holidays.map((holiday) => dateToDateOnly(holiday.date));
 }
 
+export function resolveLeaveBalanceAsOfDateForYear({
+  year,
+  today = todayInSeoul(),
+}: {
+  year: number;
+  today?: DateOnly;
+}) {
+  const currentYear = Number(today.slice(0, 4));
+
+  return year === currentYear ? today : (`${year}-12-31` as DateOnly);
+}
+
 export async function getUserLeaveBalance({
   userId,
   year,
-  asOfDate = todayInSeoul(),
+  asOfDate,
   prisma = getPrisma(),
 }: {
   userId: string;
@@ -179,6 +191,8 @@ export async function getUserLeaveBalance({
   asOfDate?: DateOnly;
   prisma?: PrismaClient;
 }) {
+  const effectiveAsOfDate =
+    asOfDate ?? resolveLeaveBalanceAsOfDateForYear({ year });
   const [user, policies, adjustments, leaveRequests] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
@@ -234,7 +248,7 @@ export async function getUserLeaveBalance({
     user.status === "ACTIVE" && user.role !== "EXTERNAL_PARTNER";
   const balance = calculateLeaveBalanceForUser({
     hireDate: hireDate ? dateToDateOnly(hireDate) : null,
-    asOfDate,
+    asOfDate: effectiveAsOfDate,
     fiscalYear: year,
     includeUnderOneYearFiscalProratedLeave,
     adjustments: adjustments.map((adjustment) => ({

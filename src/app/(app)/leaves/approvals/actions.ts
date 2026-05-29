@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { Prisma } from "@/generated/prisma/client";
 import { getPrisma } from "@/lib/db/prisma";
 import { assertEnoughLeaveBalance, policyDeductsAnnual, toNumber } from "@/lib/leave/balance";
-import { dateToDateOnly, todayInSeoul } from "@/lib/leave/calculate-business-days";
+import { dateToDateOnly } from "@/lib/leave/calculate-business-days";
 import {
   convertLeaveGrantPendingToUsed,
   CustomLeaveRequestError,
@@ -159,7 +159,6 @@ async function assertApprovalStillValid(params: {
     const balance = await getUserLeaveBalance({
       userId: leaveRequest.userId,
       year: Number(dateToDateOnly(leaveRequest.startDate).slice(0, 4)),
-      asOfDate: todayInSeoul(),
       prisma: tx as unknown as ReturnType<typeof getPrisma>,
     });
 

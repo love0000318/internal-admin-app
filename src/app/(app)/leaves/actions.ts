@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 
 import { Prisma } from "@/generated/prisma/client";
 import { getPrisma } from "@/lib/db/prisma";
-import { assertEnoughLeaveBalance, policyDeductsAnnual } from "@/lib/leave/balance";
+import { assertEnoughLeaveBalance, policyDeductsAnnual, toNumber } from "@/lib/leave/balance";
 import {
   createLeaveAttachmentRecord,
   getAttachmentPolicyForLegacyLeaveType,
@@ -29,6 +29,7 @@ import {
   getRequestableLeaveGrantDetail,
   reserveLeaveGrantAmountForPendingRequest,
   releaseLeaveGrantPendingAmount,
+  restoreLeaveGrantUsedAmount,
   type CustomLeaveUsageUnit,
 } from "@/lib/leave/custom-grant-requests";
 import {
@@ -40,6 +41,7 @@ import {
 import { assertNoOverlappingLeaveRequest } from "@/lib/leave/overlap";
 import {
   recordLeaveRequestApprovedLedger,
+  recordLeaveRequestCancelledLedger,
   recordLeaveRequestPendingLedger,
   recordLeaveRequestWithdrawnLedger,
 } from "@/lib/leave/ledger";
@@ -53,7 +55,9 @@ import { leaveRequestSchema, optionalString } from "@/lib/leave/validation";
 import {
   notifyLeaveApprovalNeeded,
   notifyLeaveRequestApproved,
+  notifyLeaveRequestRejectedOrCancelled,
 } from "@/lib/notifications/leave-notifications";
+import { assertRequesterCanCancelApprovedLeaveRequest } from "@/lib/leave/cancellation";
 import { requireRouteAccess } from "@/lib/rbac/server-guards";
 
 function toJsonValue(value: unknown): Prisma.InputJsonValue {
@@ -68,6 +72,12 @@ function getRequiredFormValue(formData: FormData, name: string) {
 
 function redirectToNewRequest(error: string): never {
   redirect(`/leaves/me/requests/new?error=${error}`);
+}
+
+class LeaveRequesterCancelActionError extends Error {
+  constructor(readonly code: string) {
+    super(code);
+  }
 }
 
 function normalizeRequestDates(formData: FormData) {
@@ -133,6 +143,7 @@ async function createCustomGrantLeaveRequest(formData: FormData) {
       endDate: endDate as DateOnly,
       halfDayPeriod,
       today,
+      allowPast: true,
     });
   } catch {
     redirectToNewRequest("invalid-date");
@@ -473,6 +484,7 @@ export async function createLeaveRequest(formData: FormData) {
       startDate: parsed.data.startDate as DateOnly,
       endDate: parsed.data.endDate as DateOnly,
       today,
+      allowPast: true,
     });
   } catch {
     redirectToNewRequest("invalid-date");
@@ -566,7 +578,6 @@ export async function createLeaveRequest(formData: FormData) {
     const balance = await getUserLeaveBalance({
       userId: actor.id,
       year: Number((parsed.data.startDate as DateOnly).slice(0, 4)),
-      asOfDate: today,
       prisma,
     });
 
@@ -829,4 +840,170 @@ export async function withdrawLeaveRequest(formData: FormData) {
 
   revalidatePath("/leaves/me");
   redirect(`/leaves/me/requests/${leaveRequest.id}?success=withdrawn`);
+}
+
+export async function cancelMyApprovedLeaveRequest(formData: FormData) {
+  const actor = await requireRouteAccess("/leaves/me");
+  const requestId = getRequiredFormValue(formData, "requestId");
+  const cancelComment = optionalString(formData.get("cancelComment"));
+
+  if (!requestId) {
+    redirect("/leaves/me?error=invalid");
+  }
+
+  const prisma = getPrisma();
+  let leaveRequestId = requestId;
+
+  try {
+    const cancelled = await prisma.$transaction(
+      async (tx) => {
+        const before = await tx.leaveRequest.findFirst({
+          where: {
+            id: requestId,
+            userId: actor.id,
+          },
+          include: {
+            grantUsages: {
+              include: {
+                leaveGrant: {
+                  include: {
+                    leaveType: true,
+                  },
+                },
+              },
+            },
+            customLeaveType: true,
+          },
+        });
+
+        if (!before) {
+          throw new LeaveRequesterCancelActionError("not-found");
+        }
+
+        leaveRequestId = before.id;
+
+        try {
+          assertRequesterCanCancelApprovedLeaveRequest({ leaveRequest: before });
+        } catch (error) {
+          throw new LeaveRequesterCancelActionError(
+            error instanceof Error ? error.message : "invalid",
+          );
+        }
+
+        const updateResult = await tx.leaveRequest.updateMany({
+          where: {
+            id: before.id,
+            userId: actor.id,
+            status: "APPROVED",
+          },
+          data: {
+            status: "CANCELLED",
+            reviewerId: actor.id,
+            reviewedAt: new Date(),
+            reviewComment: cancelComment,
+            cancelReason: cancelComment,
+            cancelledAt: new Date(),
+          },
+        });
+
+        if (updateResult.count !== 1) {
+          throw new LeaveRequesterCancelActionError("not-approved");
+        }
+
+        if (before.requestKind === "CUSTOM_GRANT") {
+          try {
+            for (const usage of before.grantUsages) {
+              await restoreLeaveGrantUsedAmount({
+                tx,
+                leaveGrantId: usage.leaveGrantId,
+                amount: usage.amount,
+              });
+            }
+          } catch (error) {
+            if (error instanceof CustomLeaveRequestError) {
+              throw new LeaveRequesterCancelActionError("grant-state");
+            }
+
+            throw error;
+          }
+        }
+
+        const updated = await tx.leaveRequest.findUniqueOrThrow({
+          where: { id: before.id },
+        });
+
+        await tx.auditLog.create({
+          data: {
+            actorId: actor.id,
+            actorUserId: actor.id,
+            targetUserId: actor.id,
+            action:
+              before.requestKind === "CUSTOM_GRANT"
+                ? "CUSTOM_LEAVE_REQUEST_CANCELLED"
+                : "LEAVE_REQUEST_CANCELLED",
+            targetType: "LEAVE_REQUEST",
+            targetId: updated.id,
+            metadata: toJsonValue({
+              requestKind: before.requestKind,
+              leaveRequestId: updated.id,
+              leaveType: before.type,
+              leaveTypeId: before.leaveTypeId,
+              leaveTypeCode: before.customLeaveType?.code,
+              requestedDays: toNumber(before.dayCount),
+              startDate: dateToDateOnly(before.startDate),
+              endDate: dateToDateOnly(before.endDate),
+              cancelSource: "REQUESTER",
+              cancelComment,
+              grantUsages: before.grantUsages.map((usage) => ({
+                leaveGrantId: usage.leaveGrantId,
+                amount: usage.amount,
+                unit: usage.unit,
+              })),
+              before: { status: before.status },
+              after: {
+                status: updated.status,
+                cancelledAt: updated.cancelledAt,
+              },
+            }),
+          },
+        });
+
+        await recordLeaveRequestCancelledLedger({
+          tx,
+          leaveRequest: before,
+          actorId: actor.id,
+        });
+
+        return updated;
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+
+    leaveRequestId = cancelled.id;
+  } catch (error) {
+    if (error instanceof LeaveRequesterCancelActionError) {
+      const target =
+        error.code === "not-found"
+          ? "/leaves/me?error=not-found"
+          : `/leaves/me/requests/${leaveRequestId}?error=${error.code}`;
+
+      redirect(target);
+    }
+
+    throw error;
+  }
+
+  await notifyLeaveRequestRejectedOrCancelled({
+    leaveRequestId,
+    action: "CANCELLED",
+    prisma,
+  });
+
+  revalidatePath("/leaves/me");
+  revalidatePath(`/leaves/me/requests/${leaveRequestId}`);
+  revalidatePath("/leaves/approvals");
+  revalidatePath("/leaves/approvals/approved");
+  revalidatePath("/leaves/calendar");
+  revalidatePath("/notifications");
+  redirect(`/leaves/me/requests/${leaveRequestId}?success=cancelled`);
 }

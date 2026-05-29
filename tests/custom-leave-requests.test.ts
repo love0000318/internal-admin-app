@@ -10,6 +10,7 @@ import {
   calculateCustomLeaveRequestAmount,
   filterRequestableLeaveGrantsForDate,
   isRequestableLeaveGrantType,
+  listRequestableLeaveGrants,
 } from "@/lib/leave/custom-grant-requests";
 
 const leaveType = {
@@ -238,6 +239,27 @@ describe("custom leave request helpers", () => {
         "2026-05-11",
       ).map((item) => item.id),
     ).toEqual(["usable"]);
+  });
+
+  it("keeps active expired grants selectable for retroactive request forms", async () => {
+    const prisma = {
+      leaveGrant: {
+        findMany: async () => [
+          {
+            ...grant,
+            id: "expired-but-retroactive",
+            expiresAt: dateOnlyToDate("2026-05-09"),
+          },
+        ],
+      },
+    };
+
+    await expect(
+      listRequestableLeaveGrants("user-1", null, prisma as never),
+    ).resolves.toMatchObject([{ id: "expired-but-retroactive" }]);
+    await expect(
+      listRequestableLeaveGrants("user-1", "2026-05-11", prisma as never),
+    ).resolves.toEqual([]);
   });
 
   it("keeps birthday half-day requests to exactly 0.5 days", () => {
