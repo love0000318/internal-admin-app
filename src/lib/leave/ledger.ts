@@ -56,6 +56,7 @@ export type LeaveLedgerBalance = {
 };
 
 type LedgerDb = PrismaClient | Prisma.TransactionClient;
+const BIRTHDAY_HALF_DAY_LEDGER_CODE = "BIRTHDAY_HALF_DAY";
 
 function toJsonValue(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
@@ -395,11 +396,36 @@ export async function recordLeaveGrantRevokedLedger({
   });
 }
 
-function primaryGrantUsage(
-  leaveRequest: {
-    grantUsages?: Array<{ leaveGrantId: string; amount: number; unit: string }>;
-  },
-) {
+type GrantUsageForLedger = {
+  leaveGrantId: string;
+  amount: number;
+  unit: string;
+  leaveGrantSource?: string | null;
+  leaveTypeCode?: string | null;
+  leaveGrant?: {
+    source?: string | null;
+    leaveType?: {
+      code?: string | null;
+    } | null;
+  } | null;
+};
+
+type LeaveRequestForLedger = {
+  id: string;
+  userId: string;
+  leaveTypeId: string | null;
+  dayCount: unknown;
+  startDate: Date;
+  endDate: Date;
+  requestKind: string;
+  type: string;
+  customLeaveType?: {
+    code?: string | null;
+  } | null;
+  grantUsages?: GrantUsageForLedger[];
+};
+
+function primaryGrantUsage(leaveRequest: { grantUsages?: GrantUsageForLedger[] }) {
   return leaveRequest.grantUsages?.[0] ?? null;
 }
 
@@ -407,22 +433,43 @@ function leaveRequestAmount(leaveRequest: { dayCount: unknown }) {
   return toNumber(leaveRequest.dayCount);
 }
 
+function isBirthdayHalfDayLedgerRequest(
+  leaveRequest: Pick<LeaveRequestForLedger, "customLeaveType" | "grantUsages">,
+) {
+  return (
+    leaveRequest.customLeaveType?.code === BIRTHDAY_HALF_DAY_LEDGER_CODE ||
+    leaveRequest.grantUsages?.some((usage) => {
+      return (
+        usage.leaveGrantSource === "BIRTHDAY_AUTO" ||
+        usage.leaveTypeCode === BIRTHDAY_HALF_DAY_LEDGER_CODE ||
+        usage.leaveGrant?.source === "BIRTHDAY_AUTO" ||
+        usage.leaveGrant?.leaveType?.code === BIRTHDAY_HALF_DAY_LEDGER_CODE
+      );
+    }) === true
+  );
+}
+
+function requestLedgerSource(
+  leaveRequest: LeaveRequestForLedger,
+  fallbackSource: LeaveLedgerSource,
+) {
+  if (isBirthdayHalfDayLedgerRequest(leaveRequest)) {
+    return "BIRTHDAY_AUTO";
+  }
+
+  if (leaveRequest.requestKind === "CUSTOM_GRANT") {
+    return "CUSTOM_GRANT";
+  }
+
+  return fallbackSource;
+}
+
 export async function recordLeaveRequestPendingLedger({
   tx,
   leaveRequest,
 }: {
   tx: LedgerDb;
-  leaveRequest: {
-    id: string;
-    userId: string;
-    leaveTypeId: string | null;
-    dayCount: unknown;
-    startDate: Date;
-    endDate: Date;
-    requestKind: string;
-    type: string;
-    grantUsages?: Array<{ leaveGrantId: string; amount: number; unit: string }>;
-  };
+  leaveRequest: LeaveRequestForLedger;
 }) {
   const usage = primaryGrantUsage(leaveRequest);
 
@@ -437,12 +484,17 @@ export async function recordLeaveRequestPendingLedger({
     unit: (usage?.unit as LeaveLedgerUnit | undefined) ?? "DAY",
     effectiveDate: leaveRequest.startDate,
     referenceYear: Number(dateToDateOnly(leaveRequest.startDate).slice(0, 4)),
-    source: "LEAVE_REQUEST",
+    source: requestLedgerSource(leaveRequest, "LEAVE_REQUEST"),
     idempotencyKey: `request-pending:${leaveRequest.id}`,
     reason: "Leave request submitted",
     metadata: {
       requestKind: leaveRequest.requestKind,
       leaveType: leaveRequest.type,
+      customLeaveTypeCode:
+        leaveRequest.customLeaveType?.code ??
+        usage?.leaveTypeCode ??
+        usage?.leaveGrant?.leaveType?.code ??
+        null,
       startDate: dateToDateOnly(leaveRequest.startDate),
       endDate: dateToDateOnly(leaveRequest.endDate),
     },
@@ -455,7 +507,7 @@ export async function recordLeaveRequestWithdrawnLedger({
   actorId,
 }: {
   tx: LedgerDb;
-  leaveRequest: Parameters<typeof recordLeaveRequestPendingLedger>[0]["leaveRequest"];
+  leaveRequest: LeaveRequestForLedger;
   actorId: string;
 }) {
   return createRequestTransitionLedger({
@@ -475,7 +527,7 @@ export async function recordLeaveRequestApprovedLedger({
   actorId,
 }: {
   tx: LedgerDb;
-  leaveRequest: Parameters<typeof recordLeaveRequestPendingLedger>[0]["leaveRequest"];
+  leaveRequest: LeaveRequestForLedger;
   actorId: string | null;
 }) {
   return createRequestTransitionLedger({
@@ -494,7 +546,7 @@ export async function recordLeaveRequestAutoConfirmedLedger({
   leaveRequest,
 }: {
   tx: LedgerDb;
-  leaveRequest: Parameters<typeof recordLeaveRequestPendingLedger>[0]["leaveRequest"];
+  leaveRequest: LeaveRequestForLedger;
 }) {
   const usage = primaryGrantUsage(leaveRequest);
 
@@ -509,13 +561,18 @@ export async function recordLeaveRequestAutoConfirmedLedger({
     unit: (usage?.unit as LeaveLedgerUnit | undefined) ?? "DAY",
     effectiveDate: new Date(),
     referenceYear: Number(dateToDateOnly(leaveRequest.startDate).slice(0, 4)),
-    source: "LEAVE_AUTO_CONFIRM",
+    source: requestLedgerSource(leaveRequest, "LEAVE_AUTO_CONFIRM"),
     idempotencyKey: `auto-confirm-used:${leaveRequest.id}`,
     reason: "Leave request auto-confirmed after start date",
     metadata: {
       approvalSource: "AUTO_START_DATE",
       requestKind: leaveRequest.requestKind,
       leaveType: leaveRequest.type,
+      customLeaveTypeCode:
+        leaveRequest.customLeaveType?.code ??
+        usage?.leaveTypeCode ??
+        usage?.leaveGrant?.leaveType?.code ??
+        null,
       startDate: dateToDateOnly(leaveRequest.startDate),
       endDate: dateToDateOnly(leaveRequest.endDate),
     },
@@ -528,7 +585,7 @@ export async function recordLeaveRequestRejectedLedger({
   actorId,
 }: {
   tx: LedgerDb;
-  leaveRequest: Parameters<typeof recordLeaveRequestPendingLedger>[0]["leaveRequest"];
+  leaveRequest: LeaveRequestForLedger;
   actorId: string;
 }) {
   return createRequestTransitionLedger({
@@ -548,7 +605,7 @@ export async function recordLeaveRequestCancelledLedger({
   actorId,
 }: {
   tx: LedgerDb;
-  leaveRequest: Parameters<typeof recordLeaveRequestPendingLedger>[0]["leaveRequest"];
+  leaveRequest: LeaveRequestForLedger;
   actorId: string;
 }) {
   return createRequestTransitionLedger({
@@ -572,7 +629,7 @@ async function createRequestTransitionLedger({
   reason,
 }: {
   tx: LedgerDb;
-  leaveRequest: Parameters<typeof recordLeaveRequestPendingLedger>[0]["leaveRequest"];
+  leaveRequest: LeaveRequestForLedger;
   actorId: string | null;
   eventType: LeaveLedgerEventType;
   source: LeaveLedgerSource;
@@ -592,12 +649,17 @@ async function createRequestTransitionLedger({
     unit: (usage?.unit as LeaveLedgerUnit | undefined) ?? "DAY",
     effectiveDate: new Date(),
     referenceYear: Number(dateToDateOnly(leaveRequest.startDate).slice(0, 4)),
-    source,
+    source: requestLedgerSource(leaveRequest, source),
     idempotencyKey: `${keyPrefix}:${leaveRequest.id}`,
     reason,
     metadata: {
       requestKind: leaveRequest.requestKind,
       leaveType: leaveRequest.type,
+      customLeaveTypeCode:
+        leaveRequest.customLeaveType?.code ??
+        usage?.leaveTypeCode ??
+        usage?.leaveGrant?.leaveType?.code ??
+        null,
       startDate: dateToDateOnly(leaveRequest.startDate),
       endDate: dateToDateOnly(leaveRequest.endDate),
     },

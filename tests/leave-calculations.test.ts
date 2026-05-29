@@ -389,6 +389,50 @@ describe("leave calculations", () => {
     expect(balance.remainingDays).toBe(13.5);
   });
 
+  it("keeps birthday half-day grant usage out of annual balance totals", () => {
+    const policies = {
+      ANNUAL: annualPolicy,
+      HALF_DAY: { ...annualPolicy, type: "HALF_DAY" as const },
+      RESERVE_FORCES: { ...nonDeductingSickPolicy, type: "RESERVE_FORCES" as const },
+      SICK: nonDeductingSickPolicy,
+      BEREAVEMENT: { ...nonDeductingSickPolicy, type: "BEREAVEMENT" as const },
+    };
+    const balance = calculateLeaveBalanceForUser({
+      hireDate: "2024-01-01",
+      asOfDate: "2026-05-01",
+      fiscalYear: 2026,
+      adjustments: [],
+      leaveRequests: [
+        { type: "ANNUAL", status: "APPROVED", dayCount: 1 },
+        { type: "HALF_DAY", status: "APPROVED", dayCount: 0.5 },
+        {
+          type: "HALF_DAY",
+          status: "APPROVED",
+          dayCount: 0.5,
+          requestKind: "CUSTOM_GRANT",
+          customLeaveType: {
+            code: "BIRTHDAY_HALF_DAY",
+            category: "CUSTOM",
+            deductsAnnualBalance: true,
+          },
+          grantUsages: [
+            {
+              leaveGrant: {
+                source: "BIRTHDAY_AUTO",
+                leaveType: { code: "BIRTHDAY_HALF_DAY" },
+              },
+            },
+          ],
+        },
+      ],
+      policies,
+    });
+
+    expect(balance.usedDays).toBe(1.5);
+    expect(balance.pendingDays).toBe(0);
+    expect(balance.remainingDays).toBe(13.5);
+  });
+
   it("keeps balance consistent after approve, reject, and cancel statuses", () => {
     const policies = {
       ANNUAL: annualPolicy,

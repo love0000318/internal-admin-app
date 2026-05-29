@@ -45,6 +45,45 @@ export function policyDeductsAnnual(policy: Pick<LeavePolicy, "deductsAnnual"> &
   return policy.deductsAnnualBalance ?? policy.deductsAnnual;
 }
 
+const BIRTHDAY_HALF_DAY_BALANCE_CODE = "BIRTHDAY_HALF_DAY";
+
+export function isBirthdayHalfDayBalanceRequest(
+  request: Pick<
+    LeaveRequestForBalance,
+    "requestKind" | "customLeaveType" | "grantUsages"
+  >,
+) {
+  return (
+    request.customLeaveType?.code === BIRTHDAY_HALF_DAY_BALANCE_CODE ||
+    request.grantUsages?.some((usage) => {
+      const grant = usage.leaveGrant;
+
+      return (
+        grant?.source === "BIRTHDAY_AUTO" ||
+        grant?.leaveType?.code === BIRTHDAY_HALF_DAY_BALANCE_CODE
+      );
+    }) === true
+  );
+}
+
+export function leaveRequestDeductsAnnualBalance({
+  request,
+  policies,
+}: {
+  request: LeaveRequestForBalance;
+  policies: Record<LeaveType, LeavePolicy>;
+}) {
+  if (isBirthdayHalfDayBalanceRequest(request)) {
+    return false;
+  }
+
+  if (request.requestKind === "CUSTOM_GRANT") {
+    return request.customLeaveType?.deductsAnnualBalance === true;
+  }
+
+  return policyDeductsAnnual(policies[request.type]);
+}
+
 export function calculateRemainingDays({
   grantedDays,
   usedDays,
@@ -94,9 +133,9 @@ export function calculateLeaveBalanceForUser({
   }, 0);
   const grantedDays = annualEntitled + manualGranted;
 
-  const annualDeductingRequests = leaveRequests.filter((request) => {
-    return policyDeductsAnnual(policies[request.type]);
-  });
+  const annualDeductingRequests = leaveRequests.filter((request) =>
+    leaveRequestDeductsAnnualBalance({ request, policies }),
+  );
   const usedDays = annualDeductingRequests
     .filter((request) => request.status === "APPROVED")
     .reduce((sum, request) => sum + request.dayCount, 0);

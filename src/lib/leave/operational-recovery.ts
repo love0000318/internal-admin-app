@@ -24,6 +24,10 @@ import {
   isLeaveGrantUsableOnDate,
   isRequestableLeaveGrantType,
 } from "@/lib/leave/custom-grant-requests";
+import {
+  runBirthdayAnnualDeductionRecovery,
+  type BirthdayAnnualDeductionRecoveryCandidate,
+} from "@/lib/leave/birthday-half-day-recovery";
 import { formatLeaveDays, LEAVE_TYPE_LABELS } from "@/lib/leave/labels";
 import {
   recordLeaveRequestApprovedLedger,
@@ -55,7 +59,17 @@ type RecoveryLeaveRequest = LeaveRequestWithPolicy & {
   approvalSource?: "MANUAL" | "AUTO_START_DATE" | null;
   createdAt?: Date;
   updatedAt?: Date;
-  grantUsages: Array<{ leaveGrantId: string; amount: number; unit: string }>;
+  grantUsages: Array<{
+    leaveGrantId: string;
+    amount: number;
+    unit: string;
+    leaveGrant?: {
+      source?: string | null;
+      leaveType?: {
+        code?: string | null;
+      } | null;
+    } | null;
+  }>;
 };
 
 type ExpectedApprovalNotification = {
@@ -145,6 +159,7 @@ export type LeaveOperationalRecoveryReport = {
   calendarVisibilityIssues: CalendarVisibilityIssue[];
   requestableGrantOptionIssues: RequestableGrantOptionIssue[];
   birthdayGrantOptionIssues: RequestableGrantOptionIssue[];
+  birthdayAnnualDeductionRepairs: BirthdayAnnualDeductionRecoveryCandidate[];
   koreanNotificationRepairs: KoreanNotificationRepair[];
   applied: {
     approvalNotificationsCreated: number;
@@ -152,9 +167,12 @@ export type LeaveOperationalRecoveryReport = {
     notificationLinksUpdated: number;
     autoApprovedRequests: number;
     koreanNotificationsUpdated: number;
+    birthdayAnnualDeductionLedgersReclassified: number;
+    birthdayAnnualLeaveBalancesUpdated: number;
   };
   skipped: {
     autoApprovalRequestIds: string[];
+    birthdayAnnualDeductionAlreadyRecovered: number;
   };
 };
 
@@ -175,7 +193,15 @@ const leaveRequestRecoveryInclude = {
       },
     },
   },
-  grantUsages: true,
+  grantUsages: {
+    include: {
+      leaveGrant: {
+        include: {
+          leaveType: true,
+        },
+      },
+    },
+  },
 } satisfies Prisma.LeaveRequestInclude;
 
 const LEAVE_NOTIFICATION_TYPES = [
@@ -1296,6 +1322,7 @@ export async function runLeaveOperationalRecovery({
     koreanRepairScan,
     requestableGrantScan,
     calendarVisibilityScan,
+    birthdayAnnualDeductionRecovery,
   ] = await Promise.all([
     findMissingApprovalNotifications({ prisma, pendingRequests }),
     findMissingRequesterNotifications({ prisma, approvedRequests }),
@@ -1303,6 +1330,12 @@ export async function runLeaveOperationalRecovery({
     findKoreanNotificationRepairs({ prisma, notificationScanLimit, window: windowFilter }),
     findRequestableGrantOptionIssues({ prisma, date: requestableGrantScanDate }),
     findCalendarVisibilityIssues({ prisma, window: windowFilter }),
+    runBirthdayAnnualDeductionRecovery({
+      prisma,
+      dryRun: true,
+      fromDate: window.fromDate,
+      toDate: window.toDate,
+    }),
   ]);
   const missingApprovalNotifications = approvalNotificationScan.missing;
   const missingRequesterNotifications = requesterNotificationScan.missing;
@@ -1330,6 +1363,7 @@ export async function runLeaveOperationalRecovery({
     birthdayGrantOptionIssues: requestableGrantScan.issues.filter(
       (issue) => issue.isBirthdayHalfDay,
     ),
+    birthdayAnnualDeductionRepairs: birthdayAnnualDeductionRecovery.candidates,
     koreanNotificationRepairs: koreanRepairScan.repairs,
     applied: {
       approvalNotificationsCreated: 0,
@@ -1337,9 +1371,13 @@ export async function runLeaveOperationalRecovery({
       notificationLinksUpdated: 0,
       autoApprovedRequests: 0,
       koreanNotificationsUpdated: 0,
+      birthdayAnnualDeductionLedgersReclassified: 0,
+      birthdayAnnualLeaveBalancesUpdated: 0,
     },
     skipped: {
       autoApprovalRequestIds: [],
+      birthdayAnnualDeductionAlreadyRecovered:
+        birthdayAnnualDeductionRecovery.applied.skippedAlreadyRecovered,
     },
   };
 
@@ -1385,6 +1423,19 @@ export async function runLeaveOperationalRecovery({
     prisma,
     repairs: koreanRepairScan.repairs,
   });
+
+  const birthdayAnnualApply = await runBirthdayAnnualDeductionRecovery({
+    prisma,
+    dryRun: false,
+    fromDate: window.fromDate,
+    toDate: window.toDate,
+  });
+  report.applied.birthdayAnnualDeductionLedgersReclassified =
+    birthdayAnnualApply.applied.annualLedgersReclassified;
+  report.applied.birthdayAnnualLeaveBalancesUpdated =
+    birthdayAnnualApply.applied.leaveBalancesUpdated;
+  report.skipped.birthdayAnnualDeductionAlreadyRecovered =
+    birthdayAnnualApply.applied.skippedAlreadyRecovered;
 
   return report;
 }

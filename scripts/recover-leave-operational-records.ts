@@ -105,10 +105,28 @@ async function main() {
         autoApprovalCandidates: report.autoApprovalCandidates.length,
         requestableGrantOptionIssues: report.requestableGrantOptionIssues.length,
         birthdayGrantOptionIssues: report.birthdayGrantOptionIssues.length,
+        birthdayAnnualDeductionRepairs:
+          report.birthdayAnnualDeductionRepairs.length,
         calendarVisibilityIssues: report.calendarVisibilityIssues.length,
         calendarEligibleApprovedLeaveRequests:
           report.calendarEligibleApprovedLeaveRequestIds.length,
         koreanNotificationRepairs: report.koreanNotificationRepairs.length,
+        birthdayAnnualDeductionRepairDetails:
+          report.birthdayAnnualDeductionRepairs.map((item) => ({
+            userId: item.userId,
+            leaveRequestId: item.leaveRequestId,
+            leaveRequestStatus: item.leaveRequestStatus,
+            fiscalYear: item.fiscalYear,
+            amount: item.amount,
+            repairEventType: item.repairEventType,
+            annualLedgerIds: item.annualLedgerIds,
+            annualLedgerSources: item.annualLedgerSources,
+            birthdayGrantIds: item.birthdayGrantIds,
+            leaveTypeCode: item.leaveTypeCode,
+            startDate: item.startDate,
+            endDate: item.endDate,
+            leaveBalanceRepairPossible: item.leaveBalance?.repairPossible ?? false,
+          })),
         applied: report.applied,
         skipped: report.skipped,
         leaveRequestIds: {
@@ -127,6 +145,10 @@ async function main() {
           birthdayGrantOptionIssues: report.birthdayGrantOptionIssues.map(
             (item) => item.leaveGrantId,
           ),
+          birthdayAnnualDeductionRepairs:
+            report.birthdayAnnualDeductionRepairs.map(
+              (item) => item.leaveRequestId,
+            ),
           calendarVisibilityIssues: report.calendarVisibilityIssues.map(
             (item) => item.leaveRequestId,
           ),
@@ -152,8 +174,12 @@ async function main() {
           report.applied.autoApprovedRequests,
         updatedCount:
           report.applied.notificationLinksUpdated +
-          report.applied.koreanNotificationsUpdated,
-        skippedCount: report.skipped.autoApprovalRequestIds.length,
+          report.applied.koreanNotificationsUpdated +
+          report.applied.birthdayAnnualDeductionLedgersReclassified +
+          report.applied.birthdayAnnualLeaveBalancesUpdated,
+        skippedCount:
+          report.skipped.autoApprovalRequestIds.length +
+          report.skipped.birthdayAnnualDeductionAlreadyRecovered,
         failedCount: 0,
         resultSummary: reportSummary,
       };

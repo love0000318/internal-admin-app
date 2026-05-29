@@ -1,5 +1,9 @@
 import type { PrismaClient } from "@/generated/prisma/client";
-import { calculateLeaveBalanceForUser, toNumber } from "@/lib/leave/balance";
+import {
+  calculateLeaveBalanceForUser,
+  isBirthdayHalfDayBalanceRequest,
+  toNumber,
+} from "@/lib/leave/balance";
 import {
   dateToDateOnly,
   todayInSeoul,
@@ -196,6 +200,28 @@ export async function getUserLeaveBalance({
           lte: new Date(`${year}-12-31T00:00:00.000Z`),
         },
       },
+      include: {
+        customLeaveType: {
+          select: {
+            code: true,
+            category: true,
+            deductsAnnualBalance: true,
+          },
+        },
+        grantUsages: {
+          include: {
+            leaveGrant: {
+              include: {
+                leaveType: {
+                  select: {
+                    code: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
     }),
   ]);
 
@@ -218,6 +244,9 @@ export async function getUserLeaveBalance({
       type: request.type,
       status: request.status,
       dayCount: toNumber(request.dayCount),
+      requestKind: request.requestKind,
+      customLeaveType: request.customLeaveType,
+      grantUsages: request.grantUsages,
     })) satisfies LeaveRequestForBalance[],
     policies,
   });
@@ -245,13 +274,69 @@ export async function getUserLeaveBalance({
         },
       ],
     },
+    include: {
+      leaveRequest: {
+        include: {
+          customLeaveType: {
+            select: {
+              code: true,
+              category: true,
+              deductsAnnualBalance: true,
+            },
+          },
+          grantUsages: {
+            include: {
+              leaveGrant: {
+                include: {
+                  leaveType: {
+                    select: {
+                      code: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      leaveGrant: {
+        include: {
+          leaveType: {
+            select: {
+              code: true,
+            },
+          },
+        },
+      },
+    },
+  });
+  const annualLedgerEntriesForBalance = annualLedgerEntries.filter((entry) => {
+    if (
+      entry.leaveRequest &&
+      isBirthdayHalfDayBalanceRequest({
+        requestKind: entry.leaveRequest.requestKind,
+        customLeaveType: entry.leaveRequest.customLeaveType,
+        grantUsages: entry.leaveRequest.grantUsages,
+      })
+    ) {
+      return false;
+    }
+
+    if (
+      entry.leaveGrant?.source === "BIRTHDAY_AUTO" ||
+      entry.leaveGrant?.leaveType.code === "BIRTHDAY_HALF_DAY"
+    ) {
+      return false;
+    }
+
+    return true;
   });
   const hasAnnualLedgerGrant = annualLedgerEntries.some(
     (entry) => entry.source === "ANNUAL_AUTO",
   );
   const ledgerBalance = hasAnnualLedgerGrant
     ? calculateLeaveLedgerBalance(
-        annualLedgerEntries.map((entry) => ({
+        annualLedgerEntriesForBalance.map((entry) => ({
           eventType: entry.eventType,
           amount: entry.amount,
           metadata: entry.metadata,

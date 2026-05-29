@@ -57,6 +57,20 @@ export type LeaveRequestForBalance = {
   type: LeaveType;
   status: LeaveRequestStatus;
   dayCount: number;
+  requestKind?: "LEGACY" | "ANNUAL" | "CUSTOM_GRANT" | string;
+  customLeaveType?: {
+    code?: string | null;
+    category?: string | null;
+    deductsAnnualBalance?: boolean | null;
+  } | null;
+  grantUsages?: Array<{
+    leaveGrant?: {
+      source?: string | null;
+      leaveType?: {
+        code?: string | null;
+      } | null;
+    } | null;
+  }>;
 };
 
 export type LeaveAdjustmentForBalance = {

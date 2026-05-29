@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import { Prisma } from "@/generated/prisma/client";
 import {
+  findBirthdayAnnualDeductionRecoveryCandidates,
+  runBirthdayAnnualDeductionRecovery,
+} from "@/lib/leave/birthday-half-day-recovery";
+import {
   buildRecoveredLeaveNotificationContent,
   containsLegacyKoreanMojibake,
   normalizeLeaveOperationalRecoveryDateWindow,
@@ -123,6 +127,12 @@ describe("leave operational recovery helpers", () => {
       leaveGrant: {
         findMany: async () => [],
       },
+      leaveLedger: {
+        findMany: async () => [],
+      },
+      leaveBalance: {
+        findMany: async () => [],
+      },
     };
 
     const report = await runLeaveOperationalRecovery({
@@ -198,6 +208,12 @@ describe("leave operational recovery helpers", () => {
           },
         ],
       },
+      leaveLedger: {
+        findMany: async () => [],
+      },
+      leaveBalance: {
+        findMany: async () => [],
+      },
       notification: {
         findMany: async () => [],
       },
@@ -236,6 +252,224 @@ describe("leave operational recovery helpers", () => {
         reason: "REQUESTER_NOT_INTERNAL_CALENDAR_ROLE",
       },
     ]);
+  });
+});
+
+describe("birthday half-day annual deduction recovery", () => {
+  it("reports wrong annual ledger deductions in dry-run without touching birthday grant usage", async () => {
+    const prisma = {
+      leaveRequest: {
+        findMany: async () => [
+          {
+            id: "birthday-request-1",
+            userId: "requester",
+            type: "HALF_DAY" as const,
+            requestKind: "CUSTOM_GRANT" as const,
+            leaveTypeId: "birthday-type",
+            status: "APPROVED" as const,
+            startDate: new Date("2026-05-29T00:00:00.000Z"),
+            endDate: new Date("2026-05-29T00:00:00.000Z"),
+            dayCount: new Prisma.Decimal(0.5),
+            createdAt: new Date("2026-05-28T00:00:00.000Z"),
+            customLeaveType: { code: "BIRTHDAY_HALF_DAY" },
+            grantUsages: [
+              {
+                leaveGrantId: "birthday-grant-1",
+                amount: 0.5,
+                unit: "DAY",
+                leaveGrant: {
+                  source: "BIRTHDAY_AUTO" as const,
+                  leaveType: { code: "BIRTHDAY_HALF_DAY" },
+                },
+              },
+            ],
+          },
+        ],
+      },
+      leaveLedger: {
+        findMany: async (args: { where: Record<string, unknown> }) => {
+          if ("idempotencyKey" in args.where) {
+            return [];
+          }
+
+          return [
+            {
+              id: "wrong-annual-used-ledger",
+              leaveRequestId: "birthday-request-1",
+              source: "LEAVE_APPROVAL",
+              eventType: "USED",
+              amount: 0.5,
+              createdAt: new Date("2026-05-29T00:00:00.000Z"),
+            },
+          ];
+        },
+      },
+      leaveBalance: {
+        findMany: async () => [
+          {
+            id: "annual-balance-1",
+            userId: "requester",
+            fiscalYear: 2026,
+            usedDays: new Prisma.Decimal(2),
+            pendingDays: new Prisma.Decimal(0),
+            remainingDays: new Prisma.Decimal(13),
+          },
+        ],
+      },
+    };
+
+    const report = await findBirthdayAnnualDeductionRecoveryCandidates({
+      prisma: prisma as never,
+      fromDate: "2026-05-28",
+      toDate: "2026-05-29",
+    });
+
+    expect(report.checkedBirthdayRequests).toBe(1);
+    expect(report.candidates).toEqual([
+      expect.objectContaining({
+        userId: "requester",
+        leaveRequestId: "birthday-request-1",
+        amount: 0.5,
+        repairEventType: "USED_RESTORED",
+        annualLedgerIds: ["wrong-annual-used-ledger"],
+        birthdayGrantIds: ["birthday-grant-1"],
+        alreadyRecovered: false,
+        leaveBalance: expect.objectContaining({
+          id: "annual-balance-1",
+          repairPossible: true,
+        }),
+      }),
+    ]);
+  });
+
+  it("reclassifies wrong annual birthday ledgers and restores only regular annual balance on apply", async () => {
+    let ledgerUpdateArgs: {
+      where: Record<string, unknown>;
+      data: Record<string, unknown>;
+    } | null = null;
+    let balanceUpdateArgs: {
+      where: Record<string, unknown>;
+      data: Record<string, unknown>;
+    } | null = null;
+    const transaction = {
+      leaveLedger: {
+        updateMany: async (args: {
+          where: Record<string, unknown>;
+          data: Record<string, unknown>;
+        }) => {
+          ledgerUpdateArgs = args;
+
+          return { count: 2 };
+        },
+      },
+      leaveBalance: {
+        updateMany: async (args: {
+          where: Record<string, unknown>;
+          data: Record<string, unknown>;
+        }) => {
+          balanceUpdateArgs = args;
+
+          return { count: 1 };
+        },
+      },
+    };
+    const prisma = {
+      leaveRequest: {
+        findMany: async () => [
+          {
+            id: "birthday-request-1",
+            userId: "requester",
+            type: "HALF_DAY" as const,
+            requestKind: "CUSTOM_GRANT" as const,
+            leaveTypeId: "birthday-type",
+            status: "APPROVED" as const,
+            startDate: new Date("2026-05-29T00:00:00.000Z"),
+            endDate: new Date("2026-05-29T00:00:00.000Z"),
+            dayCount: new Prisma.Decimal(0.5),
+            createdAt: new Date("2026-05-28T00:00:00.000Z"),
+            customLeaveType: { code: "BIRTHDAY_HALF_DAY" },
+            grantUsages: [
+              {
+                leaveGrantId: "birthday-grant-1",
+                amount: 0.5,
+                unit: "DAY",
+                leaveGrant: {
+                  source: "BIRTHDAY_AUTO" as const,
+                  leaveType: { code: "BIRTHDAY_HALF_DAY" },
+                },
+              },
+            ],
+          },
+        ],
+      },
+      leaveLedger: {
+        findMany: async () => [
+          {
+            id: "wrong-annual-pending-ledger",
+            leaveRequestId: "birthday-request-1",
+            source: "LEAVE_REQUEST",
+            eventType: "PENDING",
+            amount: 0.5,
+            createdAt: new Date("2026-05-28T00:00:00.000Z"),
+          },
+          {
+            id: "wrong-annual-used-ledger",
+            leaveRequestId: "birthday-request-1",
+            source: "LEAVE_APPROVAL",
+            eventType: "USED",
+            amount: 0.5,
+            createdAt: new Date("2026-05-29T00:00:00.000Z"),
+          },
+        ],
+      },
+      leaveBalance: {
+        findMany: async () => [
+          {
+            id: "annual-balance-1",
+            userId: "requester",
+            fiscalYear: 2026,
+            usedDays: new Prisma.Decimal(2),
+            pendingDays: new Prisma.Decimal(0),
+            remainingDays: new Prisma.Decimal(13),
+          },
+        ],
+      },
+      $transaction: async <T>(callback: (txClient: typeof transaction) => Promise<T>) =>
+        callback(transaction),
+    };
+
+    const report = await runBirthdayAnnualDeductionRecovery({
+      prisma: prisma as never,
+      dryRun: false,
+      fromDate: "2026-05-28",
+      toDate: "2026-05-29",
+    });
+
+    expect(report.applied).toEqual({
+      annualLedgersReclassified: 2,
+      leaveBalancesUpdated: 1,
+      skippedAlreadyRecovered: 0,
+    });
+    expect(ledgerUpdateArgs).toEqual({
+      where: {
+        id: { in: ["wrong-annual-pending-ledger", "wrong-annual-used-ledger"] },
+        leaveRequestId: "birthday-request-1",
+        source: { in: ["LEAVE_REQUEST", "LEAVE_APPROVAL", "LEAVE_AUTO_CONFIRM"] },
+        eventType: { in: ["PENDING", "USED"] },
+      },
+      data: { source: "BIRTHDAY_AUTO" },
+    });
+    expect(balanceUpdateArgs).toEqual({
+      where: {
+        userId: "requester",
+        fiscalYear: 2026,
+        usedDays: { gte: 0.5 },
+      },
+      data: {
+        usedDays: { decrement: 0.5 },
+        remainingDays: { increment: 0.5 },
+      },
+    });
   });
 });
 

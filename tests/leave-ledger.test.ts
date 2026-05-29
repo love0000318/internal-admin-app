@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { calculateLeaveLedgerBalance } from "@/lib/leave/ledger";
+import {
+  calculateLeaveLedgerBalance,
+  recordLeaveRequestApprovedLedger,
+  recordLeaveRequestPendingLedger,
+} from "@/lib/leave/ledger";
 
 describe("calculateLeaveLedgerBalance", () => {
   it("calculates granted, pending, used, and remaining amounts", () => {
@@ -69,5 +73,106 @@ describe("calculateLeaveLedgerBalance", () => {
     expect(balance.expiredAmount).toBe(1);
     expect(balance.revokedAmount).toBe(0.5);
     expect(balance.remainingAmount).toBe(1.5);
+  });
+});
+
+describe("leave request ledger sources", () => {
+  it("records birthday half-day request usage as birthday ledger, not annual request ledger", async () => {
+    const createdLedgers: Array<Record<string, unknown>> = [];
+    const tx = {
+      leaveLedger: {
+        findUnique: async () => null,
+        create: async ({ data }: { data: Record<string, unknown> }) => {
+          const ledger = { id: `ledger-${createdLedgers.length + 1}`, ...data };
+          createdLedgers.push(ledger);
+          return ledger;
+        },
+      },
+      auditLog: {
+        create: async () => ({}),
+      },
+    };
+    const birthdayRequest = {
+      id: "birthday-request-1",
+      userId: "user-1",
+      leaveTypeId: "birthday-type",
+      dayCount: 0.5,
+      startDate: new Date("2026-05-29T00:00:00.000Z"),
+      endDate: new Date("2026-05-29T00:00:00.000Z"),
+      requestKind: "CUSTOM_GRANT",
+      type: "HALF_DAY",
+      customLeaveType: { code: "BIRTHDAY_HALF_DAY" },
+      grantUsages: [
+        {
+          leaveGrantId: "birthday-grant-1",
+          amount: 0.5,
+          unit: "DAY",
+          leaveGrantSource: "BIRTHDAY_AUTO",
+          leaveTypeCode: "BIRTHDAY_HALF_DAY",
+        },
+      ],
+    };
+
+    await recordLeaveRequestPendingLedger({
+      tx: tx as never,
+      leaveRequest: birthdayRequest,
+    });
+    await recordLeaveRequestApprovedLedger({
+      tx: tx as never,
+      leaveRequest: birthdayRequest,
+      actorId: "owner-1",
+    });
+
+    expect(createdLedgers).toHaveLength(2);
+    expect(createdLedgers.map((ledger) => ledger.source)).toEqual([
+      "BIRTHDAY_AUTO",
+      "BIRTHDAY_AUTO",
+    ]);
+    expect(createdLedgers).not.toContainEqual(
+      expect.objectContaining({ source: "LEAVE_APPROVAL" }),
+    );
+  });
+
+  it("keeps normal annual leave request ledger sources unchanged", async () => {
+    const createdLedgers: Array<Record<string, unknown>> = [];
+    const tx = {
+      leaveLedger: {
+        findUnique: async () => null,
+        create: async ({ data }: { data: Record<string, unknown> }) => {
+          const ledger = { id: `ledger-${createdLedgers.length + 1}`, ...data };
+          createdLedgers.push(ledger);
+          return ledger;
+        },
+      },
+      auditLog: {
+        create: async () => ({}),
+      },
+    };
+    const annualRequest = {
+      id: "annual-request-1",
+      userId: "user-1",
+      leaveTypeId: null,
+      dayCount: 1,
+      startDate: new Date("2026-05-29T00:00:00.000Z"),
+      endDate: new Date("2026-05-29T00:00:00.000Z"),
+      requestKind: "LEGACY",
+      type: "ANNUAL",
+      grantUsages: [],
+    };
+
+    await recordLeaveRequestPendingLedger({
+      tx: tx as never,
+      leaveRequest: annualRequest,
+    });
+    await recordLeaveRequestApprovedLedger({
+      tx: tx as never,
+      leaveRequest: annualRequest,
+      actorId: "owner-1",
+    });
+
+    expect(createdLedgers.map((ledger) => ledger.source)).toEqual([
+      "LEAVE_REQUEST",
+      "LEAVE_APPROVAL",
+    ]);
   });
 });

@@ -111,7 +111,15 @@ const leaveRequestActionInclude = {
       },
     },
   },
-  grantUsages: true,
+  grantUsages: {
+    include: {
+      leaveGrant: {
+        include: {
+          leaveType: true,
+        },
+      },
+    },
+  },
 } satisfies Prisma.LeaveRequestInclude;
 
 function grantUsageMetadata(

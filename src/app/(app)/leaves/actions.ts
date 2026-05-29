@@ -355,6 +355,8 @@ async function createCustomGrantLeaveRequest(formData: FormData) {
               leaveGrantId,
               amount: requestedDays,
               unit: grant!.unit,
+              leaveGrantSource: grant!.source,
+              leaveTypeCode: grant!.leaveType.code,
             },
           ],
         },
@@ -365,6 +367,8 @@ async function createCustomGrantLeaveRequest(formData: FormData) {
           {
             leaveGrantId,
             amount: requestedDays,
+            leaveGrantSource: grant!.source,
+            leaveTypeCode: grant!.leaveType.code,
           },
         ]) {
           await convertLeaveGrantPendingToUsed({
@@ -383,6 +387,8 @@ async function createCustomGrantLeaveRequest(formData: FormData) {
                 leaveGrantId,
                 amount: requestedDays,
                 unit: grant!.unit,
+                leaveGrantSource: grant!.source,
+                leaveTypeCode: grant!.leaveType.code,
               },
             ],
           },
@@ -739,7 +745,15 @@ export async function withdrawLeaveRequest(formData: FormData) {
       userId: actor.id,
     },
     include: {
-      grantUsages: true,
+      grantUsages: {
+        include: {
+          leaveGrant: {
+            include: {
+              leaveType: true,
+            },
+          },
+        },
+      },
       customLeaveType: true,
     },
   });

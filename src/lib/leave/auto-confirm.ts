@@ -60,11 +60,29 @@ const autoConfirmLeaveRequestInclude = {
       },
     },
   },
-  grantUsages: true,
+  grantUsages: {
+    include: {
+      leaveGrant: {
+        include: {
+          leaveType: true,
+        },
+      },
+    },
+  },
 } satisfies Prisma.LeaveRequestInclude;
 
 type AutoConfirmLeaveRequest = LeaveRequestWithPolicy & {
-  grantUsages: Array<{ leaveGrantId: string; amount: number; unit: string }>;
+  grantUsages: Array<{
+    leaveGrantId: string;
+    amount: number;
+    unit: string;
+    leaveGrant?: {
+      source?: string | null;
+      leaveType?: {
+        code?: string | null;
+      } | null;
+    } | null;
+  }>;
   autoConfirmedAt?: Date | null;
 };
 
