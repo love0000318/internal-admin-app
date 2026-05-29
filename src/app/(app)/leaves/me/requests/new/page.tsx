@@ -1,8 +1,10 @@
 import Link from "next/link";
 
 import { LeaveRequestForm } from "@/app/(app)/leaves/me/requests/new/leave-request-form";
-import { dateToDateOnly } from "@/lib/leave/calculate-business-days";
-import { listRequestableLeaveGrants } from "@/lib/leave/custom-grant-requests";
+import {
+  listRequestableLeaveGrants,
+  resolveLeaveGrantUsableRange,
+} from "@/lib/leave/custom-grant-requests";
 import { listLeavePolicies } from "@/lib/leave/queries";
 import { requireRouteAccess } from "@/lib/rbac/server-guards";
 
@@ -42,7 +44,7 @@ export default async function NewLeaveRequestPage({
   const { error } = await searchParams;
   const [policies, requestableGrants] = await Promise.all([
     listLeavePolicies(),
-    listRequestableLeaveGrants(actor.id),
+    listRequestableLeaveGrants(actor.id, null),
   ]);
 
   return (
@@ -63,22 +65,26 @@ export default async function NewLeaveRequestPage({
       ) : null}
       <LeaveRequestForm
         policies={policies}
-        requestableGrants={requestableGrants.map((grant) => ({
-          id: grant.id,
-          remainingAmount: grant.remainingAmount,
-          unit: grant.unit,
-          effectiveFrom: dateToDateOnly(grant.effectiveFrom),
-          expiresAt: grant.expiresAt ? dateToDateOnly(grant.expiresAt) : null,
-          reason: grant.reason,
-          leaveType: {
-            id: grant.leaveType.id,
-            code: grant.leaveType.code,
-            name: grant.leaveType.name,
-            allowedUnits: grant.leaveType.allowedUnits,
-            attachmentPolicy: grant.leaveType.attachmentPolicy,
-            attachmentDescription: grant.leaveType.attachmentDescription,
-          },
-        }))}
+        requestableGrants={requestableGrants.map((grant) => {
+          const usableRange = resolveLeaveGrantUsableRange(grant);
+
+          return {
+            id: grant.id,
+            remainingAmount: grant.remainingAmount,
+            unit: grant.unit,
+            effectiveFrom: usableRange.usableFrom,
+            expiresAt: usableRange.usableUntil,
+            reason: grant.reason,
+            leaveType: {
+              id: grant.leaveType.id,
+              code: grant.leaveType.code,
+              name: grant.leaveType.name,
+              allowedUnits: grant.leaveType.allowedUnits,
+              attachmentPolicy: grant.leaveType.attachmentPolicy,
+              attachmentDescription: grant.leaveType.attachmentDescription,
+            },
+          };
+        })}
       />
     </section>
   );

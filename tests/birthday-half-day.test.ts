@@ -15,6 +15,7 @@ import {
 } from "@/lib/leave/birthday-half-day";
 import type { DateOnly } from "@/lib/leave/types";
 import { parseBirthdayGrantScriptArgs } from "../scripts/grant-birthday-half-days";
+import { parseBirthdayHalfDayRangeFixArgs } from "../scripts/fix-birthday-half-day-usable-ranges";
 
 function utcDate(value: DateOnly) {
   const [year, month, day] = value.split("-").map(Number);
@@ -180,6 +181,7 @@ function createBirthdayGrantPrismaMock({
     leaveGrants,
     leaveLedgers,
     auditLogs,
+    notifications,
   };
 }
 
@@ -190,10 +192,14 @@ describe("birthday half-day helpers", () => {
     expect(calculateBirthdayDateForYear("1996-02-29", 2028)).toBe("2028-02-29");
   });
 
-  it("calculates usable range and nominal grant date", () => {
-    expect(calculateBirthdayHalfDayUsableRange("2026-03-12", 7)).toEqual({
-      usableFrom: "2026-03-12",
-      usableUntil: "2026-03-19",
+  it("calculates usable range from actual grant date and nominal grant date", () => {
+    expect(calculateBirthdayHalfDayUsableRange("2026-05-28", 7)).toEqual({
+      usableFrom: "2026-05-28",
+      usableUntil: "2026-06-04",
+    });
+    expect(calculateBirthdayHalfDayUsableRange("2026-06-04", 7)).not.toEqual({
+      usableFrom: "2026-05-28",
+      usableUntil: "2026-06-04",
     });
     expect(calculateBirthdayHalfDayNominalGrantDate("2026-03-12", 1)).toBe(
       "2026-03-11",
@@ -370,7 +376,8 @@ describe("birthday half-day grant job", () => {
         birthdayDate: "2026-06-10",
         nominalGrantDate: "2026-06-03",
         actualGrantDate: "2026-06-03",
-        usableUntil: "2026-06-17",
+        usableFrom: "2026-06-03",
+        usableUntil: "2026-06-10",
       }),
     ]);
     expect(leaveGrants).toHaveLength(0);
@@ -403,7 +410,8 @@ describe("birthday half-day grant job", () => {
         userId: "user-expired",
         birthdayDate: "2026-01-18",
         actualGrantDate: "2026-01-11",
-        usableUntil: "2026-01-25",
+        usableFrom: "2026-01-11",
+        usableUntil: "2026-01-18",
       }),
     ]);
     expect(result.skipped).toEqual([
@@ -494,6 +502,8 @@ describe("birthday half-day grant job", () => {
       referenceYear: 2026,
       source: "BIRTHDAY_AUTO",
       grantedAmount: 0.5,
+      effectiveFrom: utcDate("2026-06-03"),
+      expiresAt: utcDate("2026-06-10"),
     });
     expect(leaveLedgers).toHaveLength(1);
     expect(auditLogs.map((log) => log.action)).toEqual(
@@ -502,6 +512,38 @@ describe("birthday half-day grant job", () => {
         "BIRTHDAY_HALF_DAY_GRANTED",
       ]),
     );
+  });
+
+  it("creates grant notifications with the actual grant-date usable range", async () => {
+    const { prisma, notifications } = createBirthdayGrantPrismaMock({
+      notifyEmployee: true,
+      users: [
+        {
+          id: "user-notified",
+          name: "Notified User",
+          status: "ACTIVE",
+          birthDate: utcDate("1995-06-04"),
+        },
+      ],
+    });
+
+    await grantBirthdayHalfDaysForDate({
+      prisma,
+      processedDate: "2026-05-28",
+      dryRun: false,
+      includePastDue: false,
+    });
+
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0]).toMatchObject({
+      userId: "user-notified",
+      type: "LEAVE_GRANTED",
+    });
+    expect(notifications[0].message).toContain("2026-05-28 ~ 2026-06-04");
+    expect(notifications[0].metadata).toMatchObject({
+      usableFrom: "2026-05-28",
+      usableUntil: "2026-06-04",
+    });
   });
 
   it("skips users that already have a birthday grant for the reference year", async () => {
@@ -590,5 +632,30 @@ describe("birthday half-day grant script args", () => {
       includePastDue: false,
     });
     expect(() => parseBirthdayGrantScriptArgs(["--dry-run", "--apply"])).toThrow();
+  });
+});
+
+describe("birthday half-day range repair script args", () => {
+  it("defaults to dry-run and requires --apply for range repairs", () => {
+    expect(parseBirthdayHalfDayRangeFixArgs(["--as-of-date=2026-05-29"])).toMatchObject({
+      mode: "dry-run",
+      asOfDate: "2026-05-29",
+    });
+    expect(
+      parseBirthdayHalfDayRangeFixArgs([
+        "--apply",
+        "--user-id=cmoqq369t000004joneto18fr",
+        "--year=2026",
+        "--as-of-date=2026-05-29",
+      ]),
+    ).toMatchObject({
+      mode: "apply",
+      userId: "cmoqq369t000004joneto18fr",
+      referenceYear: 2026,
+      asOfDate: "2026-05-29",
+    });
+    expect(() =>
+      parseBirthdayHalfDayRangeFixArgs(["--dry-run", "--apply"]),
+    ).toThrow();
   });
 });

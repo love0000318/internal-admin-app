@@ -247,6 +247,36 @@ describe("leave calendar visibility", () => {
     expect(events[0]).not.toHaveProperty("attachmentStatus");
   });
 
+  it("shows approved birthday half-day custom leave on the calendar", () => {
+    const events = buildLeaveCalendarEventsFromRequest({
+      actor: owner,
+      request: request({
+        type: "HALF_DAY",
+        leaveTypeId: "birthday-half-day-type",
+        startDate: new Date("2026-05-28T00:00:00.000Z"),
+        endDate: new Date("2026-05-28T00:00:00.000Z"),
+        halfDayPeriod: "PM",
+        dayCount: new Prisma.Decimal(0.5),
+        customLeaveType: {
+          id: "birthday-half-day-type",
+          code: "BIRTHDAY_HALF_DAY",
+          name: "생일 반차",
+          visibility: "PUBLIC_WITH_TYPE",
+        },
+      }),
+      definitionsByCode: definitions,
+    });
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      date: "2026-05-28",
+      leaveTypeCode: "BIRTHDAY_HALF_DAY",
+      leaveTypeLabel: "생일 반차",
+      amount: 0.5,
+      detailUrl: "/leaves/approvals/request-1",
+    });
+  });
+
   it("colors annual and half-day events without exposing hidden leave types", () => {
     expect(
       getLeaveCalendarEventColorClass({

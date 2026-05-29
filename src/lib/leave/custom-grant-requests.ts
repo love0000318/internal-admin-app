@@ -15,6 +15,10 @@ import {
   parseDateOnly,
   todayInSeoul,
 } from "@/lib/leave/calculate-business-days";
+import {
+  BIRTHDAY_HALF_DAY_CODE,
+  resolveBirthdayHalfDayUsableRangeFromGrantMetadata,
+} from "@/lib/leave/birthday-half-day";
 import { deserializeAllowedUnits } from "@/lib/leave/leave-types";
 import type { DateOnly } from "@/lib/leave/types";
 
@@ -31,7 +35,6 @@ export class CustomLeaveRequestError extends Error {
 }
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
-const BIRTHDAY_HALF_DAY_CODE = "BIRTHDAY_HALF_DAY";
 
 type RequestableLeaveGrantCandidate = Pick<
   LeaveGrant,
@@ -40,6 +43,7 @@ type RequestableLeaveGrantCandidate = Pick<
   | "remainingAmount"
   | "effectiveFrom"
   | "expiresAt"
+  | "metadata"
 > & {
   leaveType: Pick<LeaveTypeDefinition, "category" | "code" | "isEnabled">;
 };
@@ -57,6 +61,23 @@ function calendarDayCount(startDate: DateOnly, endDate: DateOnly) {
 
 function asDateOnly(value: Date | string) {
   return typeof value === "string" ? (value as DateOnly) : dateToDateOnly(value);
+}
+
+export function resolveLeaveGrantUsableRange(
+  grant: Pick<LeaveGrant, "source" | "effectiveFrom" | "expiresAt" | "metadata"> & {
+    leaveType: Pick<LeaveTypeDefinition, "code">;
+  },
+) {
+  const birthdayRange = isBirthdayHalfDayGrant(grant)
+    ? resolveBirthdayHalfDayUsableRangeFromGrantMetadata(grant.metadata)
+    : null;
+
+  return (
+    birthdayRange ?? {
+      usableFrom: asDateOnly(grant.effectiveFrom),
+      usableUntil: grant.expiresAt ? asDateOnly(grant.expiresAt) : null,
+    }
+  );
 }
 
 export function isBirthdayHalfDayGrant(
@@ -86,14 +107,27 @@ export function isLeaveGrantUsableOnDate(
   grant: RequestableLeaveGrantCandidate,
   date: DateOnly,
 ) {
-  const effectiveFrom = asDateOnly(grant.effectiveFrom);
-  const expiresAt = grant.expiresAt ? asDateOnly(grant.expiresAt) : null;
+  const { usableFrom, usableUntil } = resolveLeaveGrantUsableRange(grant);
 
   return (
     grant.status === "ACTIVE" &&
     grant.remainingAmount > 0 &&
-    compareDateOnly(effectiveFrom, date) <= 0 &&
-    (!expiresAt || compareDateOnly(expiresAt, date) >= 0) &&
+    compareDateOnly(usableFrom, date) <= 0 &&
+    (!usableUntil || compareDateOnly(usableUntil, date) >= 0) &&
+    isRequestableLeaveGrantType(grant)
+  );
+}
+
+export function isLeaveGrantRequestCandidateVisible(
+  grant: RequestableLeaveGrantCandidate,
+  asOfDate: DateOnly,
+) {
+  const { usableUntil } = resolveLeaveGrantUsableRange(grant);
+
+  return (
+    grant.status === "ACTIVE" &&
+    grant.remainingAmount > 0 &&
+    (!usableUntil || compareDateOnly(usableUntil, asOfDate) >= 0) &&
     isRequestableLeaveGrantType(grant)
   );
 }
@@ -151,18 +185,19 @@ export function assertLeaveGrantDateInUsableRange({
   startDate,
   endDate,
 }: {
-  grant: Pick<LeaveGrant, "effectiveFrom" | "expiresAt">;
+  grant: Pick<LeaveGrant, "source" | "effectiveFrom" | "expiresAt" | "metadata"> & {
+    leaveType: Pick<LeaveTypeDefinition, "code">;
+  };
   startDate: DateOnly;
   endDate: DateOnly;
 }) {
-  const effectiveFrom = asDateOnly(grant.effectiveFrom);
-  const expiresAt = grant.expiresAt ? asDateOnly(grant.expiresAt) : null;
+  const { usableFrom, usableUntil } = resolveLeaveGrantUsableRange(grant);
 
-  if (compareDateOnly(startDate, effectiveFrom) < 0) {
+  if (compareDateOnly(startDate, usableFrom) < 0) {
     throw new CustomLeaveRequestError("outside-grant-range");
   }
 
-  if (expiresAt && compareDateOnly(endDate, expiresAt) > 0) {
+  if (usableUntil && compareDateOnly(endDate, usableUntil) > 0) {
     throw new CustomLeaveRequestError("outside-grant-range");
   }
 }
@@ -256,17 +291,17 @@ export function assertCustomLeaveGrantRequestAllowed({
 
 export async function listRequestableLeaveGrants(
   userId: string,
-  date: DateOnly = todayInSeoul(),
+  date: DateOnly | null = todayInSeoul(),
   prisma: PrismaClient = getPrisma(),
 ) {
-  const dateValue = dateOnlyToDate(date);
+  const asOfDate = date ?? todayInSeoul();
+  const dateValue = dateOnlyToDate(asOfDate);
 
   const grants = await prisma.leaveGrant.findMany({
     where: {
       userId,
       status: "ACTIVE",
       remainingAmount: { gt: 0 },
-      effectiveFrom: { lte: dateValue },
       OR: [{ expiresAt: null }, { expiresAt: { gte: dateValue } }],
       leaveType: {
         isEnabled: true,
@@ -276,7 +311,9 @@ export async function listRequestableLeaveGrants(
     orderBy: [{ expiresAt: "asc" }, { createdAt: "desc" }],
   });
 
-  return filterRequestableLeaveGrantsForDate(grants, date);
+  return date
+    ? filterRequestableLeaveGrantsForDate(grants, date)
+    : grants.filter((grant) => isLeaveGrantRequestCandidateVisible(grant, asOfDate));
 }
 
 export async function getRequestableLeaveGrantDetail(

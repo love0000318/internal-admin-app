@@ -12,6 +12,7 @@ import type { DateOnly } from "@/lib/leave/types";
 
 export const BIRTHDAY_HALF_DAY_CODE = "BIRTHDAY_HALF_DAY";
 export const BIRTHDAY_HALF_DAY_REASON = "생일 반차 자동 지급";
+export const BIRTHDAY_HALF_DAY_DEFAULT_USABLE_DAYS = 7;
 
 export type BirthdayGrantMode = "exact-date" | "due-through-date";
 
@@ -65,11 +66,29 @@ export type BirthdayGrantJobResult = {
   }>;
 };
 
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
 function addDays(value: DateOnly, days: number): DateOnly {
   const date = dateOnlyToDate(value);
   date.setUTCDate(date.getUTCDate() + days);
 
   return formatDateOnly(date);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function isDateOnlyString(value: unknown): value is DateOnly {
+  return typeof value === "string" && DATE_ONLY_PATTERN.test(value);
+}
+
+function dateOnlyDiffInDays(startDate: DateOnly, endDate: DateOnly) {
+  return Math.round(
+    (dateOnlyToDate(endDate).getTime() - dateOnlyToDate(startDate).getTime()) /
+      ONE_DAY_MS,
+  );
 }
 
 function isLeapYear(year: number) {
@@ -114,13 +133,63 @@ export function calculateBirthdayDateForYear(
 }
 
 export function calculateBirthdayHalfDayUsableRange(
-  birthdayDate: DateOnly,
-  usableDaysFromBirthday = 7,
+  actualGrantDate: DateOnly,
+  usableDaysFromGrantDate = BIRTHDAY_HALF_DAY_DEFAULT_USABLE_DAYS,
 ) {
   return {
-    usableFrom: birthdayDate,
-    usableUntil: addDays(birthdayDate, usableDaysFromBirthday),
+    usableFrom: actualGrantDate,
+    usableUntil: addDays(actualGrantDate, usableDaysFromGrantDate),
   };
+}
+
+export function resolveBirthdayHalfDayActualGrantDateFromMetadata(
+  metadata: unknown,
+): DateOnly | null {
+  if (!isRecord(metadata)) {
+    return null;
+  }
+
+  return isDateOnlyString(metadata.actualGrantDate)
+    ? metadata.actualGrantDate
+    : null;
+}
+
+export function resolveBirthdayHalfDayUsableDaysFromMetadata(
+  metadata: unknown,
+  fallbackDays = BIRTHDAY_HALF_DAY_DEFAULT_USABLE_DAYS,
+) {
+  if (!isRecord(metadata)) {
+    return fallbackDays;
+  }
+
+  if (
+    isDateOnlyString(metadata.usableFrom) &&
+    isDateOnlyString(metadata.usableUntil)
+  ) {
+    const diff = dateOnlyDiffInDays(metadata.usableFrom, metadata.usableUntil);
+
+    if (Number.isInteger(diff) && diff >= 0 && diff <= 366) {
+      return diff;
+    }
+  }
+
+  return fallbackDays;
+}
+
+export function resolveBirthdayHalfDayUsableRangeFromGrantMetadata(
+  metadata: unknown,
+  fallbackDays = BIRTHDAY_HALF_DAY_DEFAULT_USABLE_DAYS,
+) {
+  const actualGrantDate = resolveBirthdayHalfDayActualGrantDateFromMetadata(metadata);
+
+  if (!actualGrantDate) {
+    return null;
+  }
+
+  return calculateBirthdayHalfDayUsableRange(
+    actualGrantDate,
+    resolveBirthdayHalfDayUsableDaysFromMetadata(metadata, fallbackDays),
+  );
 }
 
 export function calculateBirthdayHalfDayNominalGrantDate(
@@ -227,7 +296,7 @@ async function getBirthdayPolicy(prisma: PrismaClient) {
       grantAmount: 0.5,
       grantUnit: "DAY",
       grantDaysBefore: 1,
-      usableDaysFromBirthday: 7,
+      usableDaysFromBirthday: BIRTHDAY_HALF_DAY_DEFAULT_USABLE_DAYS,
       adjustGrantDateToPreviousBusinessDay: true,
       notifyEmployee: true,
     },
@@ -355,10 +424,6 @@ export async function grantBirthdayHalfDaysForDate({
 
     for (const year of candidateYears) {
       const birthdayDate = calculateBirthdayDateForYear(birthDate, year);
-      const { usableFrom, usableUntil } = calculateBirthdayHalfDayUsableRange(
-        birthdayDate,
-        policy.usableDaysFromBirthday,
-      );
       const { nominalGrantDate, actualGrantDate } =
         calculateBirthdayHalfDayGrantDate({
           birthdayDate,
@@ -367,6 +432,10 @@ export async function grantBirthdayHalfDaysForDate({
           adjustGrantDateToPreviousBusinessDay:
             policy.adjustGrantDateToPreviousBusinessDay,
         });
+      const { usableFrom, usableUntil } = calculateBirthdayHalfDayUsableRange(
+        actualGrantDate,
+        policy.usableDaysFromBirthday,
+      );
 
       const grantIsDue = includePastDue
         ? compareDateOnly(actualGrantDate, processedDate) <= 0
@@ -456,6 +525,7 @@ export async function grantBirthdayHalfDaysForDate({
             actualGrantDate,
             usableFrom,
             usableUntil,
+            usableRangeBasis: "ACTUAL_GRANT_DATE",
           }),
         },
       });

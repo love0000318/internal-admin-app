@@ -220,4 +220,86 @@ describe("leave notification recipients", () => {
     expect(notifications[0].message).toContain("연차 2일을 요청했습니다.");
     expect(notifications[0].message).not.toMatch(/�|[占筌獄]|[利泥湲諛痍]/);
   });
+
+  it("creates approval-needed notifications for birthday half-day requests", async () => {
+    const notifications: Array<{
+      userId: string;
+      message: string;
+      linkUrl: string | null;
+    }> = [];
+    const prisma = {
+      ...prismaMock(),
+      auditLog: {
+        create: vi.fn(async () => ({})),
+      },
+      notification: {
+        findFirst: vi.fn(async () => null),
+        create: vi.fn(async ({ data }) => {
+          notifications.push({
+            userId: data.userId,
+            message: data.message,
+            linkUrl: data.linkUrl,
+          });
+
+          return { id: `notification-${notifications.length}`, ...data };
+        }),
+      },
+    };
+    const birthdayRequest = {
+      ...leaveRequest,
+      type: "HALF_DAY" as const,
+      requestKind: "CUSTOM_GRANT" as const,
+      leaveTypeId: "birthday-half-day-type",
+      startDate: new Date("2026-05-28T00:00:00.000Z"),
+      endDate: new Date("2026-05-28T00:00:00.000Z"),
+      halfDayPeriod: "PM" as const,
+      dayCount: new Prisma.Decimal(0.5),
+      customLeaveType: {
+        id: "birthday-half-day-type",
+        code: "BIRTHDAY_HALF_DAY",
+        name: "생일 반차",
+        description: null,
+        category: "CUSTOM" as const,
+        isSystemRequired: true,
+        isEnabled: true,
+        isPaid: true,
+        paidRate: 1,
+        grantMethod: "SYSTEM" as const,
+        grantAmount: 0.5,
+        grantUnit: "DAY" as const,
+        usageMode: "USE_ALL_AT_ONCE" as const,
+        allowedUnits: "HALF_DAY",
+        unusedRemainderHandling: "EXPIRE_REMAINING" as const,
+        deductsAnnualBalance: false,
+        attachmentPolicy: "NOT_REQUIRED" as const,
+        attachmentDescription: null,
+        includeHolidayInDeduction: false,
+        visibility: "PUBLIC_WITH_TYPE" as const,
+        approvalPolicyId: null,
+        approvalPolicy: null,
+        createdAt: new Date(0),
+        updatedAt: new Date(0),
+      },
+    };
+
+    const result = await notifyLeaveApprovalNeeded({
+      leaveRequest: birthdayRequest,
+      approvalPolicy: {
+        id: "approval-policy-1",
+        code: "DEFAULT_TEAM_LEAD_OR_OWNER",
+        approvalMode: "SINGLE",
+        approverRule: "TEAM_LEAD_OR_OWNER",
+        customApproverUserId: null,
+      },
+      leaveRequestId: birthdayRequest.id,
+      leaveTypeName: "생일 반차",
+      prisma: prisma as never,
+    });
+
+    expect(result.count).toBe(2);
+    expect(notifications[0]).toMatchObject({
+      linkUrl: "/leaves/approvals/leave-request-1",
+    });
+    expect(notifications[0].message).toContain("생일 반차");
+  });
 });

@@ -37,6 +37,8 @@ type LeaveRequestFormProps = {
   requestableGrants: RequestableGrant[];
 };
 
+const BIRTHDAY_HALF_DAY_CODE = "BIRTHDAY_HALF_DAY";
+
 const unitLabels = {
   DAY: "일",
   HOUR: "시간",
@@ -108,8 +110,12 @@ export function LeaveRequestForm({
     () => requestableGrants.find((grant) => grant.id === selectedGrantId),
     [requestableGrants, selectedGrantId],
   );
-  const allowedUnits = selectedGrant
-    ? deserializeAllowedUnits(selectedGrant.leaveType.allowedUnits)
+  const isSelectedBirthdayHalfDay =
+    selectedGrant?.leaveType.code === BIRTHDAY_HALF_DAY_CODE;
+  const allowedUnits: string[] = selectedGrant
+    ? isSelectedBirthdayHalfDay
+      ? ["HALF_DAY"]
+      : deserializeAllowedUnits(selectedGrant.leaveType.allowedUnits)
     : [];
   const defaultUsageUnit = allowedUnits.includes("HALF_DAY")
     ? "HALF_DAY"
@@ -317,7 +323,10 @@ export function LeaveRequestForm({
                 >
                   <option
                     value="FULL_DAY"
-                    disabled={!allowedUnits.includes("FULL_DAY")}
+                    disabled={
+                      isSelectedBirthdayHalfDay ||
+                      !allowedUnits.includes("FULL_DAY")
+                    }
                   >
                     하루
                   </option>
@@ -359,6 +368,7 @@ export function LeaveRequestForm({
                 <select
                   name="halfDayPeriod"
                   className="h-11 w-full min-w-0 rounded-lg border border-slate-300 px-3 text-base font-normal sm:text-sm"
+                  required={isSelectedBirthdayHalfDay}
                 >
                   <option value="">하루 사용이면 선택하지 않음</option>
                   <option value="AM">오전</option>

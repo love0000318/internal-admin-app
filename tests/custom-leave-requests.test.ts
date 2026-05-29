@@ -170,6 +170,54 @@ describe("custom leave request helpers", () => {
     ).toEqual(["grant-1"]);
   });
 
+  it("uses actual grant-date metadata for already-created birthday half-day grants", () => {
+    const legacyBirthdayRangeGrant = {
+      ...grant,
+      effectiveFrom: dateOnlyToDate("2026-06-04"),
+      expiresAt: dateOnlyToDate("2026-06-11"),
+      referenceDate: dateOnlyToDate("2026-06-04"),
+      metadata: {
+        birthdayDate: "2026-06-04",
+        actualGrantDate: "2026-05-28",
+        usableFrom: "2026-06-04",
+        usableUntil: "2026-06-11",
+      },
+    } as const;
+
+    expect(
+      filterRequestableLeaveGrantsForDate(
+        [legacyBirthdayRangeGrant],
+        "2026-05-28",
+      ).map((item) => item.id),
+    ).toEqual(["grant-1"]);
+    expect(
+      filterRequestableLeaveGrantsForDate(
+        [legacyBirthdayRangeGrant],
+        "2026-06-05",
+      ).map((item) => item.id),
+    ).toEqual([]);
+    expect(() =>
+      assertCustomLeaveGrantRequestAllowed({
+        grant: legacyBirthdayRangeGrant,
+        userId: "user-1",
+        usageUnit: "HALF_DAY",
+        amount: 0.5,
+        startDate: "2026-05-28",
+        endDate: "2026-05-28",
+      }),
+    ).not.toThrow();
+    expect(() =>
+      assertCustomLeaveGrantRequestAllowed({
+        grant: legacyBirthdayRangeGrant,
+        userId: "user-1",
+        usageUnit: "HALF_DAY",
+        amount: 0.5,
+        startDate: "2026-06-05",
+        endDate: "2026-06-05",
+      }),
+    ).toThrow();
+  });
+
   it("hides expired or already-used birthday half-day grants from request options", () => {
     expect(
       filterRequestableLeaveGrantsForDate(

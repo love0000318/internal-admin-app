@@ -154,7 +154,7 @@ export default async function BirthdayLeavePolicyPage({
             />
           </label>
           <label className="text-sm">
-            사용 가능 기간
+            지급일부터 사용 가능 기간
             <input
               name="usableDaysFromBirthday"
               type="number"
@@ -164,7 +164,7 @@ export default async function BirthdayLeavePolicyPage({
               required
             />
             <span className="mt-1 block text-xs text-neutral-500">
-              생일부터 입력한 일수 뒤 날짜까지 포함합니다.
+              실제 지급일부터 입력한 일수 뒤 날짜까지 포함합니다.
             </span>
           </label>
         </div>
