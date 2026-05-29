@@ -31,6 +31,18 @@ export class CustomLeaveRequestError extends Error {
 }
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+const BIRTHDAY_HALF_DAY_CODE = "BIRTHDAY_HALF_DAY";
+
+type RequestableLeaveGrantCandidate = Pick<
+  LeaveGrant,
+  | "source"
+  | "status"
+  | "remainingAmount"
+  | "effectiveFrom"
+  | "expiresAt"
+> & {
+  leaveType: Pick<LeaveTypeDefinition, "category" | "code" | "isEnabled">;
+};
 
 function calendarDayCount(startDate: DateOnly, endDate: DateOnly) {
   const start = parseDateOnly(startDate);
@@ -45,6 +57,51 @@ function calendarDayCount(startDate: DateOnly, endDate: DateOnly) {
 
 function asDateOnly(value: Date | string) {
   return typeof value === "string" ? (value as DateOnly) : dateToDateOnly(value);
+}
+
+export function isBirthdayHalfDayGrant(
+  grant: Pick<LeaveGrant, "source"> & {
+    leaveType: Pick<LeaveTypeDefinition, "code">;
+  },
+) {
+  return (
+    grant.source === "BIRTHDAY_AUTO" ||
+    grant.leaveType.code === BIRTHDAY_HALF_DAY_CODE
+  );
+}
+
+export function isRequestableLeaveGrantType(
+  grant: Pick<LeaveGrant, "source"> & {
+    leaveType: Pick<LeaveTypeDefinition, "category" | "code" | "isEnabled">;
+  },
+) {
+  if (!grant.leaveType.isEnabled) {
+    return false;
+  }
+
+  return grant.leaveType.category === "CUSTOM" || isBirthdayHalfDayGrant(grant);
+}
+
+export function isLeaveGrantUsableOnDate(
+  grant: RequestableLeaveGrantCandidate,
+  date: DateOnly,
+) {
+  const effectiveFrom = asDateOnly(grant.effectiveFrom);
+  const expiresAt = grant.expiresAt ? asDateOnly(grant.expiresAt) : null;
+
+  return (
+    grant.status === "ACTIVE" &&
+    grant.remainingAmount > 0 &&
+    compareDateOnly(effectiveFrom, date) <= 0 &&
+    (!expiresAt || compareDateOnly(expiresAt, date) >= 0) &&
+    isRequestableLeaveGrantType(grant)
+  );
+}
+
+export function filterRequestableLeaveGrantsForDate<
+  TGrant extends RequestableLeaveGrantCandidate,
+>(grants: TGrant[], date: DateOnly) {
+  return grants.filter((grant) => isLeaveGrantUsableOnDate(grant, date));
 }
 
 export function calculateCustomLeaveRequestAmount({
@@ -177,8 +234,15 @@ export function assertCustomLeaveGrantRequestAllowed({
     throw new CustomLeaveRequestError("grant-inactive");
   }
 
-  if (grant.leaveType.category !== "CUSTOM" || !grant.leaveType.isEnabled) {
+  if (!isRequestableLeaveGrantType(grant)) {
     throw new CustomLeaveRequestError("disabled-policy");
+  }
+
+  if (
+    isBirthdayHalfDayGrant(grant) &&
+    (usageUnit !== "HALF_DAY" || Math.abs(amount - 0.5) > Number.EPSILON)
+  ) {
+    throw new CustomLeaveRequestError("unit-not-allowed");
   }
 
   assertLeaveTypeUnitAllowed({ leaveType: grant.leaveType, usageUnit });
@@ -197,7 +261,7 @@ export async function listRequestableLeaveGrants(
 ) {
   const dateValue = dateOnlyToDate(date);
 
-  return prisma.leaveGrant.findMany({
+  const grants = await prisma.leaveGrant.findMany({
     where: {
       userId,
       status: "ACTIVE",
@@ -205,13 +269,14 @@ export async function listRequestableLeaveGrants(
       effectiveFrom: { lte: dateValue },
       OR: [{ expiresAt: null }, { expiresAt: { gte: dateValue } }],
       leaveType: {
-        category: "CUSTOM",
         isEnabled: true,
       },
     },
     include: { leaveType: true },
     orderBy: [{ expiresAt: "asc" }, { createdAt: "desc" }],
   });
+
+  return filterRequestableLeaveGrantsForDate(grants, date);
 }
 
 export async function getRequestableLeaveGrantDetail(

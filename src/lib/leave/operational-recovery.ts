@@ -1,5 +1,7 @@
 import {
   Prisma,
+  type LeaveGrant,
+  type LeaveTypeDefinition,
   type NotificationType,
   type PrismaClient,
 } from "@/generated/prisma/client";
@@ -11,10 +13,16 @@ import {
   type LeaveRequestWithPolicy,
 } from "@/lib/leave/approval-policy";
 import { assertEnoughLeaveBalance, policyDeductsAnnual, toNumber } from "@/lib/leave/balance";
-import { dateToDateOnly } from "@/lib/leave/calculate-business-days";
+import {
+  dateToDateOnly,
+  todayInSeoul,
+} from "@/lib/leave/calculate-business-days";
 import {
   convertLeaveGrantPendingToUsed,
   CustomLeaveRequestError,
+  isBirthdayHalfDayGrant,
+  isLeaveGrantUsableOnDate,
+  isRequestableLeaveGrantType,
 } from "@/lib/leave/custom-grant-requests";
 import { formatLeaveDays, LEAVE_TYPE_LABELS } from "@/lib/leave/labels";
 import {
@@ -85,6 +93,35 @@ type AutoApprovalCandidate = {
   policyCode: string;
 };
 
+type RequestableGrantOptionIssue = {
+  userId: string;
+  leaveGrantId: string;
+  leaveTypeId: string;
+  leaveTypeCode: string;
+  reason: string;
+  isBirthdayHalfDay: boolean;
+};
+
+type CalendarVisibilityIssue = {
+  leaveRequestId: string;
+  requesterUserId: string;
+  reason: string;
+};
+
+type RecoveryGrantOption = Pick<
+  LeaveGrant,
+  | "id"
+  | "userId"
+  | "leaveTypeId"
+  | "source"
+  | "status"
+  | "remainingAmount"
+  | "effectiveFrom"
+  | "expiresAt"
+> & {
+  leaveType: Pick<LeaveTypeDefinition, "id" | "category" | "code" | "isEnabled">;
+};
+
 type ResolvedApprovalPolicy = Awaited<ReturnType<typeof resolveApprovalPolicyForLeaveRequest>>;
 
 export type LeaveOperationalRecoveryReport = {
@@ -97,12 +134,17 @@ export type LeaveOperationalRecoveryReport = {
     pendingLeaveRequests: number;
     approvedLeaveRequests: number;
     leaveNotifications: number;
+    activeLeaveGrants: number;
+    approvedCalendarLeaveRequests: number;
   };
   missingApprovalNotifications: ExpectedApprovalNotification[];
   missingRequesterNotifications: ExpectedRequesterNotification[];
   notificationLinkRepairs: NotificationLinkRepair[];
   autoApprovalCandidates: AutoApprovalCandidate[];
   calendarEligibleApprovedLeaveRequestIds: string[];
+  calendarVisibilityIssues: CalendarVisibilityIssue[];
+  requestableGrantOptionIssues: RequestableGrantOptionIssue[];
+  birthdayGrantOptionIssues: RequestableGrantOptionIssue[];
   koreanNotificationRepairs: KoreanNotificationRepair[];
   applied: {
     approvalNotificationsCreated: number;
@@ -469,6 +511,146 @@ async function listApprovedRequests(
     include: leaveRequestRecoveryInclude,
     orderBy: [{ reviewedAt: "asc" }, { createdAt: "asc" }],
   }) as Promise<RecoveryLeaveRequest[]>;
+}
+
+function requestableGrantIssueReason(grant: RecoveryGrantOption, date: DateOnly) {
+  if (grant.status !== "ACTIVE") {
+    return "GRANT_NOT_ACTIVE";
+  }
+
+  if (grant.remainingAmount <= 0) {
+    return "NO_REMAINING_AMOUNT";
+  }
+
+  if (dateToDateOnly(grant.effectiveFrom) > date) {
+    return "NOT_YET_EFFECTIVE";
+  }
+
+  if (grant.expiresAt && dateToDateOnly(grant.expiresAt) < date) {
+    return "EXPIRED";
+  }
+
+  if (!grant.leaveType.isEnabled) {
+    return "LEAVE_TYPE_DISABLED";
+  }
+
+  if (!isRequestableLeaveGrantType(grant)) {
+    return "LEAVE_TYPE_NOT_REQUESTABLE";
+  }
+
+  return "UNKNOWN";
+}
+
+async function findRequestableGrantOptionIssues({
+  prisma,
+  date,
+}: {
+  prisma: RecoveryPrisma;
+  date: DateOnly;
+}) {
+  const grants = await prisma.leaveGrant.findMany({
+    where: {
+      status: "ACTIVE",
+      remainingAmount: { gt: 0 },
+      user: {
+        status: "ACTIVE",
+        role: { not: "EXTERNAL_PARTNER" },
+      },
+    },
+    include: {
+      leaveType: {
+        select: {
+          id: true,
+          code: true,
+          category: true,
+          isEnabled: true,
+        },
+      },
+    },
+    orderBy: [{ expiresAt: "asc" }, { createdAt: "desc" }],
+  });
+  const issues: RequestableGrantOptionIssue[] = [];
+
+  for (const grant of grants) {
+    if (isLeaveGrantUsableOnDate(grant, date)) {
+      continue;
+    }
+
+    issues.push({
+      userId: grant.userId,
+      leaveGrantId: grant.id,
+      leaveTypeId: grant.leaveTypeId,
+      leaveTypeCode: grant.leaveType.code,
+      reason: requestableGrantIssueReason(grant, date),
+      isBirthdayHalfDay: isBirthdayHalfDayGrant(grant),
+    });
+  }
+
+  return { checkedCount: grants.length, issues };
+}
+
+async function findCalendarVisibilityIssues({
+  prisma,
+  window,
+}: {
+  prisma: RecoveryPrisma;
+  window: { fromDate?: DateOnly; toDate?: DateOnly };
+}) {
+  const createdAt = createdAtWindowWhere(window);
+  const requests = await prisma.leaveRequest.findMany({
+    where: {
+      status: "APPROVED",
+      ...(createdAt ? { createdAt } : {}),
+    },
+    include: {
+      user: {
+        select: {
+          id: true,
+          role: true,
+          status: true,
+        },
+      },
+      customLeaveType: {
+        select: {
+          id: true,
+        },
+      },
+    },
+    orderBy: [{ reviewedAt: "asc" }, { createdAt: "asc" }],
+  });
+  const issues: CalendarVisibilityIssue[] = [];
+
+  for (const request of requests) {
+    const issue = (() => {
+      if (request.user.status !== "ACTIVE") {
+        return "REQUESTER_NOT_ACTIVE";
+      }
+
+      if (!["OWNER", "LEAD", "MANAGER"].includes(request.user.role)) {
+        return "REQUESTER_NOT_INTERNAL_CALENDAR_ROLE";
+      }
+
+      if (request.startDate.getTime() > request.endDate.getTime()) {
+        return "INVALID_DATE_RANGE";
+      }
+
+      if (request.requestKind === "CUSTOM_GRANT" && request.leaveTypeId && !request.customLeaveType) {
+        return "CUSTOM_LEAVE_TYPE_MISSING";
+      }
+
+      return null;
+    })();
+
+    if (issue) {
+      issues.push({
+        leaveRequestId: request.id,
+        requesterUserId: request.userId,
+        reason: issue,
+      });
+    }
+  }
+
+  return { checkedCount: requests.length, issues };
 }
 
 async function hasAutoApprovedAudit(prisma: RecoveryPrisma, leaveRequestId: string) {
@@ -1090,6 +1272,7 @@ export async function runLeaveOperationalRecovery({
     fromDate: window.fromDate ?? undefined,
     toDate: window.toDate ?? undefined,
   };
+  const requestableGrantScanDate = todayInSeoul();
   const [pendingRequests, approvedRequests] = await Promise.all([
     listPendingRequests(prisma, windowFilter),
     listApprovedRequests(prisma, windowFilter),
@@ -1111,11 +1294,15 @@ export async function runLeaveOperationalRecovery({
     requesterNotificationScan,
     autoApprovalCandidates,
     koreanRepairScan,
+    requestableGrantScan,
+    calendarVisibilityScan,
   ] = await Promise.all([
     findMissingApprovalNotifications({ prisma, pendingRequests }),
     findMissingRequesterNotifications({ prisma, approvedRequests }),
     findAutoApprovalCandidates({ prisma, pendingRequests }),
     findKoreanNotificationRepairs({ prisma, notificationScanLimit, window: windowFilter }),
+    findRequestableGrantOptionIssues({ prisma, date: requestableGrantScanDate }),
+    findCalendarVisibilityIssues({ prisma, window: windowFilter }),
   ]);
   const missingApprovalNotifications = approvalNotificationScan.missing;
   const missingRequesterNotifications = requesterNotificationScan.missing;
@@ -1130,12 +1317,19 @@ export async function runLeaveOperationalRecovery({
       pendingLeaveRequests: pendingRequests.length,
       approvedLeaveRequests: approvedRequests.length,
       leaveNotifications: koreanRepairScan.checkedCount,
+      activeLeaveGrants: requestableGrantScan.checkedCount,
+      approvedCalendarLeaveRequests: calendarVisibilityScan.checkedCount,
     },
     missingApprovalNotifications,
     missingRequesterNotifications,
     notificationLinkRepairs,
     autoApprovalCandidates,
     calendarEligibleApprovedLeaveRequestIds: approvedRequests.map((request) => request.id),
+    calendarVisibilityIssues: calendarVisibilityScan.issues,
+    requestableGrantOptionIssues: requestableGrantScan.issues,
+    birthdayGrantOptionIssues: requestableGrantScan.issues.filter(
+      (issue) => issue.isBirthdayHalfDay,
+    ),
     koreanNotificationRepairs: koreanRepairScan.repairs,
     applied: {
       approvalNotificationsCreated: 0,

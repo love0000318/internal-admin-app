@@ -8,6 +8,8 @@ import {
   assertLeaveGrantHasEnoughRemaining,
   assertLeaveTypeUnitAllowed,
   calculateCustomLeaveRequestAmount,
+  filterRequestableLeaveGrantsForDate,
+  isRequestableLeaveGrantType,
 } from "@/lib/leave/custom-grant-requests";
 
 const leaveType = {
@@ -143,6 +145,69 @@ describe("custom leave request helpers", () => {
       assertCustomLeaveGrantRequestAllowed({
         grant,
         userId: "other-user",
+        usageUnit: "HALF_DAY",
+        amount: 0.5,
+        startDate: "2026-05-10",
+        endDate: "2026-05-10",
+      }),
+    ).toThrow();
+  });
+
+  it("exposes usable birthday half-day grants even if legacy category data is not CUSTOM", () => {
+    const birthdayGrant = {
+      ...grant,
+      leaveType: {
+        ...leaveType,
+        category: "ANNUAL",
+      },
+    } as const;
+
+    expect(isRequestableLeaveGrantType(birthdayGrant)).toBe(true);
+    expect(
+      filterRequestableLeaveGrantsForDate([birthdayGrant], "2026-05-11").map(
+        (item) => item.id,
+      ),
+    ).toEqual(["grant-1"]);
+  });
+
+  it("hides expired or already-used birthday half-day grants from request options", () => {
+    expect(
+      filterRequestableLeaveGrantsForDate(
+        [
+          { ...grant, id: "usable" },
+          {
+            ...grant,
+            id: "expired",
+            expiresAt: dateOnlyToDate("2026-05-09"),
+          },
+          {
+            ...grant,
+            id: "used",
+            remainingAmount: 0,
+            usedAmount: 0.5,
+          },
+        ],
+        "2026-05-11",
+      ).map((item) => item.id),
+    ).toEqual(["usable"]);
+  });
+
+  it("keeps birthday half-day requests to exactly 0.5 days", () => {
+    expect(() =>
+      assertCustomLeaveGrantRequestAllowed({
+        grant,
+        userId: "user-1",
+        usageUnit: "FULL_DAY",
+        amount: 0.5,
+        startDate: "2026-05-10",
+        endDate: "2026-05-10",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      assertCustomLeaveGrantRequestAllowed({
+        grant: { ...grant, remainingAmount: 0, usedAmount: 0.5 },
+        userId: "user-1",
         usageUnit: "HALF_DAY",
         amount: 0.5,
         startDate: "2026-05-10",

@@ -5,6 +5,7 @@ import {
   buildLeaveNotificationMetadata,
   getLeaveApprovalNotificationRecipients,
   getManagedOrganizationLeaveNotificationRecipients,
+  notifyLeaveApprovalNeeded,
 } from "@/lib/notifications/leave-notifications";
 
 const teams = [
@@ -164,5 +165,59 @@ describe("leave notification recipients", () => {
     expect(JSON.stringify(metadata)).not.toContain("reason");
     expect(JSON.stringify(metadata)).not.toContain("attachment");
     expect(JSON.stringify(metadata)).not.toContain("adminMemo");
+  });
+
+  it("creates Korean approval-needed notifications with review links", async () => {
+    const notifications: Array<{
+      userId: string;
+      title: string;
+      message: string;
+      linkUrl: string | null;
+    }> = [];
+    const prisma = {
+      ...prismaMock(),
+      auditLog: {
+        create: vi.fn(async () => ({})),
+      },
+      notification: {
+        findFirst: vi.fn(async () => null),
+        create: vi.fn(async ({ data }) => {
+          notifications.push({
+            userId: data.userId,
+            title: data.title,
+            message: data.message,
+            linkUrl: data.linkUrl,
+          });
+
+          return { id: `notification-${notifications.length}`, ...data };
+        }),
+      },
+    };
+
+    const result = await notifyLeaveApprovalNeeded({
+      leaveRequest,
+      approvalPolicy: {
+        id: "approval-policy-1",
+        code: "DEFAULT_TEAM_LEAD_OR_OWNER",
+        approvalMode: "SINGLE",
+        approverRule: "TEAM_LEAD_OR_OWNER",
+        customApproverUserId: null,
+      },
+      leaveRequestId: leaveRequest.id,
+      leaveTypeName: "연차",
+      prisma: prisma as never,
+    });
+
+    expect(result.count).toBe(2);
+    expect(notifications.map((notification) => notification.userId)).toEqual([
+      "owner",
+      "lead-a",
+    ]);
+    expect(notifications[0]).toMatchObject({
+      title: "휴가 승인 요청이 접수되었습니다.",
+      linkUrl: "/leaves/approvals/leave-request-1",
+    });
+    expect(notifications[0].message).toContain("연차 2일을 요청했습니다.");
+    expect(notifications[0].message).not.toMatch(/�|[占筌獄]|[利泥湲諛痍]/);
   });
 });

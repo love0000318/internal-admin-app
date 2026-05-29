@@ -119,6 +119,9 @@ export type NotifyUsersParams = Omit<CreateNotificationParams, "userId"> & {
 };
 
 type NotificationPrisma = PrismaClient | Prisma.TransactionClient;
+type CreateNotificationWithClient = CreateNotificationParams & {
+  prisma?: NotificationPrisma;
+};
 
 export const NOTIFICATION_PRIORITIES = ["LOW", "NORMAL", "HIGH", "CRITICAL"] as const;
 
@@ -179,24 +182,29 @@ export function getNotificationGroup(type: NotificationType): NotificationGroup 
   return "SYSTEM";
 }
 
-export async function createNotification(params: CreateNotificationParams) {
-  const notification = await getPrisma().notification.create({
+export async function createNotification(params: CreateNotificationWithClient) {
+  const { prisma = getPrisma(), ...notificationParams } = params;
+  const notification = await prisma.notification.create({
     data: {
-      userId: params.userId,
-      type: params.type,
-      priority: normalizeNotificationPriority(params.priority),
-      title: params.title,
-      message: params.message,
-      linkUrl: params.linkUrl ?? null,
-      metadata: params.metadata ? sanitizeNotificationMetadata(params.metadata) : Prisma.JsonNull,
+      userId: notificationParams.userId,
+      type: notificationParams.type,
+      priority: normalizeNotificationPriority(notificationParams.priority),
+      title: notificationParams.title,
+      message: notificationParams.message,
+      linkUrl: notificationParams.linkUrl ?? null,
+      metadata: notificationParams.metadata
+        ? sanitizeNotificationMetadata(notificationParams.metadata)
+        : Prisma.JsonNull,
     },
   });
 
   await dispatchExternalNotification({
-    ...params,
-    recipientUserId: params.userId,
+    ...notificationParams,
+    recipientUserId: notificationParams.userId,
     context: {
-      ...(params.metadata && typeof params.metadata === "object" ? params.metadata : {}),
+      ...(notificationParams.metadata && typeof notificationParams.metadata === "object"
+        ? notificationParams.metadata
+        : {}),
       notificationId: notification.id,
     },
   });
@@ -327,15 +335,16 @@ export async function dispatchNotificationAndExternal(params: NotifyUsersParams)
   return notifyUsers(params);
 }
 
-export async function createNotificationOnce(params: CreateNotificationParams) {
-  const deduplicationKey = getDeduplicationKey(params.metadata);
+export async function createNotificationOnce(params: CreateNotificationWithClient) {
+  const { prisma = getPrisma(), ...notification } = params;
+  const deduplicationKey = getDeduplicationKey(notification.metadata);
 
   if (typeof deduplicationKey === "string") {
-    const existing = await getPrisma().notification.findFirst({
+    const existing = await prisma.notification.findFirst({
       where: {
-        userId: params.userId,
-        type: params.type,
-        linkUrl: params.linkUrl ?? null,
+        userId: notification.userId,
+        type: notification.type,
+        linkUrl: notification.linkUrl ?? null,
         metadata: {
           path: ["deduplicationKey"],
           equals: deduplicationKey,
@@ -348,7 +357,7 @@ export async function createNotificationOnce(params: CreateNotificationParams) {
     }
   }
 
-  return createNotification(params);
+  return createNotification({ ...notification, prisma });
 }
 
 export async function listMyNotifications(

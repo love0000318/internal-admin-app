@@ -120,6 +120,9 @@ describe("leave operational recovery helpers", () => {
         }),
         findMany: async () => [],
       },
+      leaveGrant: {
+        findMany: async () => [],
+      },
     };
 
     const report = await runLeaveOperationalRecovery({
@@ -138,6 +141,99 @@ describe("leave operational recovery helpers", () => {
         currentLinkUrl: "/leaves/approvals",
         expectedLinkUrl: "/leaves/approvals/leave-request-1",
         reason: "APPROVAL_DETAIL_LINK",
+      },
+    ]);
+  });
+
+  it("reports grant option and calendar visibility diagnostics in dry-run mode", async () => {
+    const prisma = {
+      leaveRequest: {
+        findMany: async (args: { where: Record<string, unknown> }) => {
+          if (args.where.status === "PENDING") {
+            return [];
+          }
+
+          if (args.where.status === "APPROVED" && args.where.user) {
+            return [];
+          }
+
+          if (args.where.status === "APPROVED") {
+            return [
+              {
+                ...leaveRequest,
+                id: "external-approved",
+                userId: "external-user",
+                user: {
+                  id: "external-user",
+                  name: "외부 사용자",
+                  role: "EXTERNAL_PARTNER" as const,
+                  status: "ACTIVE" as const,
+                  teamId: null,
+                },
+              },
+            ];
+          }
+
+          return [];
+        },
+      },
+      leaveGrant: {
+        findMany: async () => [
+          {
+            id: "birthday-grant-1",
+            userId: "requester",
+            leaveTypeId: "birthday-type",
+            source: "BIRTHDAY_AUTO" as const,
+            status: "ACTIVE" as const,
+            remainingAmount: 0.5,
+            effectiveFrom: new Date("2026-05-01T00:00:00.000Z"),
+            expiresAt: null,
+            createdAt: new Date("2026-05-01T00:00:00.000Z"),
+            leaveType: {
+              id: "birthday-type",
+              code: "BIRTHDAY_HALF_DAY",
+              category: "ANNUAL" as const,
+              isEnabled: false,
+            },
+          },
+        ],
+      },
+      notification: {
+        findMany: async () => [],
+      },
+      leaveTypeDefinition: {
+        findUnique: async () => null,
+      },
+      approvalPolicy: {
+        findUnique: async () => null,
+      },
+      user: {
+        findMany: async () => [],
+      },
+    };
+
+    const report = await runLeaveOperationalRecovery({
+      prisma: prisma as never,
+      dryRun: true,
+      fromDate: "2026-05-28",
+      toDate: "2026-05-29",
+    });
+
+    expect(report.birthdayGrantOptionIssues).toEqual([
+      {
+        userId: "requester",
+        leaveGrantId: "birthday-grant-1",
+        leaveTypeId: "birthday-type",
+        leaveTypeCode: "BIRTHDAY_HALF_DAY",
+        reason: "LEAVE_TYPE_DISABLED",
+        isBirthdayHalfDay: true,
+      },
+    ]);
+    expect(report.calendarVisibilityIssues).toEqual([
+      {
+        leaveRequestId: "external-approved",
+        requesterUserId: "external-user",
+        reason: "REQUESTER_NOT_INTERNAL_CALENDAR_ROLE",
       },
     ]);
   });

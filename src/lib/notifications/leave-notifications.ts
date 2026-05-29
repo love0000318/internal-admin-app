@@ -245,6 +245,7 @@ export async function notifyLeaveApprovalNeeded({
     await Promise.all(
       recipientIds.map((recipientId) =>
         createNotificationOnce({
+          prisma,
           userId: recipientId,
           type: "LEAVE_REQUEST_CREATED",
           priority: "HIGH",
@@ -329,6 +330,7 @@ export async function notifyLeaveRequestApproved({
         : `${period} ${formatLeaveDays(dayCount)} 요청이 승인되었습니다. 처리자: ${processorName}, 처리 시각: ${formatKoreanDateTime(processedAt)}.`;
 
     await createNotificationOnce({
+      prisma,
       userId: leaveRequest.userId,
       type: requesterNotificationType,
       priority: "NORMAL",
@@ -378,6 +380,7 @@ export async function notifyLeaveRequestApproved({
     await Promise.all(
       leadRecipientIds.map((recipientId) =>
         createNotificationOnce({
+          prisma,
           userId: recipientId,
           type: managedNotificationType,
           priority: "NORMAL",
@@ -436,6 +439,7 @@ export async function notifyLeaveRequestRejectedOrCancelled({
     const processorName = leaveRequest.reviewer?.name ?? "처리자";
     const dayCount = Number(leaveRequest.dayCount);
     await createNotificationOnce({
+      prisma,
       userId: leaveRequest.userId,
       type: isRejected ? "LEAVE_REQUEST_REJECTED" : "LEAVE_REQUEST_CANCELLED",
       priority: "NORMAL",

@@ -103,6 +103,9 @@ async function main() {
         missingRequesterNotifications: report.missingRequesterNotifications.length,
         notificationLinkRepairs: report.notificationLinkRepairs.length,
         autoApprovalCandidates: report.autoApprovalCandidates.length,
+        requestableGrantOptionIssues: report.requestableGrantOptionIssues.length,
+        birthdayGrantOptionIssues: report.birthdayGrantOptionIssues.length,
+        calendarVisibilityIssues: report.calendarVisibilityIssues.length,
         calendarEligibleApprovedLeaveRequests:
           report.calendarEligibleApprovedLeaveRequestIds.length,
         koreanNotificationRepairs: report.koreanNotificationRepairs.length,
@@ -116,6 +119,15 @@ async function main() {
             (item) => item.leaveRequestId,
           ),
           notificationLinkRepairs: report.notificationLinkRepairs.map(
+            (item) => item.leaveRequestId,
+          ),
+          requestableGrantOptionIssues: report.requestableGrantOptionIssues.map(
+            (item) => item.leaveGrantId,
+          ),
+          birthdayGrantOptionIssues: report.birthdayGrantOptionIssues.map(
+            (item) => item.leaveGrantId,
+          ),
+          calendarVisibilityIssues: report.calendarVisibilityIssues.map(
             (item) => item.leaveRequestId,
           ),
           autoApprovalCandidates: report.autoApprovalCandidates.map(
