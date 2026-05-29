@@ -173,6 +173,7 @@ export type LeaveOperationalRecoveryReport = {
   skipped: {
     autoApprovalRequestIds: string[];
     birthdayAnnualDeductionAlreadyRecovered: number;
+    birthdayAnnualDeductionNotRepairable: number;
   };
 };
 
@@ -501,12 +502,13 @@ async function findNotificationByDeduplicationKey({
 
 async function listPendingRequests(
   prisma: RecoveryPrisma,
-  window: { fromDate?: DateOnly; toDate?: DateOnly },
+  window: { fromDate?: DateOnly; toDate?: DateOnly; leaveRequestId?: string | null },
 ) {
   const createdAt = createdAtWindowWhere(window);
 
   return prisma.leaveRequest.findMany({
     where: {
+      ...(window.leaveRequestId ? { id: window.leaveRequestId } : {}),
       status: "PENDING",
       ...(createdAt ? { createdAt } : {}),
       user: {
@@ -521,12 +523,13 @@ async function listPendingRequests(
 
 async function listApprovedRequests(
   prisma: RecoveryPrisma,
-  window: { fromDate?: DateOnly; toDate?: DateOnly },
+  window: { fromDate?: DateOnly; toDate?: DateOnly; leaveRequestId?: string | null },
 ) {
   const createdAt = createdAtWindowWhere(window);
 
   return prisma.leaveRequest.findMany({
     where: {
+      ...(window.leaveRequestId ? { id: window.leaveRequestId } : {}),
       status: "APPROVED",
       ...(createdAt ? { createdAt } : {}),
       user: {
@@ -620,11 +623,12 @@ async function findCalendarVisibilityIssues({
   window,
 }: {
   prisma: RecoveryPrisma;
-  window: { fromDate?: DateOnly; toDate?: DateOnly };
+  window: { fromDate?: DateOnly; toDate?: DateOnly; leaveRequestId?: string | null };
 }) {
   const createdAt = createdAtWindowWhere(window);
   const requests = await prisma.leaveRequest.findMany({
     where: {
+      ...(window.leaveRequestId ? { id: window.leaveRequestId } : {}),
       status: "APPROVED",
       ...(createdAt ? { createdAt } : {}),
     },
@@ -1033,13 +1037,16 @@ async function findKoreanNotificationRepairs({
 }: {
   prisma: RecoveryPrisma;
   notificationScanLimit: number;
-  window: { fromDate?: DateOnly; toDate?: DateOnly };
+  window: { fromDate?: DateOnly; toDate?: DateOnly; leaveRequestId?: string | null };
 }) {
   const createdAt = createdAtWindowWhere(window);
   const notifications = await prisma.notification.findMany({
     where: {
       type: { in: [...LEAVE_NOTIFICATION_TYPES] },
       ...(createdAt ? { createdAt } : {}),
+      ...(window.leaveRequestId
+        ? { metadata: { path: ["leaveRequestId"], equals: window.leaveRequestId } }
+        : {}),
     },
     orderBy: { createdAt: "asc" },
     take: notificationScanLimit,
@@ -1286,17 +1293,20 @@ export async function runLeaveOperationalRecovery({
   notificationScanLimit = 1000,
   fromDate,
   toDate,
+  leaveRequestId = null,
 }: {
   prisma: RecoveryPrisma;
   dryRun?: boolean;
   notificationScanLimit?: number;
   fromDate?: DateOnly | null;
   toDate?: DateOnly | null;
+  leaveRequestId?: string | null;
 }): Promise<LeaveOperationalRecoveryReport> {
   const window = normalizeLeaveOperationalRecoveryDateWindow({ fromDate, toDate });
   const windowFilter = {
     fromDate: window.fromDate ?? undefined,
     toDate: window.toDate ?? undefined,
+    leaveRequestId,
   };
   const requestableGrantScanDate = todayInSeoul();
   const [pendingRequests, approvedRequests] = await Promise.all([
@@ -1335,6 +1345,7 @@ export async function runLeaveOperationalRecovery({
       dryRun: true,
       fromDate: window.fromDate,
       toDate: window.toDate,
+      leaveRequestId,
     }),
   ]);
   const missingApprovalNotifications = approvalNotificationScan.missing;
@@ -1378,6 +1389,8 @@ export async function runLeaveOperationalRecovery({
       autoApprovalRequestIds: [],
       birthdayAnnualDeductionAlreadyRecovered:
         birthdayAnnualDeductionRecovery.applied.skippedAlreadyRecovered,
+      birthdayAnnualDeductionNotRepairable:
+        birthdayAnnualDeductionRecovery.applied.skippedNotRepairable,
     },
   };
 
@@ -1429,6 +1442,7 @@ export async function runLeaveOperationalRecovery({
     dryRun: false,
     fromDate: window.fromDate,
     toDate: window.toDate,
+    leaveRequestId,
   });
   report.applied.birthdayAnnualDeductionLedgersReclassified =
     birthdayAnnualApply.applied.annualLedgersReclassified;
@@ -1436,6 +1450,8 @@ export async function runLeaveOperationalRecovery({
     birthdayAnnualApply.applied.leaveBalancesUpdated;
   report.skipped.birthdayAnnualDeductionAlreadyRecovered =
     birthdayAnnualApply.applied.skippedAlreadyRecovered;
+  report.skipped.birthdayAnnualDeductionNotRepairable =
+    birthdayAnnualApply.applied.skippedNotRepairable;
 
   return report;
 }

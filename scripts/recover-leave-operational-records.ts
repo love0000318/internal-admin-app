@@ -15,18 +15,25 @@ function addDateOnlyDays(value: DateOnly, days: number): DateOnly {
   return date.toISOString().slice(0, 10) as DateOnly;
 }
 
-function parseArgs(argv: string[]) {
+export function parseLeaveOperationalRecoveryArgs(argv: string[]) {
   const args = {
     apply: false,
+    dryRun: false,
     all: false,
     fromDate: null as string | null,
     toDate: null as string | null,
+    leaveRequestId: null as string | null,
     notificationScanLimit: 1000,
   };
 
   for (const arg of argv) {
     if (arg === "--apply") {
       args.apply = true;
+      continue;
+    }
+
+    if (arg === "--dry-run") {
+      args.dryRun = true;
       continue;
     }
 
@@ -45,6 +52,17 @@ function parseArgs(argv: string[]) {
       continue;
     }
 
+    if (arg.startsWith("--leave-request-id=")) {
+      const value = arg.slice("--leave-request-id=".length).trim();
+
+      if (!value) {
+        throw new Error("Invalid --leave-request-id. Use a non-empty leave request id.");
+      }
+
+      args.leaveRequestId = value;
+      continue;
+    }
+
     if (arg.startsWith("--notification-scan-limit=")) {
       const value = Number(arg.slice("--notification-scan-limit=".length));
 
@@ -56,11 +74,15 @@ function parseArgs(argv: string[]) {
     }
   }
 
+  if (args.apply && args.dryRun) {
+    throw new Error("Use either --dry-run or --apply, not both.");
+  }
+
   if (args.all && (args.fromDate || args.toDate)) {
     throw new Error("Use either --all or --from-date/--to-date, not both.");
   }
 
-  if (!args.all && !args.fromDate && !args.toDate) {
+  if (!args.all && !args.fromDate && !args.toDate && !args.leaveRequestId) {
     const today = todayInSeoul();
     args.fromDate = addDateOnlyDays(today, -1);
     args.toDate = today;
@@ -76,7 +98,7 @@ function parseArgs(argv: string[]) {
 
 async function main() {
   loadLocalEnv();
-  const args = parseArgs(process.argv.slice(2));
+  const args = parseLeaveOperationalRecoveryArgs(process.argv.slice(2));
   const dryRun = !args.apply;
   const prisma = getPrisma();
   let reportSummary: Record<string, unknown> = {};
@@ -93,11 +115,13 @@ async function main() {
         notificationScanLimit: args.notificationScanLimit,
         fromDate: args.all ? null : (args.fromDate as DateOnly | null),
         toDate: args.all ? null : (args.toDate as DateOnly | null),
+        leaveRequestId: args.leaveRequestId,
       });
 
       reportSummary = {
         dryRun: report.dryRun,
         window: report.window,
+        leaveRequestId: args.leaveRequestId,
         checked: report.checked,
         missingApprovalNotifications: report.missingApprovalNotifications.length,
         missingRequesterNotifications: report.missingRequesterNotifications.length,
@@ -120,12 +144,35 @@ async function main() {
             amount: item.amount,
             repairEventType: item.repairEventType,
             annualLedgerIds: item.annualLedgerIds,
+            targetAnnualLedgerIds: item.targetAnnualLedgerIds,
             annualLedgerSources: item.annualLedgerSources,
+            birthdayGrantId: item.birthdayGrantId,
             birthdayGrantIds: item.birthdayGrantIds,
             leaveTypeCode: item.leaveTypeCode,
             startDate: item.startDate,
             endDate: item.endDate,
+            wrongDeductedAmount: item.amount,
+            leaveBalanceId: item.leaveBalance?.id ?? null,
+            leaveBalanceMatchCount: item.leaveBalanceMatchCount,
+            currentLeaveBalance: item.leaveBalance
+              ? {
+                  usedDays: item.leaveBalance.usedDays,
+                  pendingDays: item.leaveBalance.pendingDays,
+                  remainingDays: item.leaveBalance.remainingDays,
+                }
+              : null,
+            expectedLeaveBalance: item.leaveBalance
+              ? {
+                  usedDays: item.leaveBalance.expectedUsedDays,
+                  pendingDays: item.leaveBalance.expectedPendingDays,
+                  remainingDays: item.leaveBalance.expectedRemainingDays,
+                }
+              : null,
             leaveBalanceRepairPossible: item.leaveBalance?.repairPossible ?? false,
+            leaveBalanceRepairBlockReasons:
+              item.leaveBalance?.repairBlockReasons ?? [],
+            recoveryPossible: item.repairPossible,
+            recoveryBlockReasons: item.repairBlockReasons,
           })),
         applied: report.applied,
         skipped: report.skipped,
@@ -163,7 +210,11 @@ async function main() {
 
       return {
         status:
-          report.skipped.autoApprovalRequestIds.length > 0 ? ("PARTIAL" as const) : ("SUCCESS" as const),
+          report.skipped.autoApprovalRequestIds.length > 0 ||
+          report.skipped.birthdayAnnualDeductionAlreadyRecovered > 0 ||
+          report.skipped.birthdayAnnualDeductionNotRepairable > 0
+            ? ("PARTIAL" as const)
+            : ("SUCCESS" as const),
         checkedCount:
           report.checked.pendingLeaveRequests +
           report.checked.approvedLeaveRequests +
@@ -179,7 +230,8 @@ async function main() {
           report.applied.birthdayAnnualLeaveBalancesUpdated,
         skippedCount:
           report.skipped.autoApprovalRequestIds.length +
-          report.skipped.birthdayAnnualDeductionAlreadyRecovered,
+          report.skipped.birthdayAnnualDeductionAlreadyRecovered +
+          report.skipped.birthdayAnnualDeductionNotRepairable,
         failedCount: 0,
         resultSummary: reportSummary,
       };
@@ -192,8 +244,10 @@ async function main() {
   console.log(JSON.stringify(reportSummary, null, 2));
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : "Leave operational recovery failed.");
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : "Leave operational recovery failed.");
+    process.exitCode = 1;
+  });
+}
 
