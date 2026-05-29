@@ -26,11 +26,14 @@ import {
 } from "@/lib/leave/annual-use-plan-calculator";
 import type { DateOnly } from "@/lib/leave/types";
 import {
+  ANNUAL_USE_PLAN_LINK_URL,
   ANNUAL_LEAVE_PROMOTION_LEGAL_BASIS,
   ANNUAL_LEAVE_PROMOTION_LEGAL_REVIEW_NOTE,
   ANNUAL_LEAVE_PROMOTION_POLICY_VERSION,
+  USE_PLAN_NOTICE_TYPES,
   buildAnnualUsePlanNoticeContent,
   createAnnualUsePlanRequestNotification,
+  hasBrokenAnnualUsePlanNoticeText,
   skipAnnualUsePlanNoticeBecauseSubmitted,
 } from "@/lib/notifications/annual-use-plan-notifications";
 
@@ -55,6 +58,25 @@ export type AnnualPromotionCandidate = {
   submissionDeadline: DateOnly;
   remainingAmount: number;
   isRenotice: boolean;
+  usePlanStatus: "DRAFT" | "SUBMITTED" | "CANCELLED" | null;
+  usePlanSubmittedAt: Date | null;
+};
+
+export type AnnualPromotionReadinessIssueCode =
+  | "MISSING_SCHEDULED_NOTICE"
+  | "SENT_NOTICE_MISSING_NOTIFICATION"
+  | "INVALID_NOTIFICATION_LINK"
+  | "BROKEN_KOREAN_NOTIFICATION_TEXT"
+  | "SUBMITTED_PLAN_NOT_LINKED_TO_NOTICE";
+
+export type AnnualPromotionReadinessIssue = {
+  code: AnnualPromotionReadinessIssueCode;
+  userId?: string;
+  noticeId?: string;
+  notificationId?: string;
+  referenceYear: number;
+  noticeType?: string;
+  scheduledDate?: DateOnly;
 };
 
 function addDays(value: DateOnly, days: number): DateOnly {
@@ -261,6 +283,19 @@ export async function findAnnualPromotionCandidates({
       continue;
     }
 
+    const usePlan = await prisma.annualLeaveUsePlan.findUnique({
+      where: {
+        userId_referenceYear: {
+          userId: user.id,
+          referenceYear: year,
+        },
+      },
+      select: {
+        status: true,
+        submittedAt: true,
+      },
+    });
+
     const base = {
       userId: user.id,
       name: user.name,
@@ -270,6 +305,8 @@ export async function findAnnualPromotionCandidates({
       hireDate,
       referenceYear: year,
       remainingAmount: balance.remainingAmount,
+      usePlanStatus: usePlan?.status ?? null,
+      usePlanSubmittedAt: usePlan?.submittedAt ?? null,
     };
 
     if (completedYears(hireDate, fiscalRange.end) >= 1) {
@@ -364,10 +401,21 @@ export async function scheduleAnnualLeavePromotionNotices({
   let skipped = 0;
 
   if (dryRun) {
-    return { year, candidates, created, skipped };
+    return {
+      year,
+      candidates,
+      created,
+      skipped: candidates.filter((candidate) => candidate.usePlanStatus === "SUBMITTED")
+        .length,
+    };
   }
 
   for (const candidate of candidates) {
+    if (candidate.usePlanStatus === "SUBMITTED") {
+      skipped += 1;
+      continue;
+    }
+
     const existing = await prisma.annualLeavePromotionNotice.findUnique({
       where: {
         userId_referenceYear_noticeType_scheduledDate: {
@@ -463,6 +511,7 @@ export async function sendDueAnnualLeavePromotionNotices({
     orderBy: { scheduledDate: "asc" },
   });
   let sent = 0;
+  let skipped = 0;
 
   for (const notice of dueNotices) {
     if (notice.noticeType !== "USE_PLAN_REMINDER") {
@@ -481,6 +530,7 @@ export async function sendDueAnnualLeavePromotionNotices({
           usePlan: existingPlan,
           prisma,
         });
+        skipped += 1;
         continue;
       }
     }
@@ -507,7 +557,364 @@ export async function sendDueAnnualLeavePromotionNotices({
     sent += 1;
   }
 
-  return { checked: dueNotices.length, sent };
+  return { checked: dueNotices.length, sent, skipped };
+}
+
+function annualPromotionNoticeKey({
+  userId,
+  referenceYear,
+  noticeType,
+  scheduledDate,
+}: {
+  userId: string;
+  referenceYear: number;
+  noticeType: string;
+  scheduledDate: Date | DateOnly;
+}) {
+  const dateOnly =
+    scheduledDate instanceof Date ? dateToDateOnly(scheduledDate) : scheduledDate;
+
+  return `${userId}:${referenceYear}:${noticeType}:${dateOnly}`;
+}
+
+export async function collectAnnualPromotionReadinessDiagnostics({
+  year = Number(todayInSeoul().slice(0, 4)),
+  prisma = getPrisma(),
+}: {
+  year?: number;
+  prisma?: PromotionDb;
+} = {}) {
+  const [candidates, notices, plans] = await Promise.all([
+    findAnnualPromotionCandidates({ year, prisma }),
+    prisma.annualLeavePromotionNotice.findMany({
+      where: { referenceYear: year },
+      select: {
+        id: true,
+        userId: true,
+        referenceYear: true,
+        noticeType: true,
+        status: true,
+        scheduledDate: true,
+        expirationDate: true,
+        remainingAmount: true,
+        unit: true,
+        annualLeaveUsePlanId: true,
+        policyVersion: true,
+        legalBasis: true,
+        availableFrom: true,
+        availableUntil: true,
+        submissionDeadline: true,
+        submittedAt: true,
+        notificationId: true,
+        isRenotice: true,
+      },
+    }),
+    prisma.annualLeaveUsePlan.findMany({
+      where: { referenceYear: year },
+      select: {
+        id: true,
+        userId: true,
+        referenceYear: true,
+        status: true,
+        submittedAt: true,
+      },
+    }),
+  ]);
+  const notificationIds = notices
+    .map((notice) => notice.notificationId)
+    .filter((value): value is string => Boolean(value));
+  const notifications =
+    notificationIds.length > 0
+      ? await prisma.notification.findMany({
+          where: { id: { in: notificationIds } },
+          select: {
+            id: true,
+            userId: true,
+            title: true,
+            message: true,
+            linkUrl: true,
+          },
+        })
+      : [];
+  const noticeKeySet = new Set(
+    notices.map((notice) =>
+      annualPromotionNoticeKey({
+        userId: notice.userId,
+        referenceYear: notice.referenceYear,
+        noticeType: notice.noticeType,
+        scheduledDate: notice.scheduledDate,
+      }),
+    ),
+  );
+  const notificationById = new Map(
+    notifications.map((notification) => [notification.id, notification]),
+  );
+  const submittedPlanByUserId = new Map(
+    plans
+      .filter((plan) => plan.status === "SUBMITTED")
+      .map((plan) => [plan.userId, plan]),
+  );
+  const issues: AnnualPromotionReadinessIssue[] = [];
+
+  for (const candidate of candidates) {
+    if (candidate.usePlanStatus === "SUBMITTED") {
+      continue;
+    }
+
+    const key = annualPromotionNoticeKey({
+      userId: candidate.userId,
+      referenceYear: candidate.referenceYear,
+      noticeType: candidate.noticeType,
+      scheduledDate: candidate.scheduledDate,
+    });
+
+    if (!noticeKeySet.has(key)) {
+      issues.push({
+        code: "MISSING_SCHEDULED_NOTICE",
+        userId: candidate.userId,
+        referenceYear: candidate.referenceYear,
+        noticeType: candidate.noticeType,
+        scheduledDate: candidate.scheduledDate,
+      });
+    }
+  }
+
+  for (const notice of notices) {
+    const notification = notice.notificationId
+      ? notificationById.get(notice.notificationId)
+      : null;
+
+    if (notice.status === "SENT" && !notification) {
+      issues.push({
+        code: "SENT_NOTICE_MISSING_NOTIFICATION",
+        userId: notice.userId,
+        noticeId: notice.id,
+        referenceYear: notice.referenceYear,
+        noticeType: notice.noticeType,
+        scheduledDate: dateToDateOnly(notice.scheduledDate),
+      });
+    }
+
+    if (notification && notification.linkUrl !== ANNUAL_USE_PLAN_LINK_URL) {
+      issues.push({
+        code: "INVALID_NOTIFICATION_LINK",
+        userId: notice.userId,
+        noticeId: notice.id,
+        notificationId: notification.id,
+        referenceYear: notice.referenceYear,
+        noticeType: notice.noticeType,
+        scheduledDate: dateToDateOnly(notice.scheduledDate),
+      });
+    }
+
+    if (
+      notification &&
+      (hasBrokenAnnualUsePlanNoticeText(notification.title) ||
+        hasBrokenAnnualUsePlanNoticeText(notification.message))
+    ) {
+      issues.push({
+        code: "BROKEN_KOREAN_NOTIFICATION_TEXT",
+        userId: notice.userId,
+        noticeId: notice.id,
+        notificationId: notification.id,
+        referenceYear: notice.referenceYear,
+        noticeType: notice.noticeType,
+        scheduledDate: dateToDateOnly(notice.scheduledDate),
+      });
+    }
+
+    const submittedPlan = submittedPlanByUserId.get(notice.userId);
+    if (
+      submittedPlan &&
+      USE_PLAN_NOTICE_TYPES.includes(notice.noticeType) &&
+      (notice.annualLeaveUsePlanId !== submittedPlan.id || !notice.submittedAt)
+    ) {
+      issues.push({
+        code: "SUBMITTED_PLAN_NOT_LINKED_TO_NOTICE",
+        userId: notice.userId,
+        noticeId: notice.id,
+        referenceYear: notice.referenceYear,
+        noticeType: notice.noticeType,
+        scheduledDate: dateToDateOnly(notice.scheduledDate),
+      });
+    }
+  }
+
+  return {
+    year,
+    candidates,
+    notices,
+    plans,
+    notifications,
+    issues,
+  };
+}
+
+function noticeToNotificationInput(
+  notice: Awaited<
+    ReturnType<typeof collectAnnualPromotionReadinessDiagnostics>
+  >["notices"][number],
+) {
+  return {
+    id: notice.id,
+    userId: notice.userId,
+    referenceYear: notice.referenceYear,
+    noticeType: notice.noticeType,
+    scheduledDate: notice.scheduledDate,
+    expirationDate: notice.expirationDate,
+    remainingAmount: notice.remainingAmount,
+    unit: notice.unit,
+    availableFrom: notice.availableFrom,
+    availableUntil: notice.availableUntil,
+    submissionDeadline: notice.submissionDeadline,
+    policyVersion: notice.policyVersion,
+    legalBasis: notice.legalBasis,
+    isRenotice: notice.isRenotice,
+  };
+}
+
+export async function auditAnnualLeavePromotionReadiness({
+  year = Number(todayInSeoul().slice(0, 4)),
+  apply = false,
+  prisma = getPrisma(),
+}: {
+  year?: number;
+  apply?: boolean;
+  prisma?: PromotionDb;
+} = {}) {
+  let diagnostics = await collectAnnualPromotionReadinessDiagnostics({
+    year,
+    prisma,
+  });
+  const applied = {
+    createdScheduledNotices: 0,
+    skippedScheduledNotices: 0,
+    createdMissingNotifications: 0,
+    repairedNotificationTexts: 0,
+    linkedSubmittedNotices: 0,
+    cancelledSubmittedRenotices: 0,
+  };
+
+  if (apply) {
+    const scheduleResult = await scheduleAnnualLeavePromotionNotices({
+      year,
+      dryRun: false,
+      prisma,
+    });
+    applied.createdScheduledNotices = scheduleResult.created;
+    applied.skippedScheduledNotices = scheduleResult.skipped;
+
+    diagnostics = await collectAnnualPromotionReadinessDiagnostics({
+      year,
+      prisma,
+    });
+
+    const noticeById = new Map(diagnostics.notices.map((notice) => [notice.id, notice]));
+    const notificationRepairNoticeIds = new Set(
+      diagnostics.issues
+        .filter(
+          (issue) =>
+            issue.noticeId &&
+            (issue.code === "INVALID_NOTIFICATION_LINK" ||
+              issue.code === "BROKEN_KOREAN_NOTIFICATION_TEXT"),
+        )
+        .map((issue) => issue.noticeId as string),
+    );
+
+    for (const issue of diagnostics.issues) {
+      if (issue.code !== "SENT_NOTICE_MISSING_NOTIFICATION" || !issue.noticeId) {
+        continue;
+      }
+
+      const notice = noticeById.get(issue.noticeId);
+      if (!notice) {
+        continue;
+      }
+
+      await createAnnualUsePlanRequestNotification({
+        notice: noticeToNotificationInput(notice),
+        prisma,
+      });
+      applied.createdMissingNotifications += 1;
+    }
+
+    for (const noticeId of notificationRepairNoticeIds) {
+      const notice = noticeById.get(noticeId);
+      if (!notice?.notificationId) {
+        continue;
+      }
+
+      const content = buildAnnualUsePlanNoticeContent(
+        noticeToNotificationInput(notice),
+      );
+      const contentRecord = content as Record<string, unknown>;
+      await prisma.notification.update({
+        where: { id: notice.notificationId },
+        data: {
+          title: String(contentRecord.title),
+          message: String(contentRecord.message),
+          linkUrl: ANNUAL_USE_PLAN_LINK_URL,
+        },
+      });
+      await prisma.annualLeavePromotionNotice.update({
+        where: { id: notice.id },
+        data: { noticeContent: content },
+      });
+      applied.repairedNotificationTexts += 1;
+    }
+
+    const submittedPlans = diagnostics.plans.filter(
+      (plan) => plan.status === "SUBMITTED",
+    );
+
+    for (const plan of submittedPlans) {
+      const submittedAt = plan.submittedAt ?? new Date();
+      const linked = await prisma.annualLeavePromotionNotice.updateMany({
+        where: {
+          userId: plan.userId,
+          referenceYear: plan.referenceYear,
+          noticeType: { in: USE_PLAN_NOTICE_TYPES },
+          OR: [
+            { annualLeaveUsePlanId: { not: plan.id } },
+            { annualLeaveUsePlanId: null },
+            { submittedAt: null },
+          ],
+        },
+        data: {
+          annualLeaveUsePlanId: plan.id,
+          submittedAt,
+        },
+      });
+      const cancelled = await prisma.annualLeavePromotionNotice.updateMany({
+        where: {
+          userId: plan.userId,
+          referenceYear: plan.referenceYear,
+          noticeType: { in: ["ANNUAL_SECOND_NOTICE", "MONTHLY_SECOND_NOTICE"] },
+          status: "SCHEDULED",
+        },
+        data: {
+          status: "CANCELLED",
+          cancelledAt: submittedAt,
+          annualLeaveUsePlanId: plan.id,
+          submittedAt,
+        },
+      });
+
+      applied.linkedSubmittedNotices += linked.count;
+      applied.cancelledSubmittedRenotices += cancelled.count;
+    }
+
+    diagnostics = await collectAnnualPromotionReadinessDiagnostics({
+      year,
+      prisma,
+    });
+  }
+
+  return {
+    ...diagnostics,
+    apply,
+    applied,
+  };
 }
 
 export async function getUsePlanContext({

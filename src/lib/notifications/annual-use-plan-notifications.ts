@@ -13,6 +13,8 @@ type NotificationDb = PrismaClient | Prisma.TransactionClient;
 export const ANNUAL_LEAVE_PROMOTION_POLICY_VERSION =
   "KR-LSA-60-61-2025-10-23";
 
+export const ANNUAL_USE_PLAN_LINK_URL = "/leaves/me/use-plan";
+
 export const ANNUAL_LEAVE_PROMOTION_LEGAL_BASIS =
   "근로기준법 제60조 및 제61조, 국가법령정보센터 2025-10-23 시행 조문 기준";
 
@@ -101,6 +103,14 @@ export function getAnnualUsePlanNoticeMessage(
   return `미사용 연차 ${remainingAmount}의 사용계획을 ${deadlineText} 제출해 주세요. 사용 가능 기간은 ${period}입니다.`;
 }
 
+export function hasBrokenAnnualUsePlanNoticeText(value: string | null | undefined) {
+  if (!value) {
+    return false;
+  }
+
+  return /[\uFFFD\u5360\u7B4C\u7344\uF900-\uFAFF]/.test(value);
+}
+
 export function buildAnnualUsePlanNoticeContent(
   notice: PromotionNoticeForNotification,
 ) {
@@ -175,7 +185,7 @@ export async function createAnnualUsePlanRequestNotification({
     priority,
     title,
     message,
-    linkUrl: "/leaves/me/use-plan",
+    linkUrl: ANNUAL_USE_PLAN_LINK_URL,
     metadata: buildNotificationMetadata(notice),
   });
   const displayedAt = new Date();

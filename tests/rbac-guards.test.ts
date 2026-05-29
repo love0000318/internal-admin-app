@@ -129,14 +129,22 @@ describe("rbac guards", () => {
     expect(canAccessRoute(owner, "/admin/work-management")).toBe(true);
     expect(canAccessRoute(owner, "/admin/leaves/grants")).toBe(true);
     expect(canAccessRoute(owner, "/admin/leaves/birthday-policy")).toBe(true);
+    expect(canAccessRoute(owner, "/admin/leaves/promotions")).toBe(true);
+    expect(canAccessRoute(owner, "/admin/reports/leaves/promotions")).toBe(true);
     expect(canAccessRoute(managerInLeadTeam, "/notifications")).toBe(true);
     expect(canAccessRoute(lead, "/organization")).toBe(false);
     expect(canAccessRoute(lead, "/admin/work-management")).toBe(false);
     expect(canAccessRoute(lead, "/admin/leaves/grants")).toBe(false);
     expect(canAccessRoute(lead, "/admin/leaves/birthday-policy")).toBe(false);
+    expect(canAccessRoute(lead, "/admin/leaves/promotions")).toBe(false);
+    expect(canAccessRoute(lead, "/admin/reports/leaves/promotions")).toBe(true);
     expect(canAccessRoute(lead, "/admin/leaves/balances")).toBe(true);
     expect(canAccessRoute(lead, "/leaves/approvals")).toBe(true);
     expect(canAccessRoute(managerInLeadTeam, "/leaves/approvals")).toBe(false);
+    expect(canAccessRoute(managerInLeadTeam, "/admin/reports/leaves/promotions")).toBe(
+      false,
+    );
+    expect(canAccessRoute(externalPartner, "/admin/reports/leaves/promotions")).toBe(false);
     expect(canAccessRoute(managerInLeadTeam, "/admin/work-management")).toBe(false);
     expect(canAccessRoute(externalPartner, "/leaves/calendar")).toBe(false);
     expect(canAccessRoute(managerInLeadTeam, "/tasks")).toBe(false);

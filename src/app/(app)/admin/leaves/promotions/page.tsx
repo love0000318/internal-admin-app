@@ -65,10 +65,17 @@ export default async function AnnualLeavePromotionsPage({
       orderBy: { updatedAt: "desc" },
     }),
   ]);
+  const candidateByUserId = new Map(
+    candidates.map((candidate) => [candidate.userId, candidate]),
+  );
+  const uniqueCandidates = [...candidateByUserId.values()];
   const sentCount = notices.filter((notice) => notice.status === "SENT").length;
   const scheduledCount = notices.filter((notice) => notice.status === "SCHEDULED").length;
   const submittedCount = plans.filter((plan) => plan.status === "SUBMITTED").length;
-  const totalExpiringAmount = candidates.reduce(
+  const pendingUsePlanCandidateCount = uniqueCandidates.filter(
+    (candidate) => candidate.usePlanStatus !== "SUBMITTED",
+  ).length;
+  const totalExpiringAmount = uniqueCandidates.reduce(
     (sum, candidate) => sum + candidate.remainingAmount,
     0,
   );
@@ -118,7 +125,7 @@ export default async function AnnualLeavePromotionsPage({
       <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
         <div className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm">
           <p className="text-sm text-neutral-500">촉진 대상자</p>
-          <p className="mt-2 text-2xl font-semibold">{candidates.length}</p>
+          <p className="mt-2 text-2xl font-semibold">{uniqueCandidates.length}</p>
         </div>
         <div className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm">
           <p className="text-sm text-neutral-500">알림 예정</p>
@@ -129,8 +136,10 @@ export default async function AnnualLeavePromotionsPage({
           <p className="mt-2 text-2xl font-semibold">{sentCount}</p>
         </div>
         <div className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm">
-          <p className="text-sm text-neutral-500">사용계획 제출</p>
-          <p className="mt-2 text-2xl font-semibold">{submittedCount}</p>
+          <p className="text-sm text-neutral-500">미제출 대상</p>
+          <p className="mt-2 text-2xl font-semibold">
+            {pendingUsePlanCandidateCount}
+          </p>
         </div>
         <div className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm">
           <p className="text-sm text-neutral-500">소멸 예정 합계</p>
@@ -139,6 +148,11 @@ export default async function AnnualLeavePromotionsPage({
           </p>
         </div>
       </div>
+
+      <p className="mt-3 text-sm leading-relaxed text-neutral-500">
+        사용계획 제출 완료 {submittedCount}명은 신규 촉진 알림 스케줄 대상에서
+        제외됩니다.
+      </p>
 
       <div className="mt-6 overflow-x-auto rounded-lg border border-neutral-200 bg-white shadow-sm">
         <div className="border-b border-neutral-100 px-4 py-3">

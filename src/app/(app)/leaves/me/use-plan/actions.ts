@@ -165,6 +165,7 @@ export async function submitAnnualLeaveUsePlan(formData: FormData) {
 
   revalidatePath("/leaves/me/use-plan");
   revalidatePath("/admin/leaves/promotions");
+  revalidatePath("/admin/reports/leaves/promotions");
 
   redirect("/leaves/me/use-plan?success=submitted");
 }
@@ -219,6 +220,7 @@ export async function cancelAnnualLeaveUsePlan(formData: FormData) {
 
   revalidatePath("/leaves/me/use-plan");
   revalidatePath("/admin/leaves/promotions");
+  revalidatePath("/admin/reports/leaves/promotions");
 
   redirect("/leaves/me/use-plan?success=cancelled");
 }

@@ -7,6 +7,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { getPrisma } from "@/lib/db/prisma";
 import { JOB_NAMES, isManualJobName } from "@/lib/jobs/job-names";
 import { runJobWithTracking } from "@/lib/jobs/job-runner";
+import { scheduleAnnualLeavePromotionNotices } from "@/lib/leave/annual-promotion";
 import { autoConfirmPendingLeaveRequestsForDate } from "@/lib/leave/auto-confirm";
 import { grantBirthdayHalfDaysForDate } from "@/lib/leave/birthday-half-day";
 import { requireOwner } from "@/lib/rbac/server-guards";
@@ -75,18 +76,26 @@ async function runSupportedDryRun(jobName: string) {
   }
 
   if (jobName === JOB_NAMES.SCHEDULE_ANNUAL_PROMOTION_NOTICES) {
-    const [activeUsers, scheduledNotices] = await Promise.all([
-      prisma.user.count({ where: { status: "ACTIVE", role: { not: "EXTERNAL_PARTNER" } } }),
-      prisma.annualLeavePromotionNotice.count({ where: { status: "SCHEDULED" } }),
-    ]);
+    const result = await scheduleAnnualLeavePromotionNotices({
+      dryRun: true,
+      prisma,
+    });
+    const uniqueUserIds = new Set(
+      result.candidates.map((candidate) => candidate.userId),
+    );
+    const submittedUsePlanCandidates = result.candidates.filter(
+      (candidate) => candidate.usePlanStatus === "SUBMITTED",
+    ).length;
 
     return {
       status: "SUCCESS" as const,
-      checkedCount: activeUsers,
-      skippedCount: scheduledNotices,
+      checkedCount: uniqueUserIds.size,
+      skippedCount: submittedUsePlanCandidates,
       resultSummary: {
-        activeUsers,
-        existingScheduledNotices: scheduledNotices,
+        year: result.year,
+        promotionTargetUsers: uniqueUserIds.size,
+        noticeCandidates: result.candidates.length,
+        submittedUsePlanNoticeCandidates: submittedUsePlanCandidates,
         dryRun: true,
       },
     };

@@ -26,6 +26,7 @@
     "leave:ledger:rebuild": "tsx scripts/rebuild-leave-ledger.ts",
     "leave:ledger:validate": "tsx scripts/validate-leave-ledger.ts",
     "leave:promotion:schedule": "tsx scripts/schedule-annual-leave-promotion-notices.ts",
+    "jobs:audit-annual-promotion-readiness": "tsx scripts/audit-annual-leave-promotion-readiness.ts",
     "jobs:schedule-annual-promotion-notices": "tsx scripts/schedule-annual-leave-promotion-notices.ts",
     "jobs:send-annual-promotion-notices": "tsx scripts/send-annual-leave-promotion-notices.ts",
     "jobs:expire-annual-leaves": "tsx scripts/expire-annual-leaves.ts",

@@ -35,6 +35,18 @@ pnpm jobs:schedule-annual-promotion-notices -- --dry-run
 pnpm jobs:schedule-annual-promotion-notices -- --year=2026
 ```
 
+촉진 알림/사용계획 증적 진단:
+
+```bash
+pnpm jobs:audit-annual-promotion-readiness -- --year=2026
+pnpm jobs:audit-annual-promotion-readiness -- --year=2026 --apply
+```
+
+진단 job은 기본 dry-run이며 누락된 예정 알림, 잘못된 알림 링크, 깨진 한글
+문구, 제출된 사용계획과 고지 증적 연결 누락을 확인한다. `--apply`는 누락된
+스케줄 생성, 알림 링크/문구 보정, 제출 증적 연결만 수행하며 데이터를 삭제하지
+않는다.
+
 예정일이 지난 알림을 인앱 Notification으로 발송:
 
 ```bash
@@ -60,6 +72,7 @@ pnpm jobs:expire-annual-leaves
 - DRAFT 또는 미제출 상태에서는 제출 가능하다.
 - SUBMITTED 상태는 바로 수정할 수 없으며, 필요한 경우 제출 취소 후 다시 제출한다.
 - 총 계획 수량은 소멸 예정 연차를 초과할 수 없다.
+- SUBMITTED 사용계획이 있는 구성원은 신규 촉진 알림 예정 생성 대상에서 제외한다.
 
 ## OWNER 확인 화면
 

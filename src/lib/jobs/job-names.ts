@@ -2,6 +2,7 @@ export const JOB_NAMES = {
   BIRTHDAY_HALF_DAY_GRANTS: "birthday-half-day-grants",
   SCHEDULE_ANNUAL_PROMOTION_NOTICES: "schedule-annual-promotion-notices",
   SEND_ANNUAL_PROMOTION_NOTICES: "send-annual-promotion-notices",
+  AUDIT_ANNUAL_PROMOTION_READINESS: "audit-annual-promotion-readiness",
   EXPIRE_ANNUAL_LEAVES: "expire-annual-leaves",
   FIX_FISCAL_YEAR_LEAVE_EXPIRATIONS: "fix-fiscal-year-leave-expirations",
   FIX_BIRTHDAY_HALF_DAY_USABLE_RANGES: "fix-birthday-half-day-usable-ranges",

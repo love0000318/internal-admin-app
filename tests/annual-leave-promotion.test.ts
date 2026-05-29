@@ -1,7 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 
 import {
+  collectAnnualPromotionReadinessDiagnostics,
+  findAnnualPromotionCandidates,
+  scheduleAnnualLeavePromotionNotices,
+  sendDueAnnualLeavePromotionNotices,
   calculateAnnualPromotionNoticeDate,
   calculateAnnualSecondPromotionNoticeDate,
   calculateMonthlyFirstPromotionNoticeDate,
@@ -13,9 +17,150 @@ import {
 import { parseAnnualUsePlanFormItems } from "@/lib/leave/annual-use-plan-form-data";
 import { calculateAnnualUsePlanItemAmount } from "@/lib/leave/annual-use-plan-calculator";
 import {
+  ANNUAL_USE_PLAN_LINK_URL,
   ANNUAL_LEAVE_PROMOTION_LEGAL_REVIEW_NOTE,
   buildAnnualUsePlanNoticeContent,
+  hasBrokenAnnualUsePlanNoticeText,
 } from "@/lib/notifications/annual-use-plan-notifications";
+
+const promotionPolicy = {
+  promotionEnabled: true,
+  expirationEnabled: true,
+  fiscalYearStartMonth: 1,
+  fiscalYearStartDay: 1,
+  annualPromotionMonthsBeforeExpiration: 6,
+  monthlyPromotionFirstMonthsBeforeExpiration: 3,
+  monthlyPromotionSecondMonthsBeforeExpiration: 1,
+  memberReminderEnabled: true,
+  usePlanReminderDaysBefore: 10,
+};
+
+const promotionUsers = [
+  {
+    id: "user-submitted",
+    name: "제출자",
+    email: "submitted@example.com",
+    role: "MANAGER",
+    status: "ACTIVE",
+    title: "매니저",
+    hireDate: new Date("2024-01-01T00:00:00.000Z"),
+    team: { name: "운영팀" },
+    profile: null,
+    employmentProfile: null,
+  },
+  {
+    id: "user-open",
+    name: "미제출자",
+    email: "open@example.com",
+    role: "MANAGER",
+    status: "ACTIVE",
+    title: null,
+    hireDate: new Date("2024-01-01T00:00:00.000Z"),
+    team: { name: "운영팀" },
+    profile: null,
+    employmentProfile: null,
+  },
+  {
+    id: "user-zero",
+    name: "잔여없음",
+    email: "zero@example.com",
+    role: "MANAGER",
+    status: "ACTIVE",
+    title: null,
+    hireDate: new Date("2024-01-01T00:00:00.000Z"),
+    team: { name: "운영팀" },
+    profile: null,
+    employmentProfile: null,
+  },
+];
+
+type FindLedgerArgs = { where: { userId: string } };
+type FindUsePlanArgs = {
+  where: { userId_referenceYear: { userId: string; referenceYear: number } };
+};
+type CreateNoticeArgs = { data: Record<string, unknown> };
+
+function createAnnualPromotionPrismaMock() {
+  const createdNotices: Record<string, unknown>[] = [];
+  const plans = new Map([
+    [
+      "user-submitted",
+      {
+        id: "plan-submitted",
+        userId: "user-submitted",
+        referenceYear: 2027,
+        status: "SUBMITTED",
+        submittedAt: new Date("2027-06-20T00:00:00.000Z"),
+      },
+    ],
+  ]);
+
+  return {
+    prisma: {
+      annualLeavePolicy: {
+        findFirst: vi.fn(async () => promotionPolicy),
+      },
+      user: {
+        findMany: vi.fn(async () => promotionUsers),
+      },
+      leaveLedger: {
+        findMany: vi.fn(async (args: FindLedgerArgs) => {
+          if (args.where.userId === "user-zero") {
+            return [
+              { eventType: "GRANTED", amount: 1, metadata: null },
+              { eventType: "EXPIRED", amount: 1, metadata: null },
+            ];
+          }
+
+          return [{ eventType: "GRANTED", amount: 3, metadata: null }];
+        }),
+        findUnique: vi.fn(async () => null),
+      },
+      annualLeaveUsePlan: {
+        findUnique: vi.fn(async (args: FindUsePlanArgs) => {
+          return plans.get(args.where.userId_referenceYear.userId) ?? null;
+        }),
+      },
+      annualLeavePromotionNotice: {
+        findUnique: vi.fn(async () => null),
+        create: vi.fn(async (args: CreateNoticeArgs) => {
+          const notice = {
+            id: `notice-${createdNotices.length + 1}`,
+            ...args.data,
+          };
+          createdNotices.push(notice);
+          return notice;
+        }),
+      },
+      auditLog: {
+        create: vi.fn(async () => ({})),
+      },
+    },
+    createdNotices,
+  };
+}
+
+function dueNotice(overrides: Record<string, unknown>) {
+  return {
+    id: "notice-open",
+    userId: "user-open",
+    referenceYear: 2027,
+    noticeType: "ANNUAL_USE_PLAN_REQUEST",
+    status: "SCHEDULED",
+    scheduledDate: new Date("2027-06-30T00:00:00.000Z"),
+    expirationDate: new Date("2027-12-31T00:00:00.000Z"),
+    remainingAmount: 3,
+    unit: "DAY",
+    availableFrom: new Date("2027-01-01T00:00:00.000Z"),
+    availableUntil: new Date("2027-12-31T00:00:00.000Z"),
+    submissionDeadline: new Date("2027-07-10T00:00:00.000Z"),
+    policyVersion: "KR-LSA-60-61-2025-10-23",
+    legalBasis: "근로기준법 제60조 및 제61조",
+    isRenotice: false,
+    user: { id: "user-open" },
+    ...overrides,
+  };
+}
 
 describe("annual leave promotion operations", () => {
   it("calculates annual and monthly promotion notice dates", () => {
@@ -68,6 +213,190 @@ describe("annual leave promotion operations", () => {
       submissionDeadline: "2027-07-10",
       legalReviewNote: ANNUAL_LEAVE_PROMOTION_LEGAL_REVIEW_NOTE,
     });
+  });
+
+  it("calculates promotion candidates by remaining annual balance and submitted-plan status", async () => {
+    const { prisma } = createAnnualPromotionPrismaMock();
+
+    const candidates = await findAnnualPromotionCandidates({
+      year: 2027,
+      prisma: prisma as never,
+    });
+
+    expect(candidates).toHaveLength(4);
+    expect(candidates.map((candidate) => candidate.userId)).toEqual([
+      "user-submitted",
+      "user-submitted",
+      "user-open",
+      "user-open",
+    ]);
+    expect(candidates.find((candidate) => candidate.userId === "user-zero")).toBeUndefined();
+    expect(
+      candidates
+        .filter((candidate) => candidate.userId === "user-submitted")
+        .every((candidate) => candidate.usePlanStatus === "SUBMITTED"),
+    ).toBe(true);
+    expect(
+      candidates
+        .filter((candidate) => candidate.userId === "user-open")
+        .every((candidate) => candidate.usePlanStatus === null),
+    ).toBe(true);
+  });
+
+  it("does not create new promotion notice schedules for submitted use plans", async () => {
+    const { prisma, createdNotices } = createAnnualPromotionPrismaMock();
+
+    const result = await scheduleAnnualLeavePromotionNotices({
+      year: 2027,
+      prisma: prisma as never,
+    });
+
+    expect(result.created).toBe(2);
+    expect(result.skipped).toBe(2);
+    expect(createdNotices).toHaveLength(2);
+    expect(createdNotices.map((notice) => notice.userId)).toEqual([
+      "user-open",
+      "user-open",
+    ]);
+  });
+
+  it("creates request notifications and skips due notices after use-plan submission", async () => {
+    const notifications: Record<string, unknown>[] = [];
+    const updates: Record<string, unknown>[] = [];
+    const prisma = {
+      annualLeavePromotionNotice: {
+        findMany: vi.fn(async () => [
+          dueNotice({ id: "notice-submitted", userId: "user-submitted" }),
+          dueNotice({ id: "notice-open", userId: "user-open" }),
+        ]),
+        update: vi.fn(async (args: { where: { id: string }; data: Record<string, unknown> }) => {
+          updates.push({ id: args.where.id, ...args.data });
+          return { id: args.where.id, ...args.data };
+        }),
+      },
+      annualLeaveUsePlan: {
+        findUnique: vi.fn(async (args: FindUsePlanArgs) => {
+          if (args.where.userId_referenceYear.userId === "user-submitted") {
+            return {
+              id: "plan-submitted",
+              status: "SUBMITTED",
+              submittedAt: new Date("2027-06-20T00:00:00.000Z"),
+            };
+          }
+
+          return null;
+        }),
+      },
+      notification: {
+        findFirst: vi.fn(async () => null),
+        create: vi.fn(async (args: { data: Record<string, unknown> }) => {
+          const notification = {
+            id: `notification-${notifications.length + 1}`,
+            ...args.data,
+          };
+          notifications.push(notification);
+          return notification;
+        }),
+      },
+      auditLog: {
+        create: vi.fn(async () => ({})),
+      },
+    };
+
+    const result = await sendDueAnnualLeavePromotionNotices({
+      date: "2027-07-01",
+      prisma: prisma as never,
+    });
+
+    expect(result).toMatchObject({ checked: 2, sent: 1, skipped: 1 });
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0]).toMatchObject({
+      userId: "user-open",
+      title: "연차 사용계획 제출 요청",
+      linkUrl: ANNUAL_USE_PLAN_LINK_URL,
+    });
+    expect(String(notifications[0].message)).not.toMatch(/�|[占筌獄]|[利泥湲諛痍]/);
+    expect(updates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "notice-submitted", status: "SKIPPED" }),
+        expect.objectContaining({ id: "notice-open", status: "SENT" }),
+      ]),
+    );
+  });
+
+  it("diagnoses missing schedules, bad links, broken Korean, and unlinked submissions", async () => {
+    const submittedPlan = {
+      id: "plan-submitted",
+      userId: "user-submitted",
+      referenceYear: 2027,
+      status: "SUBMITTED",
+      submittedAt: new Date("2027-06-20T00:00:00.000Z"),
+    };
+    const prisma = {
+      annualLeavePolicy: {
+        findFirst: vi.fn(async () => promotionPolicy),
+      },
+      user: {
+        findMany: vi.fn(async () => promotionUsers.slice(0, 2)),
+      },
+      leaveLedger: {
+        findMany: vi.fn(async () => [
+          { eventType: "GRANTED", amount: 3, metadata: null },
+        ]),
+      },
+      annualLeaveUsePlan: {
+        findUnique: vi.fn(async (args: FindUsePlanArgs) => {
+          return args.where.userId_referenceYear.userId === "user-submitted"
+            ? submittedPlan
+            : null;
+        }),
+        findMany: vi.fn(async () => [submittedPlan]),
+      },
+      annualLeavePromotionNotice: {
+        findMany: vi.fn(async () => [
+          dueNotice({
+            id: "notice-open-first",
+            userId: "user-open",
+            status: "SENT",
+            notificationId: null,
+          }),
+          dueNotice({
+            id: "notice-submitted-first",
+            userId: "user-submitted",
+            status: "SENT",
+            notificationId: "notification-bad",
+            annualLeaveUsePlanId: null,
+            submittedAt: null,
+          }),
+        ]),
+      },
+      notification: {
+        findMany: vi.fn(async () => [
+          {
+            id: "notification-bad",
+            userId: "user-submitted",
+            title: "占쏙옙 사용계획",
+            message: "깨진 본문 �",
+            linkUrl: "/wrong",
+          },
+        ]),
+      },
+    };
+
+    const diagnostics = await collectAnnualPromotionReadinessDiagnostics({
+      year: 2027,
+      prisma: prisma as never,
+    });
+
+    expect(diagnostics.issues.map((issue) => issue.code).sort()).toEqual([
+      "BROKEN_KOREAN_NOTIFICATION_TEXT",
+      "INVALID_NOTIFICATION_LINK",
+      "MISSING_SCHEDULED_NOTICE",
+      "SENT_NOTICE_MISSING_NOTIFICATION",
+      "SUBMITTED_PLAN_NOT_LINKED_TO_NOTICE",
+    ]);
+    expect(hasBrokenAnnualUsePlanNoticeText("깨진 본문 �")).toBe(true);
+    expect(hasBrokenAnnualUsePlanNoticeText("연차 사용계획 제출 요청")).toBe(false);
   });
 
   it("calculates use-plan reminder dates", () => {
