@@ -90,6 +90,12 @@ export default async function ProfilePage() {
             외부 캘린더 연동
           </Link>
           <Link
+            href="/profile/security"
+            className="inline-flex min-h-10 items-center justify-center rounded-md border border-neutral-300 bg-white px-4 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
+          >
+            비밀번호 변경
+          </Link>
+          <Link
             href="/profile/edit"
             className="inline-flex min-h-10 items-center justify-center rounded-md bg-neutral-950 px-4 text-sm font-medium text-white"
           >

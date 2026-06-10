@@ -63,7 +63,14 @@ export const navigationSections: NavigationSection[] = [
         href: "/profile",
         iconKey: "profile",
         allowedRoles: INTERNAL_ROLES,
-        matchPatterns: ["/profile"],
+        matchPatterns: ["/profile/edit", "/profile/calendar", "/profile/confirm"],
+      },
+      {
+        id: "profile-security",
+        label: "비밀번호 변경",
+        href: "/profile/security",
+        iconKey: "security",
+        allowedRoles: INTERNAL_ROLES,
       },
       {
         id: "notifications",
