@@ -25,6 +25,10 @@ import {
   getEmployeeMutationBlockReason,
   wouldCreateTeamCycle,
 } from "@/lib/organization/rules";
+import {
+  EmployeePasswordResetError,
+  resetEmployeePasswordByOwner,
+} from "@/lib/organization/password-reset";
 import { isEligibleTeamLeadCandidate } from "@/lib/organization/permissions";
 import {
   employeeUpdateSchema,
@@ -972,6 +976,63 @@ export async function updateEmployeeProfile(formData: FormData) {
   }
 
   redirect(`/organization/employees/${user.id}?success=employee-updated`);
+}
+
+function getPasswordResetErrorSearchParam(error: unknown) {
+  if (!(error instanceof EmployeePasswordResetError)) {
+    return "password-reset-failed";
+  }
+
+  switch (error.code) {
+    case "INVALID_INPUT":
+      return "password-reset-invalid";
+    case "PASSWORD_MISMATCH":
+      return "password-reset-mismatch";
+    case "PASSWORD_POLICY":
+      return "password-reset-policy";
+    case "STEP_UP_REQUIRED":
+      return "password-reset-step-up-required";
+    case "TARGET_NOT_FOUND":
+      return "password-reset-target-not-found";
+    case "TARGET_DELETED":
+      return "password-reset-target-deleted";
+    case "FORBIDDEN":
+      return "password-reset-forbidden";
+  }
+}
+
+export async function resetEmployeePassword(formData: FormData) {
+  const actor = await requireOwner();
+  const userId = getRequiredFormValue(formData, "userId");
+
+  if (!userId) {
+    redirect("/organization/employees?error=invalid");
+  }
+
+  try {
+    await resetEmployeePasswordByOwner({
+      prisma: getPrisma(),
+      actor: {
+        id: actor.id,
+        role: actor.role,
+        status: actor.status,
+      },
+      targetUserId: userId,
+      temporaryPassword: getRequiredFormValue(formData, "temporaryPassword"),
+      confirmTemporaryPassword: getRequiredFormValue(
+        formData,
+        "confirmTemporaryPassword",
+      ),
+      stepUpPassword: getRequiredFormValue(formData, "stepUpPassword"),
+      assertStepUpPassword,
+    });
+  } catch (error) {
+    redirect(
+      `/organization/employees/${userId}?error=${getPasswordResetErrorSearchParam(error)}`,
+    );
+  }
+
+  redirect(`/organization/employees/${userId}?success=password-reset`);
 }
 
 export async function deactivateEmployee(formData: FormData) {

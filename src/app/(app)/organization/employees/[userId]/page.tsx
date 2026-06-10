@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import {
   deactivateEmployee,
   permanentlyDeleteEmployee,
+  resetEmployeePassword,
   updateEmployeeProfile,
 } from "@/app/(app)/organization/actions";
 import { RoleLabel, UserStatusBadge } from "@/components/ui/status-badge";
@@ -89,23 +90,23 @@ export default async function EmployeeDetailPage({
     .filter((team) => leadVisibleTeamIds.includes(team.id))
     .map((team) => team.name)
     .sort();
+  const errorMessage = error ? getEmployeeDetailErrorMessage(error) : null;
+  const successMessage = success
+    ? getEmployeeDetailSuccessMessage(success)
+    : null;
 
   return (
     <section>
       <p className="text-sm font-medium text-neutral-500">직원 상세</p>
       <h1 className="mt-2 text-2xl font-semibold tracking-normal">{displayName}</h1>
-      {error ? (
+      {errorMessage ? (
         <p className="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-          {error === "forbidden-change"
-            ? "자기 자신 또는 마지막 OWNER 보호 규칙 때문에 변경할 수 없습니다."
-            : error === "future-birth-date"
-              ? "생일은 미래 날짜로 입력할 수 없습니다."
-            : "직원 정보를 저장할 수 없습니다."}
+          {errorMessage}
         </p>
       ) : null}
-      {success ? (
+      {successMessage ? (
         <p className="mt-4 rounded-md bg-green-50 px-3 py-2 text-sm text-green-700">
-          직원 정보가 저장되었습니다.
+          {successMessage}
         </p>
       ) : null}
 
@@ -159,6 +160,68 @@ export default async function EmployeeDetailPage({
           <dd className="mt-1 font-medium">{toDisplayDate(user.updatedAt)}</dd>
         </div>
       </dl>
+
+      {!isDeletedUser ? (
+        <section className="mt-6 rounded-lg border border-neutral-200 bg-white p-4 shadow-sm">
+          <div>
+            <h2 className="text-lg font-semibold">비밀번호 초기화</h2>
+            <p className="mt-1 break-keep text-sm leading-relaxed text-neutral-600">
+              OWNER 본인 확인 후 새 임시 비밀번호를 설정합니다. 기존 비밀번호는
+              조회하거나 표시하지 않습니다.
+            </p>
+          </div>
+          <dl className="mt-4 grid gap-3 text-sm md:grid-cols-2">
+            <div>
+              <dt className="text-neutral-500">대상 직원</dt>
+              <dd className="mt-1 font-medium">{user.name}</dd>
+            </div>
+            <div>
+              <dt className="text-neutral-500">이메일</dt>
+              <dd className="mt-1 break-all font-medium">{user.email}</dd>
+            </div>
+          </dl>
+          <form action={resetEmployeePassword} className="mt-4 grid gap-3 md:grid-cols-2">
+            <input name="userId" type="hidden" value={user.id} />
+            <label className="grid gap-1 text-sm font-medium">
+              새 임시 비밀번호
+              <input
+                name="temporaryPassword"
+                type="password"
+                autoComplete="new-password"
+                minLength={8}
+                className="h-10 rounded-md border px-3 text-sm"
+                required
+              />
+            </label>
+            <label className="grid gap-1 text-sm font-medium">
+              새 임시 비밀번호 확인
+              <input
+                name="confirmTemporaryPassword"
+                type="password"
+                autoComplete="new-password"
+                minLength={8}
+                className="h-10 rounded-md border px-3 text-sm"
+                required
+              />
+            </label>
+            <label className="grid gap-1 text-sm font-medium md:col-span-2">
+              OWNER 본인 확인 비밀번호
+              <input
+                name="stepUpPassword"
+                type="password"
+                autoComplete="current-password"
+                className="h-10 rounded-md border px-3 text-sm"
+                required
+              />
+            </label>
+            <div className="flex justify-end md:col-span-2">
+              <button className="h-10 rounded-md bg-neutral-950 px-4 text-sm font-medium text-white">
+                비밀번호 초기화
+              </button>
+            </div>
+          </form>
+        </section>
+      ) : null}
 
       <div className="mt-6 grid gap-4 lg:grid-cols-2">
         <section className="rounded-lg border border-neutral-200 bg-white p-4 shadow-sm">
@@ -462,6 +525,41 @@ export default async function EmployeeDetailPage({
       ) : null}
     </section>
   );
+}
+
+function getEmployeeDetailErrorMessage(error: string) {
+  switch (error) {
+    case "forbidden-change":
+      return "자기 자신 또는 마지막 OWNER 보호 규칙 때문에 변경할 수 없습니다.";
+    case "future-birth-date":
+      return "생일은 미래 날짜로 입력할 수 없습니다.";
+    case "password-reset-invalid":
+      return "비밀번호 초기화 입력값을 확인해 주세요.";
+    case "password-reset-mismatch":
+      return "새 임시 비밀번호와 확인 입력이 일치하지 않습니다.";
+    case "password-reset-policy":
+      return "임시 비밀번호는 8자 이상이며 영문, 숫자, 특수문자를 포함해야 합니다.";
+    case "password-reset-step-up-required":
+      return "OWNER 본인 확인 비밀번호가 올바르지 않습니다.";
+    case "password-reset-target-not-found":
+      return "대상 직원을 찾을 수 없습니다.";
+    case "password-reset-target-deleted":
+      return "삭제된 계정의 비밀번호는 초기화할 수 없습니다.";
+    case "password-reset-forbidden":
+      return "비밀번호 초기화 권한이 없습니다.";
+    case "password-reset-failed":
+      return "비밀번호 초기화에 실패했습니다. 입력값을 확인한 뒤 다시 시도해 주세요.";
+    default:
+      return "직원 정보를 저장할 수 없습니다.";
+  }
+}
+
+function getEmployeeDetailSuccessMessage(success: string) {
+  if (success === "password-reset") {
+    return "비밀번호가 초기화되었습니다. 새 임시 비밀번호는 해시로만 저장됩니다.";
+  }
+
+  return "직원 정보가 저장되었습니다.";
 }
 
 function ImpactItem({ label, value }: { label: string; value: number }) {
