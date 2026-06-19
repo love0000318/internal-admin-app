@@ -22,6 +22,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   "min-days": "휴가 정책의 최소 요청 일수보다 적습니다.",
   "max-days": "휴가 정책의 최대 요청 일수를 초과했습니다.",
   "attachment-required": "이 휴가 유형은 증명자료 제출이 필요합니다.",
+  "attachment-storage": "증명자료 저장 중 문제가 발생했습니다. 관리자에게 문의해 주세요.",
   "invalid-file-type": "허용되지 않는 파일 형식입니다.",
   "file-too-large": "첨부파일은 최대 10MB까지 업로드할 수 있습니다.",
   "empty-file": "비어 있는 파일은 제출할 수 없습니다.",
@@ -35,6 +36,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   "unit-not-allowed": "선택한 사용 단위로 요청할 수 없는 맞춤휴가입니다.",
   "unsupported-unit": "시간/분 단위 맞춤휴가는 다음 단계에서 제공합니다.",
   "half-day-required": "반차 요청은 오전/오후를 선택해 주세요.",
+  "reserve-forces-type-missing": "예비군 휴가 유형을 찾을 수 없습니다. 관리자에게 문의해 주세요.",
 };
 
 export default async function NewLeaveRequestPage({

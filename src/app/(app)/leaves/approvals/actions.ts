@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 
 import { Prisma } from "@/generated/prisma/client";
 import { getPrisma } from "@/lib/db/prisma";
-import { assertEnoughLeaveBalance, policyDeductsAnnual, toNumber } from "@/lib/leave/balance";
+import { assertEnoughLeaveBalance, toNumber } from "@/lib/leave/balance";
 import { dateToDateOnly } from "@/lib/leave/calculate-business-days";
 import {
   convertLeaveGrantPendingToUsed,
@@ -23,6 +23,7 @@ import {
 } from "@/lib/leave/approval-policy";
 import { assertNoOverlappingLeaveRequest } from "@/lib/leave/overlap";
 import { getLeavePolicyMap, getUserLeaveBalance } from "@/lib/leave/queries";
+import { legacyLeaveTypeDeductsAnnualBalance } from "@/lib/leave/legacy-request-policy";
 import {
   hydrateReviewScope,
 } from "@/lib/leave/review";
@@ -155,7 +156,13 @@ async function assertApprovalStillValid(params: {
   const policies = await getLeavePolicyMap(tx as unknown as ReturnType<typeof getPrisma>);
   const policy = policies[leaveRequest.type];
 
-  if (leaveRequest.requestKind !== "CUSTOM_GRANT" && policyDeductsAnnual(policy)) {
+  if (
+    leaveRequest.requestKind !== "CUSTOM_GRANT" &&
+    legacyLeaveTypeDeductsAnnualBalance({
+      type: leaveRequest.type,
+      policy,
+    })
+  ) {
     const balance = await getUserLeaveBalance({
       userId: leaveRequest.userId,
       year: Number(dateToDateOnly(leaveRequest.startDate).slice(0, 4)),

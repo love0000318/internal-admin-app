@@ -36,6 +36,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   "already-used": "이미 사용 완료로 처리된 휴가는 취소할 수 없습니다.",
   "grant-state": "지급 휴가 잔여량 상태가 변경되었습니다. 다시 확인해 주세요.",
   "attachment-required": "제출할 증명자료 파일을 선택해 주세요.",
+  "attachment-storage": "증명자료 저장 중 문제가 발생했습니다. 관리자에게 문의해 주세요.",
   "invalid-file-type": "허용되지 않는 파일 형식입니다.",
   "file-too-large": "첨부파일은 최대 10MB까지 업로드할 수 있습니다.",
   "attachment-closed": "현재 상태에서는 증명자료를 추가 제출할 수 없습니다.",

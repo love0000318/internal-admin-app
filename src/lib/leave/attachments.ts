@@ -188,11 +188,17 @@ export async function prepareAttachmentFromFormData(
     fileSize: file.size,
   });
   const buffer = Buffer.from(await file.arrayBuffer());
-  const saved = await getStorageProvider().save({
-    fileName: validated.originalFileName,
-    contentType: validated.mimeType,
-    buffer,
-  });
+  let saved;
+
+  try {
+    saved = await getStorageProvider().save({
+      fileName: validated.originalFileName,
+      contentType: validated.mimeType,
+      buffer,
+    });
+  } catch {
+    throw new LeaveAttachmentError("attachment-storage");
+  }
 
   return {
     fileName: saved.fileKey.split(/[\\/]/).pop() ?? saved.fileKey,

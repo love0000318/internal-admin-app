@@ -11,6 +11,7 @@ import type {
   LeaveRequestForBalance,
   LeaveType,
 } from "@/lib/leave/types";
+import { legacyLeaveTypeDeductsAnnualBalance } from "@/lib/leave/legacy-request-policy";
 
 export type CalculatedLeaveBalance = LeaveBalanceSnapshot & {
   grantedDays: number;
@@ -81,7 +82,10 @@ export function leaveRequestDeductsAnnualBalance({
     return request.customLeaveType?.deductsAnnualBalance === true;
   }
 
-  return policyDeductsAnnual(policies[request.type]);
+  return legacyLeaveTypeDeductsAnnualBalance({
+    type: request.type,
+    policy: policies[request.type],
+  });
 }
 
 export function calculateRemainingDays({

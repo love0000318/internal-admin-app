@@ -5,10 +5,9 @@ import { revalidatePath } from "next/cache";
 
 import { Prisma } from "@/generated/prisma/client";
 import { getPrisma } from "@/lib/db/prisma";
-import { assertEnoughLeaveBalance, policyDeductsAnnual, toNumber } from "@/lib/leave/balance";
+import { assertEnoughLeaveBalance, toNumber } from "@/lib/leave/balance";
 import {
   createLeaveAttachmentRecord,
-  getAttachmentPolicyForLegacyLeaveType,
   getAttachmentStatusForPolicy,
   LeaveAttachmentError,
   prepareAttachmentFromFormData,
@@ -51,6 +50,13 @@ import {
   listEnabledCompanyHolidayDateOnlys,
 } from "@/lib/leave/queries";
 import type { DateOnly, LeaveOverlapCandidate } from "@/lib/leave/types";
+import {
+  getLegacyLeaveTypeRequestError,
+  legacyLeaveTypeDeductsAnnualBalance,
+  RESERVE_FORCES_LEAVE_TYPE,
+  resolveLegacyLeaveAttachmentPolicy,
+  type LegacyLeaveTypeDefinitionForRequest,
+} from "@/lib/leave/legacy-request-policy";
 import { leaveRequestSchema, optionalString } from "@/lib/leave/validation";
 import {
   notifyLeaveApprovalNeeded,
@@ -116,6 +122,26 @@ async function prepareOptionalAttachment(formData: FormData) {
 
     throw error;
   }
+}
+
+async function getLegacyLeaveTypeDefinitionForRequest({
+  type,
+  prisma,
+}: {
+  type: string;
+  prisma: ReturnType<typeof getPrisma>;
+}): Promise<LegacyLeaveTypeDefinitionForRequest | null> {
+  return prisma.leaveTypeDefinition.findUnique({
+    where: { code: type },
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      isEnabled: true,
+      attachmentPolicy: true,
+      deductsAnnualBalance: true,
+    },
+  });
 }
 
 async function createCustomGrantLeaveRequest(formData: FormData) {
@@ -463,18 +489,34 @@ export async function createLeaveRequest(formData: FormData) {
   const prisma = getPrisma();
   const policies = await getLeavePolicyMap(prisma);
   const policy = policies[parsed.data.type];
-  const attachmentPolicy = await getAttachmentPolicyForLegacyLeaveType(
-    parsed.data.type,
-    policy?.requiresAttachment ?? false,
+  const legacyLeaveTypeDefinition = await getLegacyLeaveTypeDefinitionForRequest({
+    type: parsed.data.type,
     prisma,
-  );
-  const preparedAttachment =
-    (await prepareOptionalAttachment(formData)) ??
-    preparedAttachmentFromUrl(parsed.data.attachmentUrl ?? null);
+  });
+  const legacyTypeError = getLegacyLeaveTypeRequestError({
+    type: parsed.data.type,
+    leaveTypeDefinition: legacyLeaveTypeDefinition,
+  });
+
+  if (legacyTypeError) {
+    redirectToNewRequest(legacyTypeError);
+  }
 
   if (!policy?.isEnabled) {
     redirectToNewRequest("disabled-policy");
   }
+
+  const attachmentPolicy = resolveLegacyLeaveAttachmentPolicy({
+    leaveTypeDefinition: legacyLeaveTypeDefinition,
+    fallbackRequiresAttachment: policy.requiresAttachment,
+  });
+  const linkedLegacyLeaveTypeId =
+    parsed.data.type === RESERVE_FORCES_LEAVE_TYPE
+      ? legacyLeaveTypeDefinition?.id ?? null
+      : null;
+  const preparedAttachment =
+    (await prepareOptionalAttachment(formData)) ??
+    preparedAttachmentFromUrl(parsed.data.attachmentUrl ?? null);
 
   const today = todayInSeoul();
 
@@ -574,7 +616,12 @@ export async function createLeaveRequest(formData: FormData) {
     redirectToNewRequest("overlap");
   }
 
-  if (policyDeductsAnnual(policy)) {
+  if (
+    legacyLeaveTypeDeductsAnnualBalance({
+      type: parsed.data.type,
+      policy,
+    })
+  ) {
     const balance = await getUserLeaveBalance({
       userId: actor.id,
       year: Number((parsed.data.startDate as DateOnly).slice(0, 4)),
@@ -597,7 +644,7 @@ export async function createLeaveRequest(formData: FormData) {
     userId: actor.id,
     type: parsed.data.type,
     requestKind: "LEGACY" as const,
-    leaveTypeId: null,
+    leaveTypeId: linkedLegacyLeaveTypeId,
     status: "PENDING" as const,
     startDate: dateOnlyToDate(parsed.data.startDate as DateOnly),
     endDate: dateOnlyToDate(parsed.data.endDate as DateOnly),
@@ -638,6 +685,8 @@ export async function createLeaveRequest(formData: FormData) {
       data: {
         userId: actor.id,
         type: parsed.data.type,
+        requestKind: "LEGACY",
+        leaveTypeId: linkedLegacyLeaveTypeId,
         status: autoApprove ? "APPROVED" : "PENDING",
         startDate: dateOnlyToDate(parsed.data.startDate as DateOnly),
         endDate: dateOnlyToDate(parsed.data.endDate as DateOnly),
@@ -689,6 +738,10 @@ export async function createLeaveRequest(formData: FormData) {
           leaveRequestId: created.id,
           targetUserId: actor.id,
           leaveType: created.type,
+          leaveTypeId: linkedLegacyLeaveTypeId,
+          leaveTypeCode: linkedLegacyLeaveTypeId
+            ? legacyLeaveTypeDefinition?.code
+            : undefined,
           requestedDays,
           startDate: parsed.data.startDate,
           endDate: parsed.data.endDate,
@@ -727,7 +780,7 @@ export async function createLeaveRequest(formData: FormData) {
       leaveRequest: approvalCheckRequest,
       approvalPolicy,
       leaveRequestId: leaveRequest.id,
-      leaveTypeName: policy.name ?? parsed.data.type,
+      leaveTypeName: legacyLeaveTypeDefinition?.name ?? policy.name ?? parsed.data.type,
     });
   }
 
