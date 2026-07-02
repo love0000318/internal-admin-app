@@ -248,6 +248,7 @@ export function assertCustomLeaveGrantRequestAllowed({
   startDate,
   endDate,
   attachmentUrl,
+  attachmentPolicy,
 }: {
   grant: LeaveGrantWithType | null;
   userId: string;
@@ -256,6 +257,7 @@ export function assertCustomLeaveGrantRequestAllowed({
   startDate: DateOnly;
   endDate: DateOnly;
   attachmentUrl?: string | null;
+  attachmentPolicy?: AttachmentPolicy;
 }) {
   if (!grant) {
     throw new CustomLeaveRequestError("grant-not-found");
@@ -284,7 +286,7 @@ export function assertCustomLeaveGrantRequestAllowed({
   assertLeaveGrantDateInUsableRange({ grant, startDate, endDate });
   assertLeaveGrantHasEnoughRemaining({ remainingAmount: grant.remainingAmount, amount });
   assertAttachmentPolicySatisfied({
-    attachmentPolicy: grant.leaveType.attachmentPolicy,
+    attachmentPolicy: attachmentPolicy ?? grant.leaveType.attachmentPolicy,
     attachmentUrl,
   });
 }

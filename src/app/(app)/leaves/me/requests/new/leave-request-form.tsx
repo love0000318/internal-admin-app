@@ -5,6 +5,11 @@ import { useMemo, useState } from "react";
 import { createLeaveRequest } from "@/app/(app)/leaves/actions";
 import { Badge, buttonClassName, Card } from "@/components/design-system/primitives";
 import { formatLeaveDays, LEAVE_TYPE_LABELS } from "@/lib/leave/labels";
+import {
+  isAttachmentRequiredForPolicy,
+  isReserveForcesLeaveType,
+  resolveAttachmentPolicyForLeaveType,
+} from "@/lib/leave/legacy-request-policy";
 import { deserializeAllowedUnits } from "@/lib/leave/leave-types";
 import type { LeavePolicy, LeaveType } from "@/lib/leave/types";
 import { LEAVE_TYPES } from "@/lib/leave/types";
@@ -38,6 +43,8 @@ type LeaveRequestFormProps = {
 };
 
 const BIRTHDAY_HALF_DAY_CODE = "BIRTHDAY_HALF_DAY";
+const RESERVE_FORCES_ATTACHMENT_DESCRIPTION =
+  "예비군 휴가는 증명자료를 선택적으로 첨부할 수 있습니다. 증명자료가 없어도 신청할 수 있습니다.";
 
 const unitLabels = {
   DAY: "일",
@@ -125,10 +132,29 @@ export function LeaveRequestForm({
     [policies, type],
   );
   const isHalfDay = type === "HALF_DAY";
+  const isLegacyReserveForces = isReserveForcesLeaveType({ type });
+  const legacyAttachmentPolicy: AttachmentPolicy = isLegacyReserveForces
+    ? "OPTIONAL"
+    : policy?.requiresAttachment
+      ? "REQUIRED_BEFORE_REQUEST"
+      : "NOT_REQUIRED";
   const legacyAttachmentRequired =
-    type === "RESERVE_FORCES" || Boolean(policy?.requiresAttachment);
+    isAttachmentRequiredForPolicy(legacyAttachmentPolicy);
+  const selectedGrantAttachmentPolicy: AttachmentPolicy = selectedGrant
+    ? resolveAttachmentPolicyForLeaveType({
+        code: selectedGrant.leaveType.code,
+        name: selectedGrant.leaveType.name,
+        attachmentPolicy: selectedGrant.leaveType.attachmentPolicy,
+      })
+    : "NOT_REQUIRED";
   const customAttachmentRequired =
-    selectedGrant?.leaveType.attachmentPolicy === "REQUIRED_BEFORE_REQUEST";
+    isAttachmentRequiredForPolicy(selectedGrantAttachmentPolicy);
+  const isSelectedReserveForcesGrant = selectedGrant
+    ? isReserveForcesLeaveType({
+        code: selectedGrant.leaveType.code,
+        name: selectedGrant.leaveType.name,
+      })
+    : false;
 
   return (
     <div className="mt-6 grid gap-6">
@@ -180,8 +206,11 @@ export function LeaveRequestForm({
 
             <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm leading-relaxed text-slate-600">
               <p className="break-keep">
-                증명자료: {legacyAttachmentRequired ? "필수" : "불필요"}
+                증명자료: {legacyAttachmentRequired ? "필수" : "선택"}
               </p>
+              {isLegacyReserveForces ? (
+                <p className="break-keep">{RESERVE_FORCES_ATTACHMENT_DESCRIPTION}</p>
+              ) : null}
               {isHalfDay ? (
                 <p className="break-keep">예상 차감: {formatLeaveDays(0.5)}</p>
               ) : (
@@ -245,7 +274,12 @@ export function LeaveRequestForm({
             />
           </FormField>
 
-          <AttachmentInput required={legacyAttachmentRequired} />
+          <AttachmentInput
+            required={legacyAttachmentRequired}
+            description={
+              isLegacyReserveForces ? RESERVE_FORCES_ATTACHMENT_DESCRIPTION : null
+            }
+          />
 
           <button className={buttonClassName({ className: "w-full sm:w-auto" })}>
             휴가 요청 제출
@@ -300,11 +334,14 @@ export function LeaveRequestForm({
                   <p className="break-keep">
                     증명자료 정책:{" "}
                     {
-                      attachmentPolicyLabels[
-                        selectedGrant.leaveType.attachmentPolicy
-                      ]
+                      attachmentPolicyLabels[selectedGrantAttachmentPolicy]
                     }
                   </p>
+                  {isSelectedReserveForcesGrant ? (
+                    <p className="break-keep">
+                      {RESERVE_FORCES_ATTACHMENT_DESCRIPTION}
+                    </p>
+                  ) : null}
                   {selectedGrant.leaveType.attachmentDescription ? (
                     <p className="break-keep">
                       {selectedGrant.leaveType.attachmentDescription}
@@ -386,7 +423,11 @@ export function LeaveRequestForm({
 
               <AttachmentInput
                 required={customAttachmentRequired}
-                description={selectedGrant?.leaveType.attachmentDescription}
+                description={
+                  isSelectedReserveForcesGrant
+                    ? RESERVE_FORCES_ATTACHMENT_DESCRIPTION
+                    : selectedGrant?.leaveType.attachmentDescription
+                }
               />
 
               <button className={buttonClassName({ className: "w-full sm:w-auto" })}>

@@ -1,6 +1,10 @@
 import { Prisma, type AttachmentPolicy, type LeaveRequestAttachmentStatus } from "@/generated/prisma/client";
 import { getPrisma } from "@/lib/db/prisma";
 import { dateToDateOnly } from "@/lib/leave/calculate-business-days";
+import {
+  isReserveForcesLeaveType,
+  RESERVE_FORCES_ATTACHMENT_POLICY,
+} from "@/lib/leave/legacy-request-policy";
 import { hydrateReviewScope, toReviewableLeaveRequest } from "@/lib/leave/review";
 import { canReviewLeaveRequest } from "@/lib/rbac/guards";
 import { isOwner, type RbacUser } from "@/lib/rbac/roles";
@@ -120,6 +124,20 @@ export function getAttachmentStatusForPolicy({
   return "NOT_REQUIRED";
 }
 
+export function canContinueWithoutStoredAttachment({
+  attachmentPolicy,
+  error,
+}: {
+  attachmentPolicy: AttachmentPolicy;
+  error: unknown;
+}) {
+  return (
+    (attachmentPolicy === "NOT_REQUIRED" || attachmentPolicy === "OPTIONAL") &&
+    error instanceof LeaveAttachmentError &&
+    error.code === "attachment-storage"
+  );
+}
+
 export function getAttachmentPolicyLabel(policy: AttachmentPolicy) {
   const labels: Record<AttachmentPolicy, string> = {
     NOT_REQUIRED: "필요 없음",
@@ -152,8 +170,18 @@ export async function getAttachmentPolicyForLegacyLeaveType(
 ): Promise<AttachmentPolicy> {
   const leaveType = await prisma.leaveTypeDefinition.findUnique({
     where: { code: type },
-    select: { attachmentPolicy: true },
+    select: { code: true, name: true, attachmentPolicy: true },
   });
+
+  if (
+    isReserveForcesLeaveType({
+      type,
+      code: leaveType?.code ?? type,
+      name: leaveType?.name,
+    })
+  ) {
+    return RESERVE_FORCES_ATTACHMENT_POLICY;
+  }
 
   if (leaveType) {
     return leaveType.attachmentPolicy;
@@ -165,7 +193,12 @@ export async function getAttachmentPolicyForLegacyLeaveType(
 function getFormFile(formData: FormData, fieldName: string) {
   const entry = formData.get(fieldName);
 
-  if (typeof File === "undefined" || !(entry instanceof File) || entry.size === 0) {
+  if (
+    typeof File === "undefined" ||
+    !(entry instanceof File) ||
+    entry.size === 0 ||
+    entry.name.trim().length === 0
+  ) {
     return null;
   }
 

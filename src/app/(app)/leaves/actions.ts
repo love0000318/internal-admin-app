@@ -3,10 +3,11 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
-import { Prisma } from "@/generated/prisma/client";
+import { Prisma, type AttachmentPolicy } from "@/generated/prisma/client";
 import { getPrisma } from "@/lib/db/prisma";
 import { assertEnoughLeaveBalance, toNumber } from "@/lib/leave/balance";
 import {
+  canContinueWithoutStoredAttachment,
   createLeaveAttachmentRecord,
   getAttachmentStatusForPolicy,
   LeaveAttachmentError,
@@ -52,8 +53,10 @@ import {
 import type { DateOnly, LeaveOverlapCandidate } from "@/lib/leave/types";
 import {
   getLegacyLeaveTypeRequestError,
+  isAttachmentRequiredForPolicy,
   legacyLeaveTypeDeductsAnnualBalance,
   RESERVE_FORCES_LEAVE_TYPE,
+  resolveAttachmentPolicyForLeaveType,
   resolveLegacyLeaveAttachmentPolicy,
   type LegacyLeaveTypeDefinitionForRequest,
 } from "@/lib/leave/legacy-request-policy";
@@ -112,11 +115,31 @@ function preparedAttachmentFromUrl(attachmentUrl: string | null): PreparedLeaveA
   };
 }
 
-async function prepareOptionalAttachment(formData: FormData) {
+async function prepareOptionalAttachment(
+  formData: FormData,
+  {
+    attachmentPolicy,
+  }: {
+    attachmentPolicy?: AttachmentPolicy;
+  } = {},
+) {
   try {
-    return await prepareAttachmentFromFormData(formData);
+    return {
+      preparedAttachment: await prepareAttachmentFromFormData(formData),
+      attachmentStorageFailureCode: null as string | null,
+    };
   } catch (error) {
     if (error instanceof LeaveAttachmentError) {
+      if (
+        attachmentPolicy &&
+        canContinueWithoutStoredAttachment({ attachmentPolicy, error })
+      ) {
+        return {
+          preparedAttachment: null,
+          attachmentStorageFailureCode: error.code,
+        };
+      }
+
       redirectToNewRequest(error.code);
     }
 
@@ -152,8 +175,9 @@ async function createCustomGrantLeaveRequest(formData: FormData) {
   const halfDayPeriod = optionalString(formData.get("halfDayPeriod")) as "AM" | "PM" | null;
   const reason = optionalString(formData.get("reason"));
   const attachmentUrl = optionalString(formData.get("attachmentUrl"));
-  const preparedAttachment =
-    (await prepareOptionalAttachment(formData)) ?? preparedAttachmentFromUrl(attachmentUrl);
+  let preparedAttachment: PreparedLeaveAttachment | null = null;
+  let attachmentStorageFailureCode: string | null = null;
+  let customAttachmentPolicy: AttachmentPolicy = "NOT_REQUIRED";
 
   if (!leaveGrantId || !startDate || !endDate) {
     redirectToNewRequest("invalid");
@@ -197,6 +221,22 @@ async function createCustomGrantLeaveRequest(formData: FormData) {
       redirectToNewRequest("zero-days");
     }
 
+    if (!grant) {
+      throw new CustomLeaveRequestError("grant-not-found");
+    }
+
+    customAttachmentPolicy = resolveAttachmentPolicyForLeaveType({
+      code: grant.leaveType.code,
+      name: grant.leaveType.name,
+      attachmentPolicy: grant.leaveType.attachmentPolicy,
+    });
+    const prepared = await prepareOptionalAttachment(formData, {
+      attachmentPolicy: customAttachmentPolicy,
+    });
+    preparedAttachment =
+      prepared.preparedAttachment ?? preparedAttachmentFromUrl(attachmentUrl);
+    attachmentStorageFailureCode = prepared.attachmentStorageFailureCode;
+
     assertCustomLeaveGrantRequestAllowed({
       grant,
       userId: actor.id,
@@ -205,6 +245,7 @@ async function createCustomGrantLeaveRequest(formData: FormData) {
       startDate: startDate as DateOnly,
       endDate: endDate as DateOnly,
       attachmentUrl: preparedAttachment ? "submitted" : null,
+      attachmentPolicy: customAttachmentPolicy,
     });
   } catch (error) {
     if (error instanceof CustomLeaveRequestError) {
@@ -259,12 +300,10 @@ async function createCustomGrantLeaveRequest(formData: FormData) {
     halfDayPeriod: usageUnit === "HALF_DAY" ? halfDayPeriod : null,
     dayCount: new Prisma.Decimal(requestedDays),
     reason,
-    attachmentRequired:
-      grant!.leaveType.attachmentPolicy === "REQUIRED_BEFORE_REQUEST" ||
-      grant!.leaveType.attachmentPolicy === "REQUIRED_AFTER_REQUEST",
+    attachmentRequired: isAttachmentRequiredForPolicy(customAttachmentPolicy),
     attachmentUrl,
     attachmentStatus: getAttachmentStatusForPolicy({
-      attachmentPolicy: grant!.leaveType.attachmentPolicy,
+      attachmentPolicy: customAttachmentPolicy,
       hasAttachment: Boolean(preparedAttachment),
     }),
     reviewerId: null,
@@ -317,12 +356,10 @@ async function createCustomGrantLeaveRequest(formData: FormData) {
           reason,
           reviewedAt: autoApprove ? new Date() : undefined,
           reviewComment: autoApprove ? "승인 정책에 따라 자동 승인되었습니다." : undefined,
-          attachmentRequired:
-            grant!.leaveType.attachmentPolicy === "REQUIRED_BEFORE_REQUEST" ||
-            grant!.leaveType.attachmentPolicy === "REQUIRED_AFTER_REQUEST",
+          attachmentRequired: isAttachmentRequiredForPolicy(customAttachmentPolicy),
           attachmentUrl,
           attachmentStatus: getAttachmentStatusForPolicy({
-            attachmentPolicy: grant!.leaveType.attachmentPolicy,
+            attachmentPolicy: customAttachmentPolicy,
             hasAttachment: Boolean(preparedAttachment),
           }),
           grantUsages: {
@@ -346,7 +383,7 @@ async function createCustomGrantLeaveRequest(formData: FormData) {
 
       if (
         !preparedAttachment &&
-        grant!.leaveType.attachmentPolicy === "REQUIRED_AFTER_REQUEST"
+        customAttachmentPolicy === "REQUIRED_AFTER_REQUEST"
       ) {
         await tx.notification.create({
           data: {
@@ -379,6 +416,9 @@ async function createCustomGrantLeaveRequest(formData: FormData) {
             startDate,
             endDate,
             approvalPolicy: approvalPolicySummary(approvalPolicy),
+            ...(attachmentStorageFailureCode
+              ? { attachmentStorageFailureCode }
+              : {}),
           }),
         },
       });
@@ -507,6 +547,7 @@ export async function createLeaveRequest(formData: FormData) {
   }
 
   const attachmentPolicy = resolveLegacyLeaveAttachmentPolicy({
+    type: parsed.data.type,
     leaveTypeDefinition: legacyLeaveTypeDefinition,
     fallbackRequiresAttachment: policy.requiresAttachment,
   });
@@ -514,9 +555,11 @@ export async function createLeaveRequest(formData: FormData) {
     parsed.data.type === RESERVE_FORCES_LEAVE_TYPE
       ? legacyLeaveTypeDefinition?.id ?? null
       : null;
+  const prepared = await prepareOptionalAttachment(formData, { attachmentPolicy });
   const preparedAttachment =
-    (await prepareOptionalAttachment(formData)) ??
+    prepared.preparedAttachment ??
     preparedAttachmentFromUrl(parsed.data.attachmentUrl ?? null);
+  const attachmentStorageFailureCode = prepared.attachmentStorageFailureCode;
 
   const today = todayInSeoul();
 
@@ -651,9 +694,7 @@ export async function createLeaveRequest(formData: FormData) {
     halfDayPeriod: parsed.data.type === "HALF_DAY" ? parsed.data.halfDayPeriod ?? null : null,
     dayCount: new Prisma.Decimal(requestedDays),
     reason: parsed.data.reason ?? null,
-    attachmentRequired:
-      attachmentPolicy === "REQUIRED_BEFORE_REQUEST" ||
-      attachmentPolicy === "REQUIRED_AFTER_REQUEST",
+    attachmentRequired: isAttachmentRequiredForPolicy(attachmentPolicy),
     attachmentUrl: parsed.data.attachmentUrl ?? null,
     attachmentStatus,
     reviewerId: null,
@@ -696,9 +737,7 @@ export async function createLeaveRequest(formData: FormData) {
         reviewerId: autoApprove ? null : undefined,
         reviewedAt: autoApprove ? new Date() : undefined,
         reviewComment: autoApprove ? "승인 정책에 따라 자동 승인되었습니다." : undefined,
-        attachmentRequired:
-          attachmentPolicy === "REQUIRED_BEFORE_REQUEST" ||
-          attachmentPolicy === "REQUIRED_AFTER_REQUEST",
+        attachmentRequired: isAttachmentRequiredForPolicy(attachmentPolicy),
         attachmentUrl: parsed.data.attachmentUrl,
         attachmentStatus,
       },
@@ -746,6 +785,9 @@ export async function createLeaveRequest(formData: FormData) {
           startDate: parsed.data.startDate,
           endDate: parsed.data.endDate,
           approvalPolicy: approvalPolicySummary(approvalPolicy),
+          ...(attachmentStorageFailureCode
+            ? { attachmentStorageFailureCode }
+            : {}),
         }),
       },
     });

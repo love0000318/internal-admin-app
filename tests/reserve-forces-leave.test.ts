@@ -10,11 +10,15 @@ import {
 } from "@/lib/leave/calendar";
 import {
   getLegacyLeaveTypeRequestError,
+  isAttachmentRequiredForPolicy,
+  isReserveForcesLeaveType,
   legacyLeaveTypeDeductsAnnualBalance,
   RESERVE_FORCES_LEAVE_TYPE,
+  resolveAttachmentPolicyForLeaveType,
   resolveLegacyLeaveAttachmentPolicy,
   type LegacyLeaveTypeDefinitionForRequest,
 } from "@/lib/leave/legacy-request-policy";
+import { getAttachmentStatusForPolicy } from "@/lib/leave/attachments";
 import { notifyLeaveApprovalNeeded } from "@/lib/notifications/leave-notifications";
 import type { LeavePolicy } from "@/lib/leave/types";
 import type { RbacUser } from "@/lib/rbac/roles";
@@ -123,13 +127,57 @@ describe("reserve forces leave requests", () => {
     ).toBeNull();
   });
 
-  it("uses reserve forces attachment policy from leave type definition", () => {
+  it("treats reserve forces evidence as optional even when policy data requires it", () => {
+    const attachmentPolicy = resolveLegacyLeaveAttachmentPolicy({
+      type: RESERVE_FORCES_LEAVE_TYPE,
+      leaveTypeDefinition: reserveLeaveType,
+      fallbackRequiresAttachment: true,
+    });
+
+    expect(attachmentPolicy).toBe("OPTIONAL");
+    expect(isAttachmentRequiredForPolicy(attachmentPolicy)).toBe(false);
     expect(
-      resolveLegacyLeaveAttachmentPolicy({
-        leaveTypeDefinition: reserveLeaveType,
-        fallbackRequiresAttachment: false,
+      getAttachmentStatusForPolicy({
+        attachmentPolicy,
+        hasAttachment: false,
       }),
-    ).toBe("REQUIRED_BEFORE_REQUEST");
+    ).toBe("OPTIONAL");
+  });
+
+  it("keeps required evidence validation for non-reserve leave types", () => {
+    const sickLeaveType: LegacyLeaveTypeDefinitionForRequest = {
+      ...reserveLeaveType,
+      code: "SICK",
+      name: "병가",
+      attachmentPolicy: "REQUIRED_BEFORE_REQUEST",
+    };
+
+    const attachmentPolicy = resolveLegacyLeaveAttachmentPolicy({
+      type: "SICK",
+      leaveTypeDefinition: sickLeaveType,
+      fallbackRequiresAttachment: false,
+    });
+
+    expect(attachmentPolicy).toBe("REQUIRED_BEFORE_REQUEST");
+    expect(isAttachmentRequiredForPolicy(attachmentPolicy)).toBe(true);
+    expect(() =>
+      getAttachmentStatusForPolicy({
+        attachmentPolicy,
+        hasAttachment: false,
+      }),
+    ).toThrow("attachment-required");
+  });
+
+  it("maps custom or public-duty reserve forces names to optional evidence", () => {
+    expect(isReserveForcesLeaveType({ code: "RESERVE_FORCES" })).toBe(true);
+    expect(isReserveForcesLeaveType({ name: "예비군 공가" })).toBe(true);
+    expect(
+      resolveAttachmentPolicyForLeaveType({
+        code: "PUBLIC_DUTY",
+        name: "예비군 공가",
+        attachmentPolicy: "REQUIRED_BEFORE_REQUEST",
+      }),
+    ).toBe("OPTIONAL");
   });
 
   it("creates approval-needed notifications for reserve forces leave", async () => {

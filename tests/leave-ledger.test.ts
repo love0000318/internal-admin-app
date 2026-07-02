@@ -175,4 +175,52 @@ describe("leave request ledger sources", () => {
       "LEAVE_APPROVAL",
     ]);
   });
+
+  it("does not label reserve forces ledger entries as annual leave deductions", async () => {
+    const createdLedgers: Array<Record<string, unknown>> = [];
+    const tx = {
+      leaveLedger: {
+        findUnique: async () => null,
+        create: async ({ data }: { data: Record<string, unknown> }) => {
+          const ledger = { id: `ledger-${createdLedgers.length + 1}`, ...data };
+          createdLedgers.push(ledger);
+          return ledger;
+        },
+      },
+      auditLog: {
+        create: async () => ({}),
+      },
+    };
+    const reserveRequest = {
+      id: "reserve-request-1",
+      userId: "user-1",
+      leaveTypeId: "reserve-type",
+      dayCount: 1,
+      startDate: new Date("2026-06-15T00:00:00.000Z"),
+      endDate: new Date("2026-06-15T00:00:00.000Z"),
+      requestKind: "LEGACY",
+      type: "RESERVE_FORCES",
+      grantUsages: [],
+    };
+
+    await recordLeaveRequestPendingLedger({
+      tx: tx as never,
+      leaveRequest: reserveRequest,
+    });
+    await recordLeaveRequestApprovedLedger({
+      tx: tx as never,
+      leaveRequest: reserveRequest,
+      actorId: "owner-1",
+    });
+
+    expect(createdLedgers).toHaveLength(2);
+    expect(
+      createdLedgers.map((ledger) => (ledger.metadata as Record<string, unknown>).leaveType),
+    ).toEqual(["RESERVE_FORCES", "RESERVE_FORCES"]);
+    expect(createdLedgers).not.toContainEqual(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ leaveType: "ANNUAL" }),
+      }),
+    );
+  });
 });

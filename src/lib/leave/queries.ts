@@ -48,7 +48,7 @@ export const DEFAULT_LEAVE_POLICIES = [
     description: "예비군 휴가",
     deductsAnnual: false,
     deductsAnnualBalance: false,
-    requiresAttachment: true,
+    requiresAttachment: false,
     isEnabled: true,
     approvalRequired: true,
   },
