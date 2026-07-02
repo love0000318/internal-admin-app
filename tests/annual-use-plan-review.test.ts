@@ -1,5 +1,13 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
+vi.mock("@/app/(app)/admin/leaves/promotions/actions", () => ({
+  confirmAnnualLeaveUsePlan: vi.fn(),
+  requestAnnualLeaveUsePlanRevision: vi.fn(),
+}));
+
+import { AnnualUsePlanReviewPanel } from "@/components/leave/annual-use-plan-review-panel";
 import {
   canReviewAnnualUsePlan,
   canSubmitAnnualUsePlan,
@@ -7,6 +15,7 @@ import {
   notifyAnnualUsePlanSubmittedForReview,
   reviewAnnualUsePlan,
   type AnnualUsePlanReviewHistoryItem,
+  type AnnualUsePlanReviewRow,
 } from "@/lib/leave/annual-use-plan-review";
 import type { RbacUser } from "@/lib/rbac/roles";
 
@@ -37,6 +46,57 @@ function reviewHistory(
       createdAt: reviewedAt,
     },
   ];
+}
+
+function usePlanReviewRow(
+  overrides: Partial<AnnualUsePlanReviewRow> = {},
+): AnnualUsePlanReviewRow {
+  const submittedAt = new Date("2026-07-01T00:00:00.000Z");
+  const itemDate = new Date("2026-08-03T00:00:00.000Z");
+
+  return {
+    userId: "employee-a",
+    name: "홍길동",
+    email: "employee@example.com",
+    teamName: "운영팀",
+    title: "매니저",
+    referenceYear: 2026,
+    remainingAnnualDays: 8,
+    expiringAnnualDays: 3,
+    expirationDate: "2026-12-31",
+    plan: {
+      id: "plan-1",
+      userId: "employee-a",
+      referenceYear: 2026,
+      status: "SUBMITTED",
+      submittedAt,
+      totalPlannedAmount: 1,
+      memo: "여름 휴가 계획",
+      createdAt: submittedAt,
+      updatedAt: submittedAt,
+      items: [
+        {
+          id: "item-1",
+          usePlanId: "plan-1",
+          plannedDate: itemDate,
+          plannedStartDate: itemDate,
+          plannedEndDate: itemDate,
+          usageType: "FULL_DAY",
+          calculatedAmount: 1,
+          amount: 1,
+          unit: "DAY",
+          halfDayPeriod: null,
+          memo: "가족 일정",
+          createdAt: submittedAt,
+          updatedAt: submittedAt,
+        },
+      ],
+    } as NonNullable<AnnualUsePlanReviewRow["plan"]>,
+    reviewStatus: "SUBMITTED",
+    latestReview: null,
+    reviewHistory: [],
+    ...overrides,
+  };
 }
 
 describe("annual use-plan review", () => {
@@ -229,5 +289,44 @@ describe("annual use-plan review", () => {
         prisma: prisma as never,
       }),
     ).rejects.toMatchObject({ code: "revision-reason-required" });
+  });
+
+  it("renders the admin review list as a collapsed compact table", () => {
+    const html = renderToStaticMarkup(
+      createElement(AnnualUsePlanReviewPanel, {
+        basePath: "/admin/leaves/promotions",
+        returnTo: "/admin/leaves/promotions?year=2026",
+        rows: [usePlanReviewRow()],
+        year: 2026,
+      }),
+    );
+
+    expect(html).toContain('data-testid="annual-use-plan-review-table"');
+    expect(html).toContain("상세 보기");
+    expect(html).toContain("처리 이력이 없습니다.");
+    expect(html).not.toContain("<textarea");
+    expect(html).not.toContain("보완요청 사유");
+  });
+
+  it("filters the compact review list by submitted status", () => {
+    const html = renderToStaticMarkup(
+      createElement(AnnualUsePlanReviewPanel, {
+        basePath: "/admin/leaves/promotions",
+        returnTo: "/admin/leaves/promotions?year=2026&status=submitted",
+        rows: [
+          usePlanReviewRow({ name: "제출자", reviewStatus: "SUBMITTED" }),
+          usePlanReviewRow({
+            userId: "employee-b",
+            name: "확인완료자",
+            reviewStatus: "CONFIRMED",
+          }),
+        ],
+        statusFilter: "submitted",
+        year: 2026,
+      }),
+    );
+
+    expect(html).toContain("제출자");
+    expect(html).not.toContain("확인완료자");
   });
 });

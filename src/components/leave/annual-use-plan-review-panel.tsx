@@ -1,11 +1,10 @@
 import Link from "next/link";
 
 import {
-  confirmAnnualLeaveUsePlan,
-  requestAnnualLeaveUsePlanRevision,
-} from "@/app/(app)/admin/leaves/promotions/actions";
-import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
-import { Badge, buttonClassName, Card, EmptyState } from "@/components/design-system/primitives";
+  AnnualUsePlanReviewTable,
+  type AnnualUsePlanReviewTableRow,
+} from "@/components/leave/annual-use-plan-review-table";
+import { buttonClassName, Card, EmptyState } from "@/components/design-system/primitives";
 import {
   annualUsePlanUsageTypeLabel,
   halfDayPeriodToUsageType,
@@ -18,6 +17,7 @@ import {
   type AnnualUsePlanReviewRow,
   type AnnualUsePlanReviewStatus,
 } from "@/lib/leave/annual-use-plan-review";
+import { todayInSeoul } from "@/lib/leave/calculate-business-days";
 
 type AnnualUsePlanReviewPanelProps = {
   rows: AnnualUsePlanReviewRow[];
@@ -27,7 +27,16 @@ type AnnualUsePlanReviewPanelProps = {
   success?: string;
   error?: string;
   backHref?: string;
+  statusFilter?: string;
+  teamFilter?: string;
+  sort?: string;
 };
+
+type StatusFilter = "all" | "submitted" | "confirmed" | "revision-requested";
+type ReviewSort = "default" | "submitted-desc" | "submitted-asc" | "expiration-asc";
+type TeamOption = { value: string; label: string };
+
+const NO_TEAM_VALUE = "__NO_TEAM__";
 
 function formatAmount(value: number | null | undefined) {
   if (typeof value !== "number") {
@@ -56,7 +65,9 @@ function itemUsageType(item: {
   return item.usageType ?? halfDayPeriodToUsageType(item.halfDayPeriod ?? null);
 }
 
-function reviewStatusTone(status: AnnualUsePlanReviewStatus) {
+function reviewStatusTone(
+  status: AnnualUsePlanReviewStatus,
+): AnnualUsePlanReviewTableRow["statusTone"] {
   switch (status) {
     case "CONFIRMED":
       return "success";
@@ -119,119 +130,272 @@ function canReview(status: AnnualUsePlanReviewStatus) {
   return status === "SUBMITTED" || status === "RESUBMITTED";
 }
 
-function PlanItems({ row }: { row: AnnualUsePlanReviewRow }) {
-  if (!row.plan?.items.length) {
-    return <p className="text-sm text-slate-500">제출된 상세 계획이 없습니다.</p>;
+function normalizeStatusFilter(value?: string): StatusFilter {
+  if (
+    value === "submitted" ||
+    value === "confirmed" ||
+    value === "revision-requested"
+  ) {
+    return value;
   }
 
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[640px] text-left text-xs">
-        <thead className="text-slate-500">
-          <tr>
-            <th className="px-2 py-2">사용 기간</th>
-            <th className="px-2 py-2">사용 형태</th>
-            <th className="px-2 py-2">계획일수</th>
-            <th className="px-2 py-2">사유/메모</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100">
-          {row.plan.items.map((item) => {
-            const startDate = dateLabel(item.plannedStartDate ?? item.plannedDate);
-            const endDate = dateLabel(item.plannedEndDate ?? item.plannedDate);
-
-            return (
-              <tr key={item.id}>
-                <td className="whitespace-nowrap px-2 py-2">
-                  {startDate}
-                  {startDate !== endDate ? ` ~ ${endDate}` : ""}
-                </td>
-                <td className="whitespace-nowrap px-2 py-2">
-                  {annualUsePlanUsageTypeLabel(itemUsageType(item))}
-                </td>
-                <td className="whitespace-nowrap px-2 py-2">
-                  {formatAmount(item.calculatedAmount ?? item.amount)}
-                </td>
-                <td className="px-2 py-2">{item.memo ?? "-"}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
+  return "all";
 }
 
-function ReviewHistory({ row }: { row: AnnualUsePlanReviewRow }) {
-  if (row.reviewHistory.length === 0) {
-    return <p className="text-sm text-slate-500">처리 이력이 없습니다.</p>;
+function normalizeSort(value?: string): ReviewSort {
+  if (
+    value === "submitted-desc" ||
+    value === "submitted-asc" ||
+    value === "expiration-asc"
+  ) {
+    return value;
   }
 
-  return (
-    <ul className="grid gap-2 text-sm">
-      {row.reviewHistory.map((history) => (
-        <li key={history.id} className="rounded-lg border border-slate-200 p-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge tone={history.actionType === "CONFIRMED" ? "success" : "warning"}>
-              {annualUsePlanReviewActionLabel(history.actionType)}
-            </Badge>
-            <span className="text-slate-600">
-              {history.reviewerName ?? history.reviewerUserId ?? "처리자 미확인"}
-            </span>
-            <span className="text-slate-400">{formatDateTime(history.reviewedAt)}</span>
-          </div>
-          {history.revisionReason ? (
-            <p className="mt-2 leading-relaxed text-slate-700">
-              보완요청 사유: {history.revisionReason}
-            </p>
-          ) : null}
-        </li>
-      ))}
-    </ul>
-  );
+  return "default";
 }
 
-function ReviewActions({
-  row,
-  returnTo,
+function cleanQueryValue(value?: string) {
+  const trimmed = value?.trim();
+
+  return trimmed ? trimmed : undefined;
+}
+
+export function buildAnnualUsePlanReviewReturnTo({
+  basePath,
+  year,
+  status,
+  team,
+  sort,
 }: {
-  row: AnnualUsePlanReviewRow;
-  returnTo: string;
+  basePath: string;
+  year: number;
+  status?: string;
+  team?: string;
+  sort?: string;
 }) {
-  if (!row.plan || !canReview(row.reviewStatus)) {
-    return null;
+  const query = new URLSearchParams({ year: String(year) });
+  const statusFilter = normalizeStatusFilter(status);
+  const teamFilter = cleanQueryValue(team);
+  const sortValue = normalizeSort(sort);
+
+  if (statusFilter !== "all") {
+    query.set("status", statusFilter);
   }
 
-  return (
-    <div className="grid gap-3 lg:grid-cols-2">
-      <form action={confirmAnnualLeaveUsePlan} className="grid gap-2">
-        <input name="planId" type="hidden" value={row.plan.id} />
-        <input name="returnTo" type="hidden" value={returnTo} />
-        <ConfirmSubmitButton
-          className={buttonClassName({ className: "w-full" })}
-          message="이 연차 사용계획을 접수 확인 완료 처리할까요?"
-        >
-          접수 확인 완료
-        </ConfirmSubmitButton>
-      </form>
-      <form action={requestAnnualLeaveUsePlanRevision} className="grid gap-2">
-        <input name="planId" type="hidden" value={row.plan.id} />
-        <input name="returnTo" type="hidden" value={returnTo} />
-        <textarea
-          className="min-h-20 rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          name="revisionReason"
-          placeholder="보완요청 사유"
-          required
-        />
-        <ConfirmSubmitButton
-          className={buttonClassName({ tone: "neutral", className: "w-full" })}
-          message="이 사용계획에 보완요청을 등록할까요?"
-        >
-          보완요청
-        </ConfirmSubmitButton>
-      </form>
-    </div>
+  if (teamFilter && teamFilter !== "all") {
+    query.set("team", teamFilter);
+  }
+
+  if (sortValue !== "default") {
+    query.set("sort", sortValue);
+  }
+
+  return `${basePath}?${query.toString()}`;
+}
+
+function teamKey(row: AnnualUsePlanReviewRow) {
+  return row.teamName ?? NO_TEAM_VALUE;
+}
+
+function teamLabel(row: AnnualUsePlanReviewRow) {
+  return row.teamName ?? "팀 미지정";
+}
+
+function buildTeamOptions(rows: AnnualUsePlanReviewRow[]): TeamOption[] {
+  const optionsByValue = new Map<string, string>();
+
+  for (const row of rows) {
+    optionsByValue.set(teamKey(row), teamLabel(row));
+  }
+
+  return Array.from(optionsByValue, ([value, label]) => ({ value, label })).sort(
+    (a, b) => {
+      if (a.value === NO_TEAM_VALUE) {
+        return 1;
+      }
+
+      if (b.value === NO_TEAM_VALUE) {
+        return -1;
+      }
+
+      return a.label.localeCompare(b.label, "ko");
+    },
   );
+}
+
+function normalizeTeamFilter(value: string | undefined, options: TeamOption[]) {
+  const cleaned = cleanQueryValue(value);
+
+  if (!cleaned || cleaned === "all") {
+    return "all";
+  }
+
+  return options.some((option) => option.value === cleaned) ? cleaned : "all";
+}
+
+function matchesStatusFilter(
+  row: AnnualUsePlanReviewRow,
+  statusFilter: StatusFilter,
+) {
+  switch (statusFilter) {
+    case "submitted":
+      return row.reviewStatus === "SUBMITTED" || row.reviewStatus === "RESUBMITTED";
+    case "confirmed":
+      return row.reviewStatus === "CONFIRMED";
+    case "revision-requested":
+      return row.reviewStatus === "REVISION_REQUESTED";
+    default:
+      return true;
+  }
+}
+
+function filterRows({
+  rows,
+  statusFilter,
+  teamFilter,
+}: {
+  rows: AnnualUsePlanReviewRow[];
+  statusFilter: StatusFilter;
+  teamFilter: string;
+}) {
+  return rows.filter(
+    (row) =>
+      matchesStatusFilter(row, statusFilter) &&
+      (teamFilter === "all" || teamKey(row) === teamFilter),
+  );
+}
+
+function dateOnlySortValue(value: string | null | undefined) {
+  if (!value) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  const time = Date.parse(`${value}T00:00:00.000Z`);
+
+  return Number.isNaN(time) ? Number.POSITIVE_INFINITY : time;
+}
+
+function submittedSortValue(row: AnnualUsePlanReviewRow) {
+  return row.plan?.submittedAt?.getTime() ?? null;
+}
+
+function compareName(a: AnnualUsePlanReviewRow, b: AnnualUsePlanReviewRow) {
+  return a.name.localeCompare(b.name, "ko");
+}
+
+function sortRows(rows: AnnualUsePlanReviewRow[], sort: ReviewSort) {
+  if (sort === "default") {
+    return rows;
+  }
+
+  return [...rows].sort((a, b) => {
+    if (sort === "expiration-asc") {
+      const byExpiration =
+        dateOnlySortValue(a.expirationDate) - dateOnlySortValue(b.expirationDate);
+      const byAmount =
+        (b.expiringAnnualDays ?? Number.NEGATIVE_INFINITY) -
+        (a.expiringAnnualDays ?? Number.NEGATIVE_INFINITY);
+
+      return byExpiration || byAmount || compareName(a, b);
+    }
+
+    const aSubmitted = submittedSortValue(a);
+    const bSubmitted = submittedSortValue(b);
+
+    if (sort === "submitted-asc") {
+      return (
+        (aSubmitted ?? Number.POSITIVE_INFINITY) -
+          (bSubmitted ?? Number.POSITIVE_INFINITY) || compareName(a, b)
+      );
+    }
+
+    return (
+      (bSubmitted ?? Number.NEGATIVE_INFINITY) -
+        (aSubmitted ?? Number.NEGATIVE_INFINITY) || compareName(a, b)
+    );
+  });
+}
+
+function isExpirationSoon(expirationDate: string | null) {
+  if (!expirationDate) {
+    return false;
+  }
+
+  const today = dateOnlySortValue(todayInSeoul());
+  const expiration = dateOnlySortValue(expirationDate);
+  const diffDays = Math.floor((expiration - today) / 86_400_000);
+
+  return diffDays >= 0 && diffDays <= 30;
+}
+
+function planItemPeriodLabel(item: {
+  plannedDate: Date;
+  plannedStartDate?: Date | null;
+  plannedEndDate?: Date | null;
+}) {
+  const startDate = dateLabel(item.plannedStartDate ?? item.plannedDate);
+  const endDate = dateLabel(item.plannedEndDate ?? item.plannedDate);
+
+  return startDate !== endDate ? `${startDate} ~ ${endDate}` : startDate;
+}
+
+function planPeriodLabel(row: AnnualUsePlanReviewRow) {
+  const items = row.plan?.items ?? [];
+
+  if (items.length === 0) {
+    return "-";
+  }
+
+  const first = items[0];
+  const last = items[items.length - 1];
+  const startDate = dateLabel(first.plannedStartDate ?? first.plannedDate);
+  const endDate = dateLabel(last.plannedEndDate ?? last.plannedDate);
+
+  return startDate !== endDate ? `${startDate} ~ ${endDate}` : startDate;
+}
+
+function toTableRow(row: AnnualUsePlanReviewRow): AnnualUsePlanReviewTableRow {
+  return {
+    userId: row.userId,
+    planId: row.plan?.id ?? null,
+    name: row.name,
+    email: row.email,
+    teamLabel: teamLabel(row),
+    titleLabel: row.title ?? "-",
+    remainingAnnualDaysLabel: formatAmount(row.remainingAnnualDays),
+    expiringAnnualDaysLabel: formatAmount(row.expiringAnnualDays),
+    expirationDateLabel: row.expirationDate ? `${row.expirationDate} 소멸` : "-",
+    expirationSoon: isExpirationSoon(row.expirationDate),
+    plannedAmountLabel: formatAmount(row.plan?.totalPlannedAmount),
+    submittedAtLabel: row.plan?.submittedAt ? dateLabel(row.plan.submittedAt) : "-",
+    statusLabel: annualUsePlanReviewStatusLabel(row.reviewStatus),
+    statusTone: reviewStatusTone(row.reviewStatus),
+    latestReviewLabel: row.latestReview
+      ? annualUsePlanReviewActionLabel(row.latestReview.actionType)
+      : null,
+    latestReviewDateLabel: row.latestReview
+      ? formatDateTime(row.latestReview.reviewedAt)
+      : null,
+    planMemo: row.plan?.memo ?? null,
+    planPeriodLabel: planPeriodLabel(row),
+    canReview: Boolean(row.plan) && canReview(row.reviewStatus),
+    items:
+      row.plan?.items.map((item) => ({
+        id: item.id,
+        periodLabel: planItemPeriodLabel(item),
+        usageTypeLabel: annualUsePlanUsageTypeLabel(itemUsageType(item)),
+        amountLabel: formatAmount(item.calculatedAmount ?? item.amount),
+        memoLabel: item.memo ?? "-",
+      })) ?? [],
+    reviewHistory: row.reviewHistory.map((history) => ({
+      id: history.id,
+      actionLabel: annualUsePlanReviewActionLabel(history.actionType),
+      actionTone: history.actionType === "CONFIRMED" ? "success" : "warning",
+      reviewerLabel: history.reviewerName ?? history.reviewerUserId ?? "처리자 미확인",
+      reviewedAtLabel: formatDateTime(history.reviewedAt),
+      revisionReason: history.revisionReason,
+    })),
+  };
 }
 
 export function AnnualUsePlanReviewPanel({
@@ -242,13 +406,29 @@ export function AnnualUsePlanReviewPanel({
   success,
   error,
   backHref,
+  statusFilter,
+  teamFilter,
+  sort,
 }: AnnualUsePlanReviewPanelProps) {
   const stats = buildStats(rows);
   const successText = successMessage(success);
   const errorText = errorMessage(error);
+  const teamOptions = buildTeamOptions(rows);
+  const statusFilterValue = normalizeStatusFilter(statusFilter);
+  const teamFilterValue = normalizeTeamFilter(teamFilter, teamOptions);
+  const sortValue = normalizeSort(sort);
+  const visibleRows = sortRows(
+    filterRows({
+      rows,
+      statusFilter: statusFilterValue,
+      teamFilter: teamFilterValue,
+    }),
+    sortValue,
+  );
+  const tableRows = visibleRows.map(toTableRow);
 
   return (
-    <section className="min-w-0 space-y-6">
+    <section className="min-w-0 space-y-5">
       <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div className="min-w-0">
           <p className="text-sm font-medium text-slate-500">연차 촉진 관리</p>
@@ -275,15 +455,63 @@ export function AnnualUsePlanReviewPanel({
         </div>
       </div>
 
-      <form className="flex max-w-xs gap-2" action={basePath}>
-        <input
-          aria-label="기준 연도"
-          className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm"
-          defaultValue={year}
-          name="year"
-          type="number"
-        />
-        <button className={buttonClassName({ className: "min-w-20" })}>조회</button>
+      <form
+        action={basePath}
+        className="flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 bg-white px-3 py-3 shadow-sm"
+      >
+        <label className="grid gap-1 text-xs font-medium text-slate-600">
+          기준 연도
+          <input
+            className="h-9 w-28 rounded-md border border-slate-300 px-3 text-sm text-slate-900"
+            defaultValue={year}
+            name="year"
+            type="number"
+          />
+        </label>
+        <label className="grid gap-1 text-xs font-medium text-slate-600">
+          상태
+          <select
+            className="h-9 rounded-md border border-slate-300 px-3 text-sm text-slate-900"
+            defaultValue={statusFilterValue}
+            name="status"
+          >
+            <option value="all">전체</option>
+            <option value="submitted">제출 완료</option>
+            <option value="confirmed">확인 완료</option>
+            <option value="revision-requested">보완요청</option>
+          </select>
+        </label>
+        <label className="grid gap-1 text-xs font-medium text-slate-600">
+          팀
+          <select
+            className="h-9 min-w-36 rounded-md border border-slate-300 px-3 text-sm text-slate-900"
+            defaultValue={teamFilterValue}
+            name="team"
+          >
+            <option value="all">전체 팀</option>
+            {teamOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="grid gap-1 text-xs font-medium text-slate-600">
+          정렬
+          <select
+            className="h-9 min-w-40 rounded-md border border-slate-300 px-3 text-sm text-slate-900"
+            defaultValue={sortValue}
+            name="sort"
+          >
+            <option value="default">기본</option>
+            <option value="submitted-desc">제출일 최신순</option>
+            <option value="submitted-asc">제출일 오래된순</option>
+            <option value="expiration-asc">소멸일 임박순</option>
+          </select>
+        </label>
+        <button className={buttonClassName({ className: "min-h-9 px-4 py-1.5" })}>
+          조회
+        </button>
       </form>
 
       {successText ? (
@@ -297,26 +525,26 @@ export function AnnualUsePlanReviewPanel({
         </p>
       ) : null}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <Card className="rounded-lg">
-          <p className="text-sm text-slate-500">전체 대상자</p>
-          <p className="mt-2 text-2xl font-semibold">{stats.total}</p>
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+        <Card className="rounded-lg p-3 sm:p-3">
+          <p className="text-xs text-slate-500">전체 대상자</p>
+          <p className="mt-1 text-xl font-semibold">{stats.total}</p>
         </Card>
-        <Card className="rounded-lg">
-          <p className="text-sm text-slate-500">미제출자</p>
-          <p className="mt-2 text-2xl font-semibold">{stats.missing}</p>
+        <Card className="rounded-lg p-3 sm:p-3">
+          <p className="text-xs text-slate-500">미제출자</p>
+          <p className="mt-1 text-xl font-semibold">{stats.missing}</p>
         </Card>
-        <Card className="rounded-lg">
-          <p className="text-sm text-slate-500">제출자</p>
-          <p className="mt-2 text-2xl font-semibold">{stats.submitted}</p>
+        <Card className="rounded-lg p-3 sm:p-3">
+          <p className="text-xs text-slate-500">제출자</p>
+          <p className="mt-1 text-xl font-semibold">{stats.submitted}</p>
         </Card>
-        <Card className="rounded-lg">
-          <p className="text-sm text-slate-500">확인 완료자</p>
-          <p className="mt-2 text-2xl font-semibold">{stats.confirmed}</p>
+        <Card className="rounded-lg p-3 sm:p-3">
+          <p className="text-xs text-slate-500">확인 완료자</p>
+          <p className="mt-1 text-xl font-semibold">{stats.confirmed}</p>
         </Card>
-        <Card className="rounded-lg">
-          <p className="text-sm text-slate-500">보완요청자</p>
-          <p className="mt-2 text-2xl font-semibold">{stats.revisionRequested}</p>
+        <Card className="rounded-lg p-3 sm:p-3">
+          <p className="text-xs text-slate-500">보완요청자</p>
+          <p className="mt-1 text-xl font-semibold">{stats.revisionRequested}</p>
         </Card>
       </div>
 
@@ -326,83 +554,11 @@ export function AnnualUsePlanReviewPanel({
           description="연차 촉진 대상자 또는 제출된 사용계획이 있으면 이곳에 표시됩니다."
         />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
-          <table className="w-full min-w-[1180px] table-auto text-left text-sm">
-            <thead className="bg-slate-50 text-slate-500">
-              <tr>
-                <th className="px-4 py-3">직원</th>
-                <th className="px-4 py-3">팀/직급</th>
-                <th className="px-4 py-3">잔여 연차</th>
-                <th className="px-4 py-3">소멸 예정</th>
-                <th className="px-4 py-3">계획일수</th>
-                <th className="px-4 py-3">제출일</th>
-                <th className="px-4 py-3">상태</th>
-                <th className="px-4 py-3">최근 처리</th>
-                <th className="px-4 py-3">상세/처리</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 align-top">
-              {rows.map((row) => (
-                <tr key={row.userId}>
-                  <td className="px-4 py-3">
-                    <p className="font-semibold text-slate-950">{row.name}</p>
-                    <p className="text-xs text-slate-500">{row.email}</p>
-                  </td>
-                  <td className="px-4 py-3">
-                    <p>{row.teamName ?? "-"}</p>
-                    <p className="text-xs text-slate-500">{row.title ?? "-"}</p>
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3">
-                    {formatAmount(row.remainingAnnualDays)}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3">
-                    {formatAmount(row.expiringAnnualDays)}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3">
-                    {formatAmount(row.plan?.totalPlannedAmount)}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3">
-                    {row.plan?.submittedAt ? dateLabel(row.plan.submittedAt) : "-"}
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge tone={reviewStatusTone(row.reviewStatus)}>
-                      {annualUsePlanReviewStatusLabel(row.reviewStatus)}
-                    </Badge>
-                  </td>
-                  <td className="min-w-44 px-4 py-3 text-slate-600">
-                    {row.latestReview ? (
-                      <>
-                        <p>{annualUsePlanReviewActionLabel(row.latestReview.actionType)}</p>
-                        <p className="text-xs text-slate-500">
-                          {formatDateTime(row.latestReview.reviewedAt)}
-                        </p>
-                      </>
-                    ) : (
-                      "-"
-                    )}
-                  </td>
-                  <td className="min-w-[360px] px-4 py-3">
-                    <details className="rounded-lg border border-slate-200 p-3">
-                      <summary className="cursor-pointer font-semibold text-blue-700">
-                        상세 보기
-                      </summary>
-                      <div className="mt-3 grid gap-4">
-                        {row.plan?.memo ? (
-                          <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
-                            메모: {row.plan.memo}
-                          </p>
-                        ) : null}
-                        <PlanItems row={row} />
-                        <ReviewHistory row={row} />
-                        <ReviewActions row={row} returnTo={returnTo} />
-                      </div>
-                    </details>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <AnnualUsePlanReviewTable
+          returnTo={returnTo}
+          rows={tableRows}
+          totalCount={rows.length}
+        />
       )}
     </section>
   );

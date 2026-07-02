@@ -1,6 +1,9 @@
 import Link from "next/link";
 
-import { AnnualUsePlanReviewPanel } from "@/components/leave/annual-use-plan-review-panel";
+import {
+  AnnualUsePlanReviewPanel,
+  buildAnnualUsePlanReviewReturnTo,
+} from "@/components/leave/annual-use-plan-review-panel";
 import { getPrisma } from "@/lib/db/prisma";
 import { dateToDateOnly, todayInSeoul } from "@/lib/leave/calculate-business-days";
 import { listAnnualUsePlanReviewRows } from "@/lib/leave/annual-use-plan-review";
@@ -13,6 +16,9 @@ type PromotionsPageProps = {
     year?: string;
     success?: string;
     error?: string;
+    status?: string;
+    team?: string;
+    sort?: string;
   }>;
 };
 
@@ -69,7 +75,13 @@ export default async function AnnualLeavePromotionsPage({
       orderBy: [{ scheduledDate: "asc" }, { createdAt: "desc" }],
     }),
   ]);
-  const returnTo = `/admin/leaves/promotions?year=${year}`;
+  const returnTo = buildAnnualUsePlanReviewReturnTo({
+    basePath: "/admin/leaves/promotions",
+    year,
+    status: params.status,
+    team: params.team,
+    sort: params.sort,
+  });
 
   return (
     <section className="min-w-0 space-y-8">
@@ -79,7 +91,10 @@ export default async function AnnualLeavePromotionsPage({
         error={params.error}
         returnTo={returnTo}
         rows={rows}
+        sort={params.sort}
+        statusFilter={params.status}
         success={params.success}
+        teamFilter={params.team}
         year={year}
       />
 

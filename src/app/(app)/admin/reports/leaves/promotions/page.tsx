@@ -1,4 +1,7 @@
-import { AnnualUsePlanReviewPanel } from "@/components/leave/annual-use-plan-review-panel";
+import {
+  AnnualUsePlanReviewPanel,
+  buildAnnualUsePlanReviewReturnTo,
+} from "@/components/leave/annual-use-plan-review-panel";
 import { getPrisma } from "@/lib/db/prisma";
 import { todayInSeoul } from "@/lib/leave/calculate-business-days";
 import { listAnnualUsePlanReviewRows } from "@/lib/leave/annual-use-plan-review";
@@ -11,6 +14,9 @@ type AnnualPromotionsReportPageProps = {
     year?: string;
     success?: string;
     error?: string;
+    status?: string;
+    team?: string;
+    sort?: string;
   }>;
 };
 
@@ -32,7 +38,13 @@ export default async function AnnualPromotionsReportPage({
     year,
     prisma: getPrisma(),
   });
-  const returnTo = `/admin/reports/leaves/promotions?year=${year}`;
+  const returnTo = buildAnnualUsePlanReviewReturnTo({
+    basePath: "/admin/reports/leaves/promotions",
+    year,
+    status: params.status,
+    team: params.team,
+    sort: params.sort,
+  });
 
   return (
     <AnnualUsePlanReviewPanel
@@ -41,7 +53,10 @@ export default async function AnnualPromotionsReportPage({
       error={params.error}
       returnTo={returnTo}
       rows={rows}
+      sort={params.sort}
+      statusFilter={params.status}
       success={params.success}
+      teamFilter={params.team}
       year={year}
     />
   );

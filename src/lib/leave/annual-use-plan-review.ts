@@ -60,6 +60,7 @@ export type AnnualUsePlanReviewRow = {
   referenceYear: number;
   remainingAnnualDays: number | null;
   expiringAnnualDays: number | null;
+  expirationDate: string | null;
   plan: (AnnualLeaveUsePlan & { items: AnnualLeaveUsePlanItem[] }) | null;
   reviewStatus: AnnualUsePlanReviewStatus;
   latestReview: AnnualUsePlanReviewHistoryItem | null;
@@ -587,6 +588,7 @@ export async function listAnnualUsePlanReviewRows({
       remainingAnnualDays:
         balanceByUserId.get(userId) ?? candidate?.remainingAmount ?? null,
       expiringAnnualDays: candidate?.remainingAmount ?? null,
+      expirationDate: candidate?.expirationDate ?? null,
       plan,
       reviewStatus: deriveAnnualUsePlanReviewStatus(plan, history),
       latestReview: history[0] ?? null,
