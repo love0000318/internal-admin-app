@@ -12,6 +12,12 @@ import {
 } from "@/lib/leave/annual-promotion";
 import { parseAnnualUsePlanFormItems } from "@/lib/leave/annual-use-plan-form-data";
 import { getUserLeaveBalance, listEnabledCompanyHolidayDateOnlys } from "@/lib/leave/queries";
+import {
+  canSubmitAnnualUsePlan,
+  deriveAnnualUsePlanReviewStatus,
+  getAnnualUsePlanReviewHistoryByPlanIds,
+  notifyAnnualUsePlanSubmittedForReview,
+} from "@/lib/leave/annual-use-plan-review";
 import { markAnnualUsePlanNoticesSubmitted } from "@/lib/notifications/annual-use-plan-notifications";
 import { requireRouteAccess } from "@/lib/rbac/server-guards";
 
@@ -46,7 +52,21 @@ export async function submitAnnualLeaveUsePlan(formData: FormData) {
     redirectToUsePlan("no-expiring-balance");
   }
 
-  if (context.plan?.status === "SUBMITTED") {
+  const reviewHistoryByPlanId = context.plan
+    ? await getAnnualUsePlanReviewHistoryByPlanIds({
+        planIds: [context.plan.id],
+        prisma,
+      })
+    : new Map();
+  const reviewHistory = context.plan
+    ? reviewHistoryByPlanId.get(context.plan.id) ?? []
+    : [];
+  const previousReviewStatus = deriveAnnualUsePlanReviewStatus(
+    context.plan,
+    reviewHistory,
+  );
+
+  if (!canSubmitAnnualUsePlan(context.plan, reviewHistory)) {
     redirectToUsePlan("already-submitted");
   }
 
@@ -143,8 +163,15 @@ export async function submitAnnualLeaveUsePlan(formData: FormData) {
         targetType: "ANNUAL_LEAVE_USE_PLAN",
         targetId: savedPlan.id,
         metadata: toJsonValue({
+          annualLeaveUsePlanId: savedPlan.id,
           userId: actor.id,
           referenceYear: year,
+          actionType:
+            previousReviewStatus === "REVISION_REQUESTED"
+              ? "RESUBMITTED_AFTER_REVISION"
+              : "SUBMITTED",
+          previousStatus: previousReviewStatus,
+          nextStatus: "SUBMITTED",
           totalPlannedAmount,
           itemCount: items.length,
         }),
@@ -155,6 +182,11 @@ export async function submitAnnualLeaveUsePlan(formData: FormData) {
       userId: actor.id,
       referenceYear: year,
       usePlan: savedPlan,
+      prisma: tx,
+    });
+
+    await notifyAnnualUsePlanSubmittedForReview({
+      usePlanId: savedPlan.id,
       prisma: tx,
     });
 

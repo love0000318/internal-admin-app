@@ -12,6 +12,11 @@ import {
 } from "@/lib/leave/annual-use-plan-calculator";
 import { getPrisma } from "@/lib/db/prisma";
 import { getUsePlanContext } from "@/lib/leave/annual-promotion";
+import {
+  annualUsePlanReviewStatusLabel,
+  deriveAnnualUsePlanReviewStatus,
+  getAnnualUsePlanReviewHistoryByPlanIds,
+} from "@/lib/leave/annual-use-plan-review";
 import { dateToDateOnly, todayInSeoul } from "@/lib/leave/calculate-business-days";
 import { getUserLeaveBalance, listEnabledCompanyHolidayDateOnlys } from "@/lib/leave/queries";
 import type { DateOnly } from "@/lib/leave/types";
@@ -33,19 +38,6 @@ function errorMessage(kind?: string) {
   };
 
   return kind ? messages[kind] ?? "처리 중 오류가 발생했습니다." : null;
-}
-
-function statusLabel(status?: string) {
-  switch (status) {
-    case "SUBMITTED":
-      return "제출 완료";
-    case "CANCELLED":
-      return "취소됨";
-    case "DRAFT":
-      return "작성 중";
-    default:
-      return "미제출";
-  }
 }
 
 function formatAmount(value: number) {
@@ -96,7 +88,18 @@ export default async function AnnualLeaveUsePlanPage({
   ]);
   const planAvailableAmount = Math.max(0, balance.remainingDays);
   const plan = context.plan;
+  const reviewHistoryByPlanId = plan
+    ? await getAnnualUsePlanReviewHistoryByPlanIds({
+        planIds: [plan.id],
+        prisma,
+      })
+    : new Map();
+  const reviewHistory = plan ? reviewHistoryByPlanId.get(plan.id) ?? [] : [];
+  const reviewStatus = deriveAnnualUsePlanReviewStatus(plan, reviewHistory);
+  const latestReview = reviewHistory[0] ?? null;
   const isSubmitted = plan?.status === "SUBMITTED";
+  const canEditPlan = !isSubmitted || reviewStatus === "REVISION_REQUESTED";
+  const canCancelPlan = isSubmitted && reviewStatus !== "CONFIRMED";
   const error = errorMessage(params.error);
 
   return (
@@ -154,10 +157,27 @@ export default async function AnnualLeaveUsePlanPage({
         <div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm">
           <p className="text-sm break-keep text-neutral-500">제출 상태</p>
           <p className="mt-2 text-lg font-semibold break-keep">
-            {statusLabel(plan?.status)}
+            {annualUsePlanReviewStatusLabel(reviewStatus)}
           </p>
         </div>
       </div>
+
+      {latestReview ? (
+        <div className="mt-6 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm leading-relaxed text-blue-900">
+          <p className="font-semibold break-keep">
+            {annualUsePlanReviewStatusLabel(reviewStatus)}
+          </p>
+          <p className="mt-1 break-keep">
+            처리자: {latestReview.reviewerName ?? latestReview.reviewerUserId ?? "-"} ·
+            처리일시: {latestReview.reviewedAt.toISOString().slice(0, 16).replace("T", " ")}
+          </p>
+          {latestReview.revisionReason ? (
+            <p className="mt-2 break-keep">
+              보완요청 사유: {latestReview.revisionReason}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       {plan?.items.length ? (
         <div className="mt-6 overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm">
@@ -276,14 +296,16 @@ export default async function AnnualLeaveUsePlanPage({
         </div>
       ) : null}
 
-      {isSubmitted && plan ? (
+      {canCancelPlan && plan ? (
         <form action={cancelAnnualLeaveUsePlan} className="mt-4">
           <input name="planId" type="hidden" value={plan.id} />
           <button className="min-h-10 w-full whitespace-nowrap break-keep rounded-md border border-red-300 px-4 text-sm font-medium text-red-700 sm:w-auto">
             제출 취소
           </button>
         </form>
-      ) : (
+      ) : null}
+
+      {canEditPlan ? (
         <AnnualUsePlanForm
           action={submitAnnualLeaveUsePlan}
           referenceYear={context.year}
@@ -291,7 +313,7 @@ export default async function AnnualLeaveUsePlanPage({
           today={today}
           companyHolidays={companyHolidays}
         />
-      )}
+      ) : null}
     </section>
   );
 }

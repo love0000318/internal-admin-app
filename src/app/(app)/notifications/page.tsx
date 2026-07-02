@@ -115,7 +115,20 @@ function stateToneForLeave(status: string): StateTone {
   }
 }
 
-function actionLabel(type: string) {
+function actionLabel(type: string, metadata?: unknown) {
+  const purpose = metadataString(metadata, "notificationPurpose");
+
+  if (purpose === "ANNUAL_USE_PLAN_REVISION_REQUESTED") {
+    return "수정하기";
+  }
+
+  if (
+    purpose === "ANNUAL_USE_PLAN_CONFIRMED" ||
+    purpose === "ANNUAL_USE_PLAN_REVIEW_REQUESTED"
+  ) {
+    return "확인하기";
+  }
+
   if (type === "LEAVE_REQUEST_CREATED" || type === "LEAVE_REQUESTED") {
     return "검토하기";
   }
@@ -389,7 +402,7 @@ export default async function NotificationsPage({
                   <form action={markNotificationReadAndRedirect}>
                     <input name="notificationId" type="hidden" value={notification.id} />
                     <button className={buttonClassName({ className: "w-full" })}>
-                      {actionLabel(notification.type)}
+                      {actionLabel(notification.type, notification.metadata)}
                     </button>
                   </form>
                 ) : null}
@@ -465,7 +478,7 @@ export default async function NotificationsPage({
                       <form action={markNotificationReadAndRedirect}>
                         <input name="notificationId" type="hidden" value={notification.id} />
                         <button className="whitespace-nowrap break-keep font-semibold text-blue-700 underline">
-                          {actionLabel(notification.type)}
+                          {actionLabel(notification.type, notification.metadata)}
                         </button>
                       </form>
                     ) : (
