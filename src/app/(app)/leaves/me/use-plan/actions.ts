@@ -11,6 +11,11 @@ import {
   validateAnnualUsePlanItems,
 } from "@/lib/leave/annual-promotion";
 import { parseAnnualUsePlanFormItems } from "@/lib/leave/annual-use-plan-form-data";
+import {
+  deriveAnnualUsePlanReviewState,
+  listAnnualUsePlanReviewLogs,
+  notifyAnnualUsePlanSubmittedForReview,
+} from "@/lib/leave/annual-use-plan-review";
 import { getUserLeaveBalance, listEnabledCompanyHolidayDateOnlys } from "@/lib/leave/queries";
 import { markAnnualUsePlanNoticesSubmitted } from "@/lib/notifications/annual-use-plan-notifications";
 import { requireRouteAccess } from "@/lib/rbac/server-guards";
@@ -41,12 +46,22 @@ export async function submitAnnualLeaveUsePlan(formData: FormData) {
   const context = await getUsePlanContext({ userId: actor.id, year, prisma });
   const balance = await getUserLeaveBalance({ userId: actor.id, year, prisma });
   const planAvailableAmount = Math.max(0, balance.remainingDays);
+  const previousReviewLogs = context.plan
+    ? await listAnnualUsePlanReviewLogs({ planIds: [context.plan.id], prisma })
+    : [];
+  const previousReviewState = deriveAnnualUsePlanReviewState({
+    plan: context.plan,
+    logs: previousReviewLogs,
+  });
 
   if (planAvailableAmount <= 0) {
     redirectToUsePlan("no-expiring-balance");
   }
 
-  if (context.plan?.status === "SUBMITTED") {
+  if (
+    context.plan?.status === "SUBMITTED" &&
+    previousReviewState.status !== "REVISION_REQUESTED"
+  ) {
     redirectToUsePlan("already-submitted");
   }
 
@@ -134,6 +149,7 @@ export async function submitAnnualLeaveUsePlan(formData: FormData) {
       })),
     });
 
+    const submittedAt = savedPlan.submittedAt ?? new Date();
     await tx.auditLog.create({
       data: {
         actorId: actor.id,
@@ -142,12 +158,29 @@ export async function submitAnnualLeaveUsePlan(formData: FormData) {
         action: "ANNUAL_LEAVE_USE_PLAN_SUBMITTED",
         targetType: "ANNUAL_LEAVE_USE_PLAN",
         targetId: savedPlan.id,
-        metadata: toJsonValue({
-          userId: actor.id,
-          referenceYear: year,
-          totalPlannedAmount,
-          itemCount: items.length,
-        }),
+        metadata:
+          previousReviewState.status === "REVISION_REQUESTED"
+            ? toJsonValue({
+                annualLeaveUsePlanId: savedPlan.id,
+                userId: actor.id,
+                referenceYear: year,
+                actionType: "RESUBMITTED_AFTER_REVISION",
+                previousStatus: "REVISION_REQUESTED",
+                nextStatus: "RESUBMITTED_AFTER_REVISION",
+                resubmittedAt: submittedAt.toISOString(),
+                totalPlannedAmount,
+                remainingDays: balance.remainingDays,
+              })
+            : toJsonValue({
+                annualLeaveUsePlanId: savedPlan.id,
+                userId: actor.id,
+                referenceYear: year,
+                actionType: "SUBMITTED",
+                previousStatus: previousReviewState.status,
+                nextStatus: "SUBMITTED",
+                totalPlannedAmount,
+                itemCount: items.length,
+              }),
       },
     });
 
@@ -162,6 +195,11 @@ export async function submitAnnualLeaveUsePlan(formData: FormData) {
   });
 
   await scheduleUsePlanReminderNotices({ usePlanId: plan.id, prisma });
+  await notifyAnnualUsePlanSubmittedForReview({
+    plan,
+    requesterName: actor.name,
+    prisma,
+  });
 
   revalidatePath("/leaves/me/use-plan");
   revalidatePath("/admin/leaves/promotions");

@@ -19,6 +19,13 @@ type ItemState = {
   memo: string;
 };
 
+export type AnnualUsePlanFormInitialItem = {
+  plannedStartDate: string;
+  plannedEndDate: string;
+  usageType: AnnualUsePlanUsageType;
+  memo?: string | null;
+};
+
 function createEmptyItem(id: number): ItemState {
   return {
     id,
@@ -43,15 +50,27 @@ export function AnnualUsePlanForm({
   expiringAmount,
   today,
   companyHolidays,
+  initialItems = [],
+  initialMemo = "",
 }: {
   action: (formData: FormData) => void | Promise<void>;
   referenceYear: number;
   expiringAmount: number;
   today: DateOnly;
   companyHolidays: DateOnly[];
+  initialItems?: AnnualUsePlanFormInitialItem[];
+  initialMemo?: string | null;
 }) {
   const [items, setItems] = useState<ItemState[]>(
-    Array.from({ length: 5 }, (_, index) => createEmptyItem(index)),
+    initialItems.length > 0
+      ? initialItems.map((item, index) => ({
+          id: index,
+          plannedStartDate: item.plannedStartDate,
+          plannedEndDate: item.plannedEndDate,
+          usageType: item.usageType,
+          memo: item.memo ?? "",
+        }))
+      : Array.from({ length: 5 }, (_, index) => createEmptyItem(index)),
   );
 
   const calculations = useMemo(
@@ -274,6 +293,7 @@ export function AnnualUsePlanForm({
             name="memo"
             className="mt-1 min-h-24 w-full min-w-0 rounded-lg border border-slate-300 px-3 py-2"
             maxLength={1000}
+            defaultValue={initialMemo ?? ""}
           />
         </label>
         <button

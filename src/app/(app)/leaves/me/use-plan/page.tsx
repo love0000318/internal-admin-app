@@ -4,7 +4,10 @@ import {
   cancelAnnualLeaveUsePlan,
   submitAnnualLeaveUsePlan,
 } from "@/app/(app)/leaves/me/use-plan/actions";
-import { AnnualUsePlanForm } from "@/components/leave/annual-use-plan-form";
+import {
+  AnnualUsePlanForm,
+  type AnnualUsePlanFormInitialItem,
+} from "@/components/leave/annual-use-plan-form";
 import {
   annualUsePlanUsageTypeLabel,
   halfDayPeriodToUsageType,
@@ -12,6 +15,10 @@ import {
 } from "@/lib/leave/annual-use-plan-calculator";
 import { getPrisma } from "@/lib/db/prisma";
 import { getUsePlanContext } from "@/lib/leave/annual-promotion";
+import {
+  deriveAnnualUsePlanReviewState,
+  listAnnualUsePlanReviewLogs,
+} from "@/lib/leave/annual-use-plan-review";
 import { dateToDateOnly, todayInSeoul } from "@/lib/leave/calculate-business-days";
 import { getUserLeaveBalance, listEnabledCompanyHolidayDateOnlys } from "@/lib/leave/queries";
 import type { DateOnly } from "@/lib/leave/types";
@@ -35,6 +42,7 @@ function errorMessage(kind?: string) {
   return kind ? messages[kind] ?? "처리 중 오류가 발생했습니다." : null;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function statusLabel(status?: string) {
   switch (status) {
     case "SUBMITTED":
@@ -77,6 +85,18 @@ function itemAmount(item: { calculatedAmount?: number | null; amount: number }) 
   return item.calculatedAmount ?? item.amount;
 }
 
+function formatDateTime(value: Date | null | undefined) {
+  if (!value) {
+    return "-";
+  }
+
+  return new Intl.DateTimeFormat("ko-KR", {
+    timeZone: "Asia/Seoul",
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(value);
+}
+
 export default async function AnnualLeaveUsePlanPage({
   searchParams,
 }: UsePlanPageProps) {
@@ -96,8 +116,22 @@ export default async function AnnualLeaveUsePlanPage({
   ]);
   const planAvailableAmount = Math.max(0, balance.remainingDays);
   const plan = context.plan;
+  const reviewLogs = plan
+    ? await listAnnualUsePlanReviewLogs({ planIds: [plan.id], prisma })
+    : [];
+  const reviewState = deriveAnnualUsePlanReviewState({ plan, logs: reviewLogs });
   const isSubmitted = plan?.status === "SUBMITTED";
+  const canEditPlan = !isSubmitted || reviewState.canEmployeeEdit;
   const error = errorMessage(params.error);
+  const initialFormItems: AnnualUsePlanFormInitialItem[] =
+    plan && reviewState.canEmployeeEdit
+      ? plan.items.map((item) => ({
+          plannedStartDate: itemStartDate(item),
+          plannedEndDate: itemEndDate(item),
+          usageType: itemUsageType(item),
+          memo: item.memo,
+        }))
+      : [];
 
   return (
     <section className="min-w-0">
@@ -154,10 +188,40 @@ export default async function AnnualLeaveUsePlanPage({
         <div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm">
           <p className="text-sm break-keep text-neutral-500">제출 상태</p>
           <p className="mt-2 text-lg font-semibold break-keep">
-            {statusLabel(plan?.status)}
+            {reviewState.label}
           </p>
         </div>
       </div>
+
+      {plan && reviewState.status !== "SUBMITTED" ? (
+        <div className="mt-4 rounded-2xl border border-neutral-200 bg-white p-4 text-sm leading-relaxed shadow-sm">
+          <p className="font-semibold text-neutral-950">관리자 확인 상태</p>
+          <dl className="mt-3 grid gap-2 text-neutral-700 sm:grid-cols-2">
+            <div>
+              <dt className="text-neutral-500">상태</dt>
+              <dd className="font-medium">{reviewState.label}</dd>
+            </div>
+            <div>
+              <dt className="text-neutral-500">처리자</dt>
+              <dd className="font-medium">{reviewState.reviewerName ?? "-"}</dd>
+            </div>
+            <div>
+              <dt className="text-neutral-500">처리일시</dt>
+              <dd className="font-medium">
+                {formatDateTime(reviewState.reviewedAt)}
+              </dd>
+            </div>
+            {reviewState.revisionReason ? (
+              <div className="sm:col-span-2">
+                <dt className="text-neutral-500">보완요청 사유</dt>
+                <dd className="font-medium break-words">
+                  {reviewState.revisionReason}
+                </dd>
+              </div>
+            ) : null}
+          </dl>
+        </div>
+      ) : null}
 
       {plan?.items.length ? (
         <div className="mt-6 overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm">
@@ -276,7 +340,7 @@ export default async function AnnualLeaveUsePlanPage({
         </div>
       ) : null}
 
-      {isSubmitted && plan ? (
+      {isSubmitted && plan && !canEditPlan ? (
         <form action={cancelAnnualLeaveUsePlan} className="mt-4">
           <input name="planId" type="hidden" value={plan.id} />
           <button className="min-h-10 w-full whitespace-nowrap break-keep rounded-md border border-red-300 px-4 text-sm font-medium text-red-700 sm:w-auto">
@@ -290,6 +354,8 @@ export default async function AnnualLeaveUsePlanPage({
           expiringAmount={planAvailableAmount}
           today={today}
           companyHolidays={companyHolidays}
+          initialItems={initialFormItems}
+          initialMemo={reviewState.canEmployeeEdit ? plan?.memo : ""}
         />
       )}
     </section>

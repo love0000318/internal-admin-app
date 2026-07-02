@@ -136,7 +136,7 @@ describe("rbac guards", () => {
     expect(canAccessRoute(lead, "/admin/work-management")).toBe(false);
     expect(canAccessRoute(lead, "/admin/leaves/grants")).toBe(false);
     expect(canAccessRoute(lead, "/admin/leaves/birthday-policy")).toBe(false);
-    expect(canAccessRoute(lead, "/admin/leaves/promotions")).toBe(false);
+    expect(canAccessRoute(lead, "/admin/leaves/promotions")).toBe(true);
     expect(canAccessRoute(lead, "/admin/reports/leaves/promotions")).toBe(true);
     expect(canAccessRoute(lead, "/admin/leaves/balances")).toBe(true);
     expect(canAccessRoute(lead, "/leaves/approvals")).toBe(true);

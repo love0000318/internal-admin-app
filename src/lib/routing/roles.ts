@@ -122,7 +122,7 @@ export const IMPLEMENTED_ROUTE_POLICIES: RoutePolicy[] = [
   {
     href: "/admin/leaves/promotions",
     label: "연차 촉진 관리",
-    roles: ["OWNER"],
+    roles: ["OWNER", "LEAD"],
     mvpStatus: "included",
     showInNav: false,
   },
