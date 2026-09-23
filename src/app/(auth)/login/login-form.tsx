@@ -8,7 +8,7 @@ const initialState: LoginFormState = {
   error: null,
 };
 
-export function LoginForm({ next }: { next?: string }) {
+export function LoginForm() {
   const [state, formAction, pending] = useActionState(
     loginAction,
     initialState,
@@ -16,7 +16,6 @@ export function LoginForm({ next }: { next?: string }) {
 
   return (
     <form action={formAction} className="grid gap-4">
-      {next ? <input type="hidden" name="next" value={next} /> : null}
       <div className="grid min-w-0 gap-1.5">
         <label className="break-keep text-sm font-semibold text-slate-800" htmlFor="phone">
           전화번호
