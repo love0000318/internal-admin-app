@@ -163,6 +163,13 @@ export const navigationSections: NavigationSection[] = [
     iconKey: "work",
     items: [
       {
+        id: "meeting",
+        label: "회의 녹음",
+        href: "/meeting",
+        iconKey: "work",
+        allowedRoles: INTERNAL_ROLES,
+      },
+      {
         id: "work-management",
         label: "업무 관리",
         href: "/admin/work-management",
