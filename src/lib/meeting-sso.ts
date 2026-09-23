@@ -36,7 +36,7 @@ function getConfig() {
     : "";
   const allowAllInternal = parseBoolean(process.env.MEETING_SSO_ALLOW_ALL_INTERNAL, false);
 
-  let teamMap: Record<string, MeetingTeam[]> = {};
+  const teamMap: Record<string, MeetingTeam[]> = {};
   if (process.env.MEETING_SSO_TEAM_MAP_JSON) {
     const parsed = JSON.parse(process.env.MEETING_SSO_TEAM_MAP_JSON) as Record<string, string[]>;
     for (const [key, values] of Object.entries(parsed)) {
