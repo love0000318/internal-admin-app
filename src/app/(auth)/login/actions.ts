@@ -21,7 +21,6 @@ const loginSchema = z.object({
   phone: z.string().trim().min(1),
   password: z.string().min(1),
   rememberMe: z.boolean(),
-  next: z.string().optional(),
 });
 
 const INVALID_LOGIN_MESSAGE = "전화번호 또는 비밀번호가 올바르지 않습니다.";
@@ -36,7 +35,6 @@ export async function loginAction(
     phone: formData.get("phone"),
     password: formData.get("password"),
     rememberMe: formData.get("rememberMe") === "on",
-    next: typeof formData.get("next") === "string" ? String(formData.get("next")) : undefined,
   });
 
   if (!parsed.success) {
@@ -151,13 +149,5 @@ export async function loginAction(
   await createSessionForUser(user.id, {
     rememberMe: parsed.data.rememberMe,
   });
-  const next = parsed.data.next;
-  const safeNext =
-    next &&
-    next.startsWith("/api/meeting-sso/authorize?") &&
-    !next.startsWith("//") &&
-    !next.includes("\\")
-      ? next
-      : "/dashboard";
-  redirect(safeNext);
+  redirect("/dashboard");
 }
