@@ -28,7 +28,10 @@ export async function GET(request: NextRequest) {
     const cookieStore = await cookies();
     const rawToken = cookieStore.get(SESSION_COOKIE_NAME)?.value;
     if (!rawToken) {
-      return NextResponse.redirect(new URL("/login", request.url), 303);
+      const next = request.nextUrl.pathname + request.nextUrl.search;
+      const loginUrl = new URL("/login", request.url);
+      loginUrl.searchParams.set("next", next);
+      return NextResponse.redirect(loginUrl, 303);
     }
 
     const session = await getPrisma().session.findUnique({
@@ -48,7 +51,10 @@ export async function GET(request: NextRequest) {
       session.expiresAt.getTime() <= Date.now() ||
       session.user.status !== "ACTIVE"
     ) {
-      return NextResponse.redirect(new URL("/login", request.url), 303);
+      const next = request.nextUrl.pathname + request.nextUrl.search;
+      const loginUrl = new URL("/login", request.url);
+      loginUrl.searchParams.set("next", next);
+      return NextResponse.redirect(loginUrl, 303);
     }
 
     const user = {
