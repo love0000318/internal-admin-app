@@ -31,7 +31,9 @@ function getConfig() {
   const keyId = process.env.MEETING_SSO_KEY_ID ?? "meeting-ops-1";
   const privateKey = process.env.MEETING_SSO_PRIVATE_KEY?.replace(/\\n/g, "\n") ?? "";
   const clientSecret = process.env.MEETING_SSO_CLIENT_SECRET ?? "";
-  const meetingOrigin = normalizeOrigin(process.env.MEETING_APP_ORIGIN, "MEETING_APP_ORIGIN");
+  const meetingOrigin = process.env.MEETING_APP_ORIGIN
+    ? normalizeOrigin(process.env.MEETING_APP_ORIGIN, "MEETING_APP_ORIGIN")
+    : "";
   const allowAllInternal = parseBoolean(process.env.MEETING_SSO_ALLOW_ALL_INTERNAL, false);
 
   let teamMap: Record<string, MeetingTeam[]> = {};
@@ -85,7 +87,7 @@ export function validateMeetingAuthorizeRequest(input: {
   nonce: string | null;
 }) {
   const cfg = getConfig();
-  if (!cfg.enabled || !cfg.privateKey || !cfg.clientSecret) {
+  if (!cfg.enabled || !cfg.privateKey || !cfg.clientSecret || !cfg.meetingOrigin) {
     throw new Error("Meeting SSO is not configured.");
   }
   if (input.clientId !== cfg.clientId) throw new Error("Invalid client_id.");
