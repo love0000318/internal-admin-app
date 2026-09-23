@@ -5,11 +5,29 @@ import { getCurrentUser } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
-export default async function LoginPage() {
+function safeMeetingReturn(next: string | undefined) {
+  if (
+    next &&
+    next.startsWith("/api/meeting-sso/authorize?") &&
+    !next.startsWith("//") &&
+    !next.includes("\\")
+  ) {
+    return next;
+  }
+  return undefined;
+}
+
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
+  const params = await searchParams;
+  const next = safeMeetingReturn(params.next);
   const user = await getCurrentUser();
 
   if (user) {
-    redirect("/dashboard");
+    redirect(next ?? "/dashboard");
   }
 
   return (
@@ -25,7 +43,7 @@ export default async function LoginPage() {
           사내 휴가, 근태, 알림과 조직 운영을 관리하는 서비스입니다.
         </p>
         <div className="mt-5">
-          <LoginForm />
+          <LoginForm next={next} />
         </div>
       </section>
     </main>
